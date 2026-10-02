@@ -1,15 +1,19 @@
 # Avatar Electric – Project & Production Tracking System (V1)
 
-Laravel 12 + MySQL + Tailwind/Livewire stack (Breeze blade), matching the sibling
+Laravel 12 + MySQL + Tailwind (Breeze blade), matching the sibling
 `PMO` / `PmoNew` apps in this htdocs folder — rebuilt from scratch with a tight
 V1 scope instead of their accumulated feature set.
 
 ## Stack
 
 - PHP 8.2, Laravel 12, MySQL/MariaDB (`avatar_pmo_v1`)
-- Blade + Tailwind (Vite), Alpine.js for modals/expand-collapse
-- No SPA framework — server-rendered pages, small vanilla-JS `fetch` calls for
-  live checklist toggling only
+- Blade + Tailwind (Vite), Alpine.js for modals, tabs, and every slide-over
+  panel (My Department's Calendar/List/Timeline + Right Detail Panel, the
+  Cabinet Quick Detail Panel on the Project page, the collapsible sidebar)
+- No SPA framework — server-rendered pages, with `fetch`-based partial updates
+  (no full page reload) for checklist toggling, the Accept/Start/Complete and
+  Department-assignment workflow, the Cabinet Quick Detail Panel, Project
+  color tagging, and comment attachments
 
 ## Run it
 
@@ -23,6 +27,16 @@ php artisan serve
 
 Visit `http://127.0.0.1:8000`.
 
+## Demo login
+
+Seeded by `UserSeeder` (password for all: `password`):
+
+- `pholpaween@avatar-electric.com` — Admin
+- `pm@avatar-electric.com` — Project Manager
+- `sales@avatar-electric.com` — Sales
+- `production@avatar-electric.com` — Production
+
+Public self-registration is disabled — accounts are created from
 **Settings → Users**.
 
 ## Demo data
@@ -47,6 +61,14 @@ Re-seed anytime with `php artisan migrate:fresh --seed`.
   cabinet copies a `CabinetTemplate`'s Task/Sub Task/Checklist tree into the
   cabinet's own real rows. Editing a cabinet's tasks never touches the
   master template.
+- **Assignment / dispatch workflow** (`app/Services/SubtaskAssignmentService.php`):
+  a Sub Task is dispatched to one Department (`cabinet_subtasks.department_id`),
+  which then Accepts → Starts → Completes it. The Department can only be
+  changed before it's accepted (`CabinetSubtask::is_department_locked`); all
+  of it is enforced server-side in the service, not just hidden in the UI.
+  The same records/endpoints are shared by the Cabinet page, the Dispatch
+  ("จ่ายงาน") list, My Department, and the Cabinet Quick Detail Panel — there
+  is exactly one assignment system, not one per page.
 - **Weighting is schema-ready but inactive in V1**: `cabinets.weight` and
   `cabinet_tasks.weight` exist and default to plain-average behavior; wiring
   them into the roll-up is a later-phase change, not a V1 one.
@@ -55,5 +77,3 @@ Re-seed anytime with `php artisan migrate:fresh --seed`.
   notifications, ERP/BOM/inventory integration. The schema (separate
   `project_tasks` vs. `cabinet_tasks`, template tables, department field on
   sub tasks) is meant to leave room for these without a rewrite.
-# PmoLastVersion
-# PmoLastVersion

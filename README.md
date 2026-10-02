@@ -23,16 +23,6 @@ php artisan serve
 
 Visit `http://127.0.0.1:8000`.
 
-## Demo login
-
-Seeded by `UserSeeder` (password for all: `password`):
-
-- `pholpaween@avatar-electric.com` — Admin
-- `pm@avatar-electric.com` — Project Manager
-- `sales@avatar-electric.com` — Sales
-- `production@avatar-electric.com` — Production
-
-Public self-registration is disabled — accounts are created from
 **Settings → Users**.
 
 ## Demo data

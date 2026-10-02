@@ -66,3 +66,4 @@ Re-seed anytime with `php artisan migrate:fresh --seed`.
   `project_tasks` vs. `cabinet_tasks`, template tables, department field on
   sub tasks) is meant to leave room for these without a rewrite.
 # PmoLastVersion
+# PmoLastVersion

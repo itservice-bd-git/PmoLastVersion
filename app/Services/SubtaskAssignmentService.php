@@ -1,0 +1,208 @@
+<?php
+
+namespace App\Services;
+
+use App\Exceptions\AssignmentException;
+use App\Models\ActivityLog;
+use App\Models\CabinetSubtask;
+use App\Models\Department;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Department-level assignment workflow for a cabinet Sub Task:
+ * UNASSIGNED -> ASSIGNED -> ACCEPTED -> IN_PROGRESS -> COMPLETED.
+ *
+ * Core rule: the assigned department may only be changed while the status is
+ * UNASSIGNED or ASSIGNED. The moment the department accepts, it is locked.
+ * Every transition re-reads the row under a lock so two concurrent requests
+ * (e.g. "change department" racing "accept") cannot both succeed.
+ */
+class SubtaskAssignmentService
+{
+    /**
+     * Returns true when the department actually changed.
+     */
+    public function changeDepartment(CabinetSubtask $subtask, ?int $departmentId, User $actor): bool
+    {
+        // Only Admin/PM may assign or reassign a department - checked here (not
+        // just hidden in the UI) so the dedicated endpoint can't be driven directly.
+        if (! $actor->canDispatchWork()) {
+            throw new AssignmentException('เฉพาะผู้ดูแลระบบ (Admin) หรือ Project Manager เท่านั้นที่มีสิทธิ์เปลี่ยนแผนก', 403);
+        }
+
+        return DB::transaction(function () use ($subtask, $departmentId, $actor) {
+            $locked = CabinetSubtask::whereKey($subtask->id)->lockForUpdate()->firstOrFail();
+
+            // Re-submitting the current department is a no-op, not an error.
+            if ($locked->department_id === $departmentId) {
+                $this->syncInstance($subtask, $locked);
+
+                return false;
+            }
+
+            if ($locked->is_department_locked) {
+                throw new AssignmentException('ไม่สามารถเปลี่ยนแผนกได้ เนื่องจากงานนี้ถูกรับแล้ว');
+            }
+
+            $oldDepartmentId = $locked->department_id;
+
+            $locked->forceFill([
+                'department_id' => $departmentId,
+                'assignment_status' => $departmentId
+                    ? CabinetSubtask::ASSIGNMENT_ASSIGNED
+                    : CabinetSubtask::ASSIGNMENT_UNASSIGNED,
+            ])->saveQuietly();
+
+            $oldName = $this->departmentName($oldDepartmentId);
+            $newName = $this->departmentName($departmentId);
+
+            $description = match (true) {
+                $oldDepartmentId === null => "จ่ายงาน {$this->label($locked)} ให้แผนก {$newName}",
+                $departmentId === null => "ยกเลิกการจ่ายงาน {$this->label($locked)} (เดิมแผนก {$oldName})",
+                default => "เปลี่ยนแผนกของ {$this->label($locked)} {$oldName} → {$newName}",
+            };
+
+            $this->log($locked, $actor, $oldDepartmentId === null ? 'assigned' : 'department_changed', $description, [
+                'department_id' => ['label' => 'แผนก', 'old' => $oldName, 'new' => $newName],
+            ]);
+
+            $this->syncInstance($subtask, $locked);
+
+            return true;
+        });
+    }
+
+    public function accept(CabinetSubtask $subtask, User $actor): CabinetSubtask
+    {
+        return $this->transition($subtask, $actor, CabinetSubtask::ASSIGNMENT_ASSIGNED, CabinetSubtask::ASSIGNMENT_ACCEPTED, 'accepted', 'accepted_by', 'accepted_at',
+            fn ($s) => "แผนก {$s->department->name} รับงาน {$this->label($s)} แล้ว");
+    }
+
+    public function start(CabinetSubtask $subtask, User $actor): CabinetSubtask
+    {
+        return $this->transition($subtask, $actor, CabinetSubtask::ASSIGNMENT_ACCEPTED, CabinetSubtask::ASSIGNMENT_IN_PROGRESS, 'started', 'started_by', 'started_at',
+            fn ($s) => "แผนก {$s->department->name} เริ่มงาน {$this->label($s)}");
+    }
+
+    public function complete(CabinetSubtask $subtask, User $actor): CabinetSubtask
+    {
+        return $this->transition($subtask, $actor, CabinetSubtask::ASSIGNMENT_IN_PROGRESS, CabinetSubtask::ASSIGNMENT_COMPLETED, 'completed', 'completed_by', 'completed_at',
+            fn ($s) => "แผนก {$s->department->name} ทำงาน {$this->label($s)} เสร็จแล้ว");
+    }
+
+    /**
+     * Which workflow buttons this user may currently use on the sub task.
+     */
+    public function actionsFor(CabinetSubtask $subtask, ?User $user): array
+    {
+        $inDepartment = $this->isInAssignedDepartment($subtask, $user);
+
+        return [
+            'can_accept' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_ASSIGNED,
+            'can_start' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_ACCEPTED,
+            'can_complete' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_IN_PROGRESS,
+        ];
+    }
+
+    /**
+     * State returned to async callers so the UI can re-render the row.
+     */
+    public function payload(CabinetSubtask $subtask, ?User $user): array
+    {
+        $subtask->load('department', 'acceptedBy', 'startedBy', 'completedBy');
+
+        return [
+            'id' => $subtask->id,
+            'department_id' => $subtask->department_id,
+            'department_name' => $subtask->department?->name,
+            'assignment_status' => $subtask->assignment_status,
+            'assignment_status_label' => $subtask->assignment_status_label,
+            'is_department_locked' => $subtask->is_department_locked,
+            'accepted_by_name' => $subtask->acceptedBy?->name,
+            'accepted_at' => $subtask->accepted_at?->format('d/m/Y H:i'),
+            'started_by_name' => $subtask->startedBy?->name,
+            'started_at' => $subtask->started_at?->format('d/m/Y H:i'),
+            'completed_by_name' => $subtask->completedBy?->name,
+            'completed_at' => $subtask->completed_at?->format('d/m/Y H:i'),
+        ] + $this->actionsFor($subtask, $user);
+    }
+
+    private function transition(CabinetSubtask $subtask, User $actor, string $from, string $to, string $action, string $byColumn, string $atColumn, \Closure $describe): CabinetSubtask
+    {
+        return DB::transaction(function () use ($subtask, $actor, $from, $to, $action, $byColumn, $atColumn, $describe) {
+            $locked = CabinetSubtask::whereKey($subtask->id)->lockForUpdate()->firstOrFail();
+
+            if (! $this->isInAssignedDepartment($locked, $actor)) {
+                throw new AssignmentException('คุณไม่ใช่สมาชิกแผนกที่ได้รับมอบหมายงานนี้', 403);
+            }
+
+            if ($locked->assignment_status !== $from) {
+                throw new AssignmentException($this->invalidTransitionMessage($locked, $to));
+            }
+
+            $locked->forceFill([
+                'assignment_status' => $to,
+                $byColumn => $actor->id,
+                $atColumn => now(),
+            ])->saveQuietly();
+
+            $locked->load('department');
+            $this->log($locked, $actor, $action, $describe($locked));
+
+            $this->syncInstance($subtask, $locked);
+
+            return $subtask;
+        });
+    }
+
+    private function isInAssignedDepartment(CabinetSubtask $subtask, ?User $user): bool
+    {
+        return $user !== null
+            && $subtask->department_id !== null
+            && $user->department_id === $subtask->department_id;
+    }
+
+    private function invalidTransitionMessage(CabinetSubtask $subtask, string $to): string
+    {
+        return match (true) {
+            $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_UNASSIGNED => 'งานนี้ยังไม่ได้จ่ายให้แผนก',
+            $to === CabinetSubtask::ASSIGNMENT_ACCEPTED => 'งานนี้ถูกรับแล้ว',
+            $to === CabinetSubtask::ASSIGNMENT_IN_PROGRESS => 'ไม่สามารถเริ่มงานได้ ต้องรับงานก่อน หรืองานนี้เริ่มไปแล้ว',
+            default => 'ไม่สามารถปิดงานได้ ต้องเริ่มงานก่อน หรืองานนี้เสร็จไปแล้ว',
+        };
+    }
+
+    private function label(CabinetSubtask $subtask): string
+    {
+        $subtask->loadMissing('cabinetTask.cabinet');
+
+        return "\"{$subtask->name}\" ({$subtask->cabinetTask->cabinet->mo_no} / {$subtask->cabinetTask->name})";
+    }
+
+    private function departmentName(?int $id): string
+    {
+        return $id ? (Department::find($id)?->name ?? "#{$id}") : '-';
+    }
+
+    private function log(CabinetSubtask $subtask, User $actor, string $action, string $description, array $changes = []): void
+    {
+        ActivityLog::record(
+            $subtask->cabinetTask->cabinet->project_id,
+            $actor->id,
+            $subtask,
+            $action,
+            $description,
+            $changes
+        );
+    }
+
+    /**
+     * Copy the freshly written state back onto the model instance the caller holds.
+     */
+    private function syncInstance(CabinetSubtask $subtask, CabinetSubtask $locked): void
+    {
+        $subtask->setRawAttributes($locked->getAttributes(), true);
+        $subtask->unsetRelations();
+    }
+}

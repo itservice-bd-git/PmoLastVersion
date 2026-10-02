@@ -1,0 +1,227 @@
+@import 'flatpickr/dist/flatpickr.min.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Avatar Electric PMO - theme tokens (restyle only, see AE_THEME.md).
+ * Mirrors tailwind.config.js's `ae`/electric-blue palette as plain CSS
+ * variables for the handful of places below that aren't Tailwind utility
+ * classes (raw CSS toast/flatpickr rules, and here for reference/future use).
+ */
+:root {
+    --ae-primary-dark: #0B1F3A;
+    --ae-primary: #0F4C81;
+    --ae-electric: #1479D7;
+    --ae-electric-hover: #0F67B8;
+    --ae-light-blue: #EAF4FF;
+    --ae-bg: #F5F7FA;
+    --ae-surface: #FFFFFF;
+    --ae-border: #DDE4EC;
+    --ae-text: #1E293B;
+    --ae-text-secondary: #64748B;
+    --ae-muted: #94A3B8;
+    --ae-success: #16A34A;
+    --ae-success-light: #DCFCE7;
+    --ae-warning: #F59E0B;
+    --ae-warning-light: #FEF3C7;
+    --ae-danger: #DC2626;
+    --ae-danger-light: #FEE2E2;
+}
+
+/* Task accordion (cabinets/show.blade.php `<details class="group">`): a soft
+   brand tint on the row that's currently expanded. Scoped to `.group` (the
+   Task level, which already carries that marker class for its chevron icon)
+   so the tighter Sub Task row underneath isn't affected. */
+details.group[open] > summary {
+    background-color: var(--ae-light-blue);
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+/*
+ * Collapsible sidebar (desktop only, >=1024px - Tailwind's `lg` breakpoint).
+ * `html.sidebar-collapsed` is the single source of truth for the collapsed
+ * layout: it's set synchronously in layouts/app.blade.php (both an early
+ * inline <script> on first paint, from localStorage, and by toggleSidebar()
+ * at runtime) so these rules and Alpine's `sidebarCollapsed` state never
+ * disagree. #app-sidebar/#app-content ID selectors outrank the Tailwind
+ * utility classes already on those elements (lg:w-64 / lg:pl-64), so no
+ * !important or extra markup changes are needed anywhere else - this is the
+ * only place sidebar width / content offset are overridden.
+ */
+@media (min-width: 1024px) {
+    html.sidebar-collapsed #app-sidebar {
+        width: 4rem;
+    }
+    html.sidebar-collapsed #app-content {
+        padding-left: 4rem;
+    }
+    /* Every page's content sits in a `max-w-7xl mx-auto` wrapper (dashboard,
+       my-department, projects, cabinets, assignments, profile) - without this,
+       collapsing the sidebar frees up space on the left but the page itself
+       stays capped at the same 1280px, so it just re-centers instead of
+       actually growing (My Department's Calendar/Timeline never gets the
+       extra width the spec calls for). Narrower form-page wrappers
+       (max-w-xl/2xl/3xl/4xl/5xl) are untouched on purpose - widening a form
+       to the full window would hurt readability, not help it. */
+    html.sidebar-collapsed #app-content main .max-w-7xl {
+        max-width: 100%;
+    }
+    html.sidebar-collapsed #app-sidebar .sidebar-label {
+        display: none;
+    }
+    html.sidebar-collapsed #app-sidebar .sidebar-logo-row {
+        justify-content: center;
+        padding-left: 0;
+        padding-right: 0;
+    }
+    html.sidebar-collapsed #app-sidebar nav {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+    html.sidebar-collapsed #app-sidebar nav a {
+        justify-content: center;
+        padding-left: 0;
+        padding-right: 0;
+    }
+}
+
+#app-toast-container {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    pointer-events: none;
+}
+
+.app-toast {
+    /* Default = success (showToast()'s own default `type` argument). A darker
+       shade of the brand Success green than --ae-success, for the same reason
+       the error variant below uses a darker red than --ae-danger: enough
+       contrast for white text on a solid fill. */
+    background: #15803D;
+    color: #f8fafc;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    padding: 0.6rem 1rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.15), 0 4px 6px -4px rgb(0 0 0 / 0.15);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.app-toast.app-toast-error {
+    background: #b91c1c;
+}
+
+/* Not dispatched by any current showToast() call (only the default/success
+   and 'error' types are used today) - defined for parity with the brand's
+   4-color toast system, ready if a call site ever passes them. */
+.app-toast.app-toast-warning {
+    background: #B45309;
+}
+
+.app-toast.app-toast-info {
+    background: var(--ae-electric-hover);
+}
+
+.app-toast.app-toast-show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* SortableJS state classes for drag & drop reordering */
+.sortable-ghost {
+    opacity: 0.4;
+}
+
+.sortable-chosen {
+    box-shadow: 0 8px 16px -4px rgb(0 0 0 / 0.15);
+    background: #eff6ff;
+}
+
+.sortable-drag {
+    opacity: 0.9 !important;
+}
+
+.sortable-fallback {
+    opacity: 0.95 !important;
+    box-shadow: 0 12px 24px -6px rgb(0 0 0 / 0.25);
+    border-radius: 0.5rem;
+    transform: scale(1.02) rotate(0.5deg);
+    cursor: grabbing !important;
+}
+
+.drag-handle {
+    cursor: grab;
+    color: #cbd5e1;
+    transition: color 0.15s ease;
+}
+
+.drag-handle:hover {
+    color: #64748b;
+}
+
+/*
+ * Flatpickr theme - overrides the library's own default (light gray) skin to
+ * match Avatar Electric's palette. Purely cosmetic: flatpickr's own behavior,
+ * the dd/mm/yyyy date format, and its init options in resources/js/app.js are
+ * untouched - these rules just retarget the classes flatpickr already renders.
+ */
+.flatpickr-calendar {
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    border: 1px solid var(--ae-border);
+}
+
+.flatpickr-months .flatpickr-month,
+.flatpickr-current-month,
+.flatpickr-weekdays {
+    background: var(--ae-primary-dark);
+    color: #fff;
+    fill: #fff;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year {
+    color: #fff;
+}
+
+.flatpickr-weekday {
+    background: var(--ae-primary-dark);
+    color: #cbd5e1;
+}
+
+.flatpickr-months .flatpickr-prev-month:hover svg,
+.flatpickr-months .flatpickr-next-month:hover svg {
+    fill: var(--ae-electric);
+}
+
+.flatpickr-day.today {
+    border-color: var(--ae-electric);
+}
+
+.flatpickr-day:hover,
+.flatpickr-day:focus {
+    background: var(--ae-light-blue);
+    border-color: var(--ae-light-blue);
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover,
+.flatpickr-day.selected:focus {
+    background: var(--ae-electric);
+    border-color: var(--ae-electric);
+    color: #fff;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}

@@ -1,0 +1,97 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\CabinetSubtask;
+use App\Models\Department;
+use App\Services\SubtaskAssignmentService;
+use Illuminate\Http\Request;
+
+class CabinetSubtaskController extends Controller
+{
+    public function __construct(private SubtaskAssignmentService $assignments) {}
+
+    public function update(Request $request, CabinetSubtask $cabinetSubtask)
+    {
+        $data = $request->validate([
+            'status' => ['required', 'in:'.implode(',', array_keys(CabinetSubtask::$statuses))],
+            'department_id' => ['nullable', 'exists:departments,id'],
+            'owner_id' => ['nullable', 'exists:users,id'],
+            'start_date' => ['nullable', 'date'],
+            'due_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'remark' => ['nullable', 'string'],
+        ]);
+
+        // Department goes through the assignment service so the lock rule
+        // (no change once accepted) and its activity log apply here too.
+        if ($request->has('department_id')) {
+            $this->assignments->changeDepartment(
+                $cabinetSubtask,
+                $data['department_id'] ? (int) $data['department_id'] : null,
+                $request->user()
+            );
+        }
+        unset($data['department_id']);
+
+        $cabinetSubtask->update($data);
+
+        // Cabinet Quick Detail Panel's Assignment Modal submits this same
+        // endpoint via fetch() (department + dates + remark in one request,
+        // exactly like the Cabinet page's own edit-subtask modal) and needs a
+        // JSON reply to update in place without a reload - respond() already
+        // falls back to back()->with(...) for the existing non-JSON form post.
+        return $this->respond($request, $cabinetSubtask, 'บันทึกงานย่อยเรียบร้อยแล้ว');
+    }
+
+    public function updateDepartment(Request $request, CabinetSubtask $cabinetSubtask)
+    {
+        $data = $request->validate([
+            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
+        ]);
+
+        $changed = $this->assignments->changeDepartment(
+            $cabinetSubtask,
+            $data['department_id'] ?? null,
+            $request->user()
+        );
+
+        return $this->respond($request, $cabinetSubtask, $changed ? 'เปลี่ยนแผนกเรียบร้อย' : 'ไม่มีการเปลี่ยนแปลง');
+    }
+
+    public function accept(Request $request, CabinetSubtask $cabinetSubtask)
+    {
+        $this->assignments->accept($cabinetSubtask, $request->user());
+
+        return $this->respond($request, $cabinetSubtask, 'รับงานเรียบร้อย');
+    }
+
+    public function start(Request $request, CabinetSubtask $cabinetSubtask)
+    {
+        $this->assignments->start($cabinetSubtask, $request->user());
+
+        return $this->respond($request, $cabinetSubtask, 'เริ่มงานเรียบร้อย');
+    }
+
+    public function complete(Request $request, CabinetSubtask $cabinetSubtask)
+    {
+        $this->assignments->complete($cabinetSubtask, $request->user());
+
+        return $this->respond($request, $cabinetSubtask, 'บันทึกงานเสร็จเรียบร้อย');
+    }
+
+    private function respond(Request $request, CabinetSubtask $subtask, string $message)
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'assignment' => $this->assignments->payload($subtask, $request->user()),
+                'html' => view('cabinets.partials._assignment', [
+                    'subtask' => $subtask,
+                    'departments' => Department::orderBy('name')->get(),
+                ])->render(),
+            ]);
+        }
+
+        return back()->with('success', $message);
+    }
+}

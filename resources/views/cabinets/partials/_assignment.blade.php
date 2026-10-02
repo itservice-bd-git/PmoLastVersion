@@ -1,0 +1,54 @@
+@php
+    $actions = app(\App\Services\SubtaskAssignmentService::class)->actionsFor($subtask, auth()->user());
+    $locked = $subtask->is_department_locked;
+    $canEditDepartment = auth()->user()?->canDispatchWork() ?? false;
+    $badge = [
+        'UNASSIGNED' => 'bg-slate-100 text-slate-600',
+        'ASSIGNED' => 'bg-amber-100 text-amber-700',
+        'ACCEPTED' => 'bg-indigo-100 text-indigo-700',
+        'IN_PROGRESS' => 'bg-blue-100 text-blue-700',
+        'COMPLETED' => 'bg-emerald-100 text-emerald-700',
+    ][$subtask->assignment_status] ?? 'bg-slate-100 text-slate-600';
+    $trail = collect([
+        $subtask->accepted_at ? 'รับงานโดย '.($subtask->acceptedBy?->name ?? '-').' '.$subtask->accepted_at->format('d/m/Y H:i') : null,
+        $subtask->started_at ? 'เริ่มงานโดย '.($subtask->startedBy?->name ?? '-').' '.$subtask->started_at->format('d/m/Y H:i') : null,
+        $subtask->completed_at ? 'เสร็จงานโดย '.($subtask->completedBy?->name ?? '-').' '.$subtask->completed_at->format('d/m/Y H:i') : null,
+    ])->filter()->implode(' · ');
+@endphp
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap {{ $badge }}" data-assignment-status
+      @if ($trail) title="{{ $trail }}" @endif>{{ $subtask->assignment_status_label }}</span>
+
+@if ($locked)
+    <span class="inline-flex items-center gap-1 text-xs font-medium text-slate-600 cursor-not-allowed"
+          title="ไม่สามารถเปลี่ยนแผนกได้ เนื่องจากแผนกรับงานแล้ว">
+        {{ $subtask->department?->name ?? '-' }} <span aria-hidden="true">🔒</span>
+    </span>
+@elseif (! $canEditDepartment)
+    <span class="inline-flex items-center gap-1 text-xs font-medium text-slate-500"
+          title="เฉพาะผู้ดูแลระบบ (Admin) หรือ Project Manager เท่านั้นที่มีสิทธิ์เปลี่ยนแผนก">
+        {{ $subtask->department?->name ?? '- ยังไม่จ่ายงาน -' }}
+    </span>
+@else
+    <select class="assignment-department-select rounded-lg border-slate-300 text-xs py-1 pl-2 pr-7"
+            data-url="{{ route('cabinet-subtasks.department', $subtask) }}"
+            data-previous="{{ $subtask->department_id }}"
+            aria-label="Department">
+        <option value="">- ยังไม่จ่ายงาน -</option>
+        @foreach ($departments as $department)
+            <option value="{{ $department->id }}" @selected($subtask->department_id === $department->id)>{{ $department->name }}</option>
+        @endforeach
+    </select>
+@endif
+
+@if ($actions['can_accept'])
+    <button type="button" class="assignment-action px-2 py-1 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700"
+            data-url="{{ route('cabinet-subtasks.accept', $subtask) }}" data-confirm="ยืนยันรับงาน? หลังรับงานแล้วจะไม่สามารถเปลี่ยนแผนกได้">รับงาน</button>
+@endif
+@if ($actions['can_start'])
+    <button type="button" class="assignment-action px-2 py-1 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"
+            data-url="{{ route('cabinet-subtasks.start', $subtask) }}">เริ่มงาน</button>
+@endif
+@if ($actions['can_complete'])
+    <button type="button" class="assignment-action px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700"
+            data-url="{{ route('cabinet-subtasks.complete', $subtask) }}">เสร็จงาน</button>
+@endif

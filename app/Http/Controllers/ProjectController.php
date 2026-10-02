@@ -1,0 +1,205 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\ActivityLog;
+use App\Models\JobType;
+use App\Models\Project;
+use App\Models\User;
+use App\Services\CommentAttachmentUploader;
+use Illuminate\Http\Request;
+
+class ProjectController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = Project::withAvg('cabinets', 'progress')
+            ->withAvg('projectTasks', 'progress')
+            ->withCount('cabinets');
+
+        if ($search = $request->get('q')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('project_no', 'like', "%{$search}%")
+                    ->orWhere('project_name', 'like', "%{$search}%")
+                    ->orWhere('customer_name', 'like', "%{$search}%");
+            });
+        }
+
+        if ($status = $request->get('status')) {
+            $query->where('status', $status);
+        }
+
+        // Nearest due date first (overdue projects surface at the top). Projects
+        // with no due date come after those with one, and finished/cancelled
+        // projects sink to the bottom since their due date no longer matters.
+        $projects = $query
+            ->orderByRaw('CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END', [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED])
+            ->orderByRaw('CASE WHEN due_date IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('due_date')
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
+
+        return view('projects.index', [
+            'projects' => $projects,
+            'statuses' => Project::$statuses,
+            'filters' => $request->only(['q', 'status']),
+        ]);
+    }
+
+    public function create()
+    {
+        return view('projects.create', [
+            'users' => User::orderBy('name')->get(),
+            'statuses' => Project::$statuses,
+            'priorities' => Project::$priorities,
+            'jobTypes' => JobType::where('is_active', true)->orderBy('name')->get(),
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        $data = $this->validateData($request);
+
+        $project = Project::create($data);
+
+        return redirect()->route('projects.show', $project)->with('success', 'สร้างโครงการเรียบร้อยแล้ว');
+    }
+
+    public function show(Project $project)
+    {
+        $project->load([
+            'projectTasks.owner',
+            'cabinets.tasks',
+            'projectManager', 'jobType',
+            'attachments.uploadedBy',
+        ]);
+
+        $project->cabinets->each(
+            fn ($cabinet) => $cabinet->tasks->each(fn ($task) => $task->setRelation('cabinet', $cabinet))
+        );
+
+        // Activity Log: system-generated events only - manual Comments (action=note)
+        // moved to their own tab/query below.
+        $activityLogs = ActivityLog::where('project_id', $project->id)
+            ->where('action', '!=', 'note')
+            ->with('user')
+            ->latest()
+            ->paginate(30, pageName: 'activity_page');
+
+        // Comments: scoped strictly to this Project itself (not its Cabinets, which
+        // have their own separate Comment tab) - the user's own written notes.
+        $comments = ActivityLog::where('loggable_type', Project::class)
+            ->where('loggable_id', $project->id)
+            ->where('action', 'note')
+            ->with(['user', 'attachments'])
+            ->latest()
+            ->paginate(30, pageName: 'comment_page');
+
+        return view('projects.show', [
+            'project' => $project,
+            'projectTaskStatuses' => \App\Models\ProjectTask::$statuses,
+            'users' => User::orderBy('name')->get(),
+            'cabinetTemplates' => \App\Models\CabinetTemplate::where('is_active', true)->get(),
+            // For the Cabinet Quick Detail Panel's Assignment Modal (department
+            // select) - same unfiltered query the Cabinet full page/Dispatch page
+            // already use, not a new Department query.
+            'departments' => \App\Models\Department::orderBy('name')->get(),
+            'activityLogs' => $activityLogs,
+            'comments' => $comments,
+        ]);
+    }
+
+    public function edit(Project $project)
+    {
+        return view('projects.edit', [
+            'project' => $project,
+            'users' => User::orderBy('name')->get(),
+            'statuses' => Project::$statuses,
+            'priorities' => Project::$priorities,
+            'jobTypes' => JobType::where('is_active', true)->orderBy('name')->get(),
+        ]);
+    }
+
+    public function update(Request $request, Project $project)
+    {
+        $data = $this->validateData($request, $project);
+
+        $project->update($data);
+
+        return redirect()->route('projects.show', $project)->with('success', 'บันทึกการแก้ไขโครงการเรียบร้อยแล้ว');
+    }
+
+    public function destroy(Project $project)
+    {
+        $project->delete();
+
+        return redirect()->route('projects.index')->with('success', 'ลบโครงการเรียบร้อยแล้ว');
+    }
+
+    /**
+     * Manual entry in the project's Activity Log - the replacement for the
+     * old single-value Remark field. Append-only: no update/destroy.
+     */
+    public function storeNote(Request $request, Project $project, CommentAttachmentUploader $uploader)
+    {
+        $data = $request->validate([
+            'note' => ['required', 'string', 'max:2000'],
+            'attachments' => ['nullable', 'array', 'max:5'],
+            'attachments.*' => ['file', 'max:20480', 'mimes:'.CommentAttachmentUploader::ALLOWED_MIMES],
+        ]);
+
+        $log = ActivityLog::record($project->id, auth()->id(), $project, 'note', $data['note']);
+
+        foreach ($request->file('attachments', []) as $file) {
+            $uploader->store($log, $file, auth()->id());
+        }
+
+        // Comment tab is client-side (Alpine) state, not reflected in the URL -
+        // redirect straight back to it (rather than back()/Referer, which would
+        // just land on the page's default tab) so posting a comment doesn't
+        // visually bounce the user away from the Comment tab.
+        return redirect()->route('projects.show', ['project' => $project, 'tab' => 'comment'])
+            ->with('success', 'บันทึกรายการเรียบร้อยแล้ว');
+    }
+
+    // Lets a user tag a Project with its own color from My Department's Right
+    // Detail Panel (overrides the auto-assigned Calendar color). Purely cosmetic,
+    // so deliberately not in Project::activityLoggableFields() - a color swap
+    // shouldn't clutter the Activity Log the way a status/priority change does.
+    public function updateColor(Request $request, Project $project)
+    {
+        $data = $request->validate([
+            'color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+        ]);
+
+        $project->update(['color' => $data['color'] ?? null]);
+
+        if ($request->wantsJson()) {
+            return response()->json(['color' => $project->color]);
+        }
+
+        return back()->with('success', 'อัปเดตสีโครงการเรียบร้อยแล้ว');
+    }
+
+    private function validateData(Request $request, ?Project $project = null): array
+    {
+        return $request->validate([
+            'project_no' => ['required', 'string', 'max:50', 'unique:projects,project_no,'.($project?->id)],
+            'project_name' => ['required', 'string', 'max:255'],
+            'customer_name' => ['required', 'string', 'max:255'],
+            'po_no' => ['nullable', 'string', 'max:100'],
+            'sales_order_no' => ['nullable', 'string', 'max:100'],
+            'project_owner' => ['nullable', 'string', 'max:255'],
+            'sales_person' => ['nullable', 'string', 'max:255'],
+            'project_manager_id' => ['nullable', 'exists:users,id'],
+            'start_date' => ['nullable', 'date'],
+            'due_date' => ['nullable', 'date'],
+            'description' => ['nullable', 'string'],
+            'payment_terms' => ['nullable', 'string', 'max:255'],
+            'job_type_id' => ['nullable', 'exists:job_types,id'],
+            'status' => ['required', 'in:'.implode(',', array_keys(Project::$statuses))],
+            'priority' => ['required', 'in:'.implode(',', array_keys(Project::$priorities))],
+        ]);
+    }
+}

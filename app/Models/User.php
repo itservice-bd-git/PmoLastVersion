@@ -69,6 +69,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Restoring from the trash (Projects/Cabinets) - the same PMO-level roles.
+     */
+    public function canManageTrash(): bool
+    {
+        return $this->canViewOtherDepartments();
+    }
+
+    /**
      * The attributes that should be hidden for serialization.
      *
      * @var list<string>

@@ -6,6 +6,7 @@ use App\Models\CabinetSubtask;
 use App\Models\Department;
 use App\Models\Project;
 use App\Services\SubtaskAssignmentService;
+use App\Support\Csv;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -25,9 +26,17 @@ class MyDepartmentController extends Controller
         $department = ($canViewOthers || $user->department_id) ? $this->resolveDepartment($request) : null;
 
         return view('my-department.index', [
+            // $department is null in two different cases the view must tell
+            // apart: "no department at all" (blocked, see the @if above in
+            // the view) vs "PMO viewing ทุกแผนก" (canViewOthers true) - the
+            // view already branches on canViewOthers for that reason.
             'department' => $department,
             'canViewOthers' => $canViewOthers,
             'departments' => $canViewOthers ? Department::where('is_active', true)->orderBy('name')->get() : collect(),
+            // Project filter (point 5) - available to everyone, not just PMO:
+            // it only narrows further within whatever department scope already
+            // applies, same as Status, so it can't leak another department's data.
+            'projects' => Project::orderBy('project_no')->get(['id', 'project_no', 'project_name']),
         ]);
     }
 
@@ -38,24 +47,93 @@ class MyDepartmentController extends Controller
      */
     public function tasks(Request $request)
     {
+        [$department, $subtasks, $today] = $this->scheduleQuery($request);
+        $user = $request->user();
+
+        return response()->json([
+            'department' => $department ? ['id' => $department->id, 'name' => $department->name] : ['id' => null, 'name' => 'ทุกแผนก'],
+            'is_all_departments' => $department === null,
+            'today' => $today->format('Y-m-d'),
+            'items' => $subtasks->map(fn ($s) => $this->item($s, $user, $today))->values(),
+        ]);
+    }
+
+    /**
+     * Same window/department/project/status filters as the screen, as a CSV the
+     * department can take to a meeting or into Excel.
+     */
+    public function export(Request $request)
+    {
+        [$department, $subtasks, $today] = $this->scheduleQuery($request);
+        $user = $request->user();
+
+        $rows = $subtasks->map(fn ($s) => $this->item($s, $user, $today))->map(fn ($i) => [
+            $i['department_name'] ?? '-',
+            $i['project_no'],
+            $i['project_name'],
+            $i['cabinet_mo'],
+            $i['task_name'],
+            $i['name'],
+            $i['owner_name'] ?? '-',
+            $i['start_date'] ? date('d/m/Y', strtotime($i['start_date'])) : '-',
+            $i['due_date'] ? date('d/m/Y', strtotime($i['due_date'])) : '-',
+            $i['assignment_status_label'],
+            $i['is_overdue'] ? 'เกินกำหนด '.abs($i['days_remaining']).' วัน' : '',
+            $i['progress'].'%',
+            $i['checklists_completed'].'/'.$i['checklists_total'],
+        ]);
+
+        return Csv::download(
+            'งานแผนก-'.($department?->name ?? 'ทุกแผนก').'-'.$today->format('Y-m-d').'.csv',
+            ['แผนก', 'Project', 'ชื่อโครงการ', 'ตู้ (MO)', 'Task', 'Sub Task', 'ผู้รับผิดชอบ', 'เริ่ม', 'กำหนดส่ง', 'สถานะ', 'เกินกำหนด', 'ความคืบหน้า', 'Checklist เสร็จ/ทั้งหมด'],
+            $rows
+        );
+    }
+
+    /**
+     * The one query behind both the calendar JSON and the CSV, so what is exported
+     * is exactly what the screen shows.
+     *
+     * @return array{0: ?Department, 1: \Illuminate\Support\Collection, 2: Carbon}
+     */
+    private function scheduleQuery(Request $request): array
+    {
         $data = $request->validate([
             'from' => ['required', 'date_format:Y-m-d'],
             'to' => ['required', 'date_format:Y-m-d', 'after_or_equal:from'],
-            'department_id' => ['nullable', 'integer'],
+            // 'all' (PMO only, resolveDepartment() enforces that) or a real id -
+            // resolved below, so this stays a loose string rule here.
+            'department_id' => ['nullable', 'string'],
+            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'status' => ['nullable', 'in:ASSIGNED,ACCEPTED,IN_PROGRESS,COMPLETED,OVERDUE'],
         ]);
 
+        // null = "ทุกแผนก" (PMO only - resolveDepartment() already enforces
+        // canViewOtherDepartments() before this can ever come back null).
         $department = $this->resolveDepartment($request);
-        $user = $request->user();
         $today = today();
 
         $subtasks = CabinetSubtask::query()
-            ->where('department_id', $department->id)
+            ->when($department, fn ($q) => $q->where('department_id', $department->id))
             ->whereIn('assignment_status', [
                 CabinetSubtask::ASSIGNMENT_ASSIGNED,
                 CabinetSubtask::ASSIGNMENT_ACCEPTED,
                 CabinetSubtask::ASSIGNMENT_IN_PROGRESS,
                 CabinetSubtask::ASSIGNMENT_COMPLETED,
             ])
+            ->when($data['project_id'] ?? null, function ($q) use ($data) {
+                $q->whereHas('cabinetTask.cabinet', fn ($q) => $q->where('project_id', $data['project_id']));
+            })
+            ->when($data['status'] ?? null, function ($q) use ($data, $today) {
+                // OVERDUE is a derived state (due date passed, not completed),
+                // never a real assignment_status value - same rule the frontend
+                // already uses for is_overdue, just applied server-side here.
+                if ($data['status'] === 'OVERDUE') {
+                    $q->whereDate('due_date', '<', $today)->where('assignment_status', '!=', CabinetSubtask::ASSIGNMENT_COMPLETED);
+                } else {
+                    $q->where('assignment_status', $data['status']);
+                }
+            })
             ->where(function ($q) use ($data, $today) {
                 // Active in the window: [start ?? due, due ?? start] overlaps [from, to].
                 $q->where(function ($q) use ($data) {
@@ -70,7 +148,7 @@ class MyDepartmentController extends Controller
                         $q->whereNull('start_date')->whereNull('due_date');
                     });
             })
-            ->with('cabinetTask.cabinet.project', 'owner')
+            ->with('cabinetTask.cabinet.project', 'owner', 'department')
             ->withCount([
                 'checklists',
                 'checklists as completed_checklists_count' => fn ($q) => $q->where('is_completed', true),
@@ -79,11 +157,7 @@ class MyDepartmentController extends Controller
             ->orderBy('id')
             ->get();
 
-        return response()->json([
-            'department' => ['id' => $department->id, 'name' => $department->name],
-            'today' => $today->format('Y-m-d'),
-            'items' => $subtasks->map(fn ($s) => $this->item($s, $user, $today))->values(),
-        ]);
+        return [$department, $subtasks, $today];
     }
 
     /**
@@ -127,17 +201,25 @@ class MyDepartmentController extends Controller
     }
 
     /**
-     * Which department is being viewed. Regular users are pinned to their
-     * own; admin/PM may pick another via department_id.
+     * Which department is being viewed - null means "ทุกแผนก" (PMO only).
+     * Regular users are pinned to their own; admin/PM may pick another
+     * department, or all of them, via department_id. This is the ONLY place
+     * that decision is made - index() and tasks() both call this, so a
+     * Department User can never reach another department's data by hand-
+     * crafting the request (not just hidden in the UI).
      */
-    private function resolveDepartment(Request $request): Department
+    private function resolveDepartment(Request $request): ?Department
     {
         $user = $request->user();
-        $requestedId = $request->integer('department_id') ?: null;
+        $requested = $request->input('department_id');
 
         if ($user->canViewOtherDepartments()) {
-            if ($requestedId) {
-                return Department::findOrFail($requestedId);
+            if ($requested === 'all') {
+                return null;
+            }
+
+            if ($requested) {
+                return Department::findOrFail((int) $requested);
             }
 
             return $user->department
@@ -146,7 +228,7 @@ class MyDepartmentController extends Controller
         }
 
         abort_unless($user->department_id, 403, 'บัญชีของคุณยังไม่ได้ผูกกับแผนก กรุณาติดต่อผู้ดูแลระบบ');
-        abort_if($requestedId && $requestedId !== $user->department_id, 403, 'คุณไม่มีสิทธิ์ดูงานของแผนกอื่น');
+        abort_if($requested && ((int) $requested !== $user->department_id), 403, 'คุณไม่มีสิทธิ์ดูงานของแผนกอื่น');
 
         return $user->department;
     }
@@ -176,6 +258,13 @@ class MyDepartmentController extends Controller
             'cabinet_task_id' => $subtask->cabinet_task_id,
             'task_name' => $subtask->cabinetTask->name,
             'name' => $subtask->name,
+            // Per-item Department (point 32) - needed once "ทุกแผนก" can return
+            // items from more than one Department at a time; a single-Department
+            // view already knows this from the top-level `department` key, but
+            // sending it per item too costs nothing and keeps both views reading
+            // the same shape.
+            'department_id' => $subtask->department_id,
+            'department_name' => $subtask->department?->name,
             'owner_name' => $subtask->owner?->name,
             'start_date' => $subtask->start_date?->format('Y-m-d'),
             'due_date' => $subtask->due_date?->format('Y-m-d'),

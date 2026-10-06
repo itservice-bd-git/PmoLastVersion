@@ -7,27 +7,14 @@ use App\Models\JobType;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\CommentAttachmentUploader;
+use App\Support\Csv;
 use Illuminate\Http\Request;
 
 class ProjectController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Project::withAvg('cabinets', 'progress')
-            ->withAvg('projectTasks', 'progress')
-            ->withCount('cabinets');
-
-        if ($search = $request->get('q')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('project_no', 'like', "%{$search}%")
-                    ->orWhere('project_name', 'like', "%{$search}%")
-                    ->orWhere('customer_name', 'like', "%{$search}%");
-            });
-        }
-
-        if ($status = $request->get('status')) {
-            $query->where('status', $status);
-        }
+        $query = $this->filteredProjects($request);
 
         // Nearest due date first (overdue projects surface at the top). Projects
         // with no due date come after those with one, and finished/cancelled
@@ -45,6 +32,57 @@ class ProjectController extends Controller
             'statuses' => Project::$statuses,
             'filters' => $request->only(['q', 'status']),
         ]);
+    }
+
+    /**
+     * Same search/status filters as the list, as a CSV (all matching rows, not just the page).
+     */
+    public function export(Request $request)
+    {
+        $projects = $this->filteredProjects($request)->with('projectManager', 'jobType')->orderBy('project_no')->get();
+
+        $rows = $projects->map(fn (Project $p) => [
+            $p->project_no,
+            $p->project_name,
+            $p->customer_name,
+            $p->po_no,
+            Project::$statuses[$p->status] ?? $p->status,
+            Project::$priorities[$p->priority] ?? $p->priority,
+            $p->projectManager?->name,
+            $p->jobType?->name,
+            $p->start_date?->format('d/m/Y'),
+            $p->due_date?->format('d/m/Y'),
+            $p->cabinets_count,
+            $p->production_progress.'%',
+            ['overdue' => 'Delayed', 'at_risk' => 'At Risk'][$p->risk_level] ?? 'On Track',
+        ]);
+
+        return Csv::download(
+            'โครงการ-'.today()->format('Y-m-d').'.csv',
+            ['Project No.', 'ชื่อโครงการ', 'ลูกค้า', 'PO No.', 'สถานะ', 'ความสำคัญ', 'Project Manager', 'ประเภทงาน', 'เริ่ม', 'กำหนดส่ง', 'จำนวนตู้', 'ความคืบหน้าการผลิต', 'ความเสี่ยง'],
+            $rows
+        );
+    }
+
+    private function filteredProjects(Request $request)
+    {
+        $query = Project::withAvg('cabinets', 'progress')
+            ->withAvg('projectTasks', 'progress')
+            ->withCount('cabinets');
+
+        if ($search = $request->get('q')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('project_no', 'like', "%{$search}%")
+                    ->orWhere('project_name', 'like', "%{$search}%")
+                    ->orWhere('customer_name', 'like', "%{$search}%");
+            });
+        }
+
+        if ($status = $request->get('status')) {
+            $query->where('status', $status);
+        }
+
+        return $query;
     }
 
     public function create()
@@ -79,14 +117,6 @@ class ProjectController extends Controller
             fn ($cabinet) => $cabinet->tasks->each(fn ($task) => $task->setRelation('cabinet', $cabinet))
         );
 
-        // Activity Log: system-generated events only - manual Comments (action=note)
-        // moved to their own tab/query below.
-        $activityLogs = ActivityLog::where('project_id', $project->id)
-            ->where('action', '!=', 'note')
-            ->with('user')
-            ->latest()
-            ->paginate(30, pageName: 'activity_page');
-
         // Comments: scoped strictly to this Project itself (not its Cabinets, which
         // have their own separate Comment tab) - the user's own written notes.
         $comments = ActivityLog::where('loggable_type', Project::class)
@@ -105,7 +135,6 @@ class ProjectController extends Controller
             // select) - same unfiltered query the Cabinet full page/Dispatch page
             // already use, not a new Department query.
             'departments' => \App\Models\Department::orderBy('name')->get(),
-            'activityLogs' => $activityLogs,
             'comments' => $comments,
         ]);
     }
@@ -185,7 +214,7 @@ class ProjectController extends Controller
     private function validateData(Request $request, ?Project $project = null): array
     {
         return $request->validate([
-            'project_no' => ['required', 'string', 'max:50', 'unique:projects,project_no,'.($project?->id)],
+            'project_no' => ['required', 'string', 'max:50', 'unique:projects,project_no,'.($project?->id ?? 'NULL').',id,deleted_at,NULL'],
             'project_name' => ['required', 'string', 'max:255'],
             'customer_name' => ['required', 'string', 'max:255'],
             'po_no' => ['nullable', 'string', 'max:100'],

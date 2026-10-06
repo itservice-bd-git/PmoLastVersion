@@ -1,4 +1,4 @@
-{{-- Workflow buttons for one item. $v = name of the JS variable holding it, $modal = inside the detail modal. --}}
+{{-- Workflow buttons for one item. $v = name of the JS variable holding it, $modal = inside the Work Detail Panel (vs. the compact row's action slot elsewhere). --}}
 <span class="inline-flex items-center gap-2" @click.stop>
     <button type="button" x-show="{{ $v }}.assignment_status === 'ASSIGNED' && {{ $v }}.can_accept" :disabled="!!{{ $v }}.busy"
             @click.stop="act({{ $v }}, 'accept')"

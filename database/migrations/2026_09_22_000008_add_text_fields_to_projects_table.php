@@ -17,8 +17,10 @@ return new class extends Migration
         });
 
         // Backfill from the old user-FK columns so existing projects keep their data.
-        DB::statement('UPDATE projects p JOIN users u ON p.owner_id = u.id SET p.project_owner = u.name WHERE p.owner_id IS NOT NULL');
-        DB::statement('UPDATE projects p JOIN users u ON p.sales_person_id = u.id SET p.sales_person = u.name WHERE p.sales_person_id IS NOT NULL');
+        // Correlated subquery instead of UPDATE ... JOIN: same result on MySQL, but also
+        // runs on sqlite (the phpunit default), which has no UPDATE ... JOIN.
+        DB::statement('UPDATE projects SET project_owner = (SELECT name FROM users WHERE users.id = projects.owner_id) WHERE owner_id IS NOT NULL');
+        DB::statement('UPDATE projects SET sales_person = (SELECT name FROM users WHERE users.id = projects.sales_person_id) WHERE sales_person_id IS NOT NULL');
     }
 
     public function down(): void

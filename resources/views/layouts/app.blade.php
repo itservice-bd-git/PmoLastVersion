@@ -79,6 +79,41 @@
                         </div>
 
                         <div class="flex items-center gap-4">
+                            @php
+                                $unreadCount = auth()->user()->unreadNotifications()->count();
+                                $latestNotices = auth()->user()->notifications()->limit(8)->get();
+                            @endphp
+                            <x-dropdown align="right" width="w-80 max-w-[calc(100vw-2rem)]">
+                                <x-slot name="trigger">
+                                    <button type="button" class="relative text-slate-500 hover:text-slate-700" aria-label="การแจ้งเตือน">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0" /></svg>
+                                        @if ($unreadCount > 0)
+                                            <span class="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-4 text-center">{{ $unreadCount > 99 ? '99+' : $unreadCount }}</span>
+                                        @endif
+                                    </button>
+                                </x-slot>
+                                <x-slot name="content">
+                                    <div class="max-h-96 overflow-y-auto divide-y divide-slate-100">
+                                        @forelse ($latestNotices as $notice)
+                                            <form method="POST" action="{{ route('notifications.read', $notice->id) }}">
+                                                @csrf
+                                                <button class="w-full text-left px-4 py-2.5 hover:bg-slate-50 flex items-start gap-2">
+                                                    <span class="mt-1.5 w-2 h-2 rounded-full shrink-0 {{ $notice->read_at ? 'bg-transparent' : 'bg-blue-500' }}"></span>
+                                                    <span class="min-w-0">
+                                                        <span class="block text-sm {{ $notice->read_at ? 'text-slate-600' : 'font-semibold text-slate-900' }}">{{ $notice->data['title'] }}</span>
+                                                        <span class="block text-xs text-slate-500 truncate">{{ $notice->data['body'] }}</span>
+                                                        <span class="block text-[11px] text-slate-400">{{ $notice->created_at->format('d/m/Y H:i') }}</span>
+                                                    </span>
+                                                </button>
+                                            </form>
+                                        @empty
+                                            <p class="px-4 py-6 text-center text-sm text-slate-400">ยังไม่มีการแจ้งเตือน</p>
+                                        @endforelse
+                                    </div>
+                                    <a href="{{ route('notifications.index') }}" class="block px-4 py-2 text-center text-xs font-medium text-blue-600 hover:bg-slate-50 border-t border-slate-100">ดูทั้งหมด</a>
+                                </x-slot>
+                            </x-dropdown>
+
                             <x-dropdown align="right" width="48">
                                 <x-slot name="trigger">
                                     <button class="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900">

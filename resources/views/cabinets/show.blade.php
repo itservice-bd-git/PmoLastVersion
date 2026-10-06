@@ -11,6 +11,7 @@
         $initialTab = in_array(request('tab'), ['tasks', 'attachments', 'comment', 'activity']) ? request('tab') : 'tasks';
     @endphp
     <div class="max-w-screen-2xl mx-auto space-y-6" x-data="{ tab: '{{ $initialTab }}' }">
+        <x-closed-project-banner :project="$cabinet->project" />
 
         <x-card>
             <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
@@ -36,7 +37,7 @@
                 </div>
                 <div class="flex gap-2 shrink-0">
                     <a href="{{ route('cabinets.edit', $cabinet) }}" class="px-3 py-2 rounded-lg bg-slate-100 text-sm font-medium text-slate-700 hover:bg-slate-200">Edit</a>
-                    <form method="POST" action="{{ route('cabinets.destroy', $cabinet) }}" onsubmit="return confirm('ยืนยันการลบตู้ {{ $cabinet->mo_no }} นี้? ข้อมูล Task/Sub Task/Checklist ทั้งหมดของตู้นี้จะถูกลบไปด้วย')">
+                    <form method="POST" action="{{ route('cabinets.destroy', $cabinet) }}" onsubmit="return confirm('ยืนยันการลบตู้ {{ $cabinet->mo_no }} นี้? Task/Sub Task/Checklist ทั้งหมดของตู้นี้จะย้ายไปถังขยะ (Admin/PM กู้คืนได้)')">
                         @csrf @method('DELETE')
                         <button class="px-3 py-2 rounded-lg bg-red-50 text-sm font-medium text-red-600 hover:bg-red-100">Delete</button>
                     </form>
@@ -85,31 +86,7 @@
         </div>
 
         <div x-show="tab === 'activity'" x-cloak>
-            <x-card title="Activity Log" subtitle="ประวัติการเปลี่ยนแปลงทั้งหมดของตู้นี้ เรียงล่าสุดก่อน">
-                <div class="divide-y divide-slate-100 -mx-5 -mb-5">
-                    @forelse ($activityLogs as $log)
-                        <div class="px-5 py-3 flex items-start gap-3 text-sm">
-                            <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-semibold text-slate-500 shrink-0">
-                                {{ $log->user ? mb_substr($log->user->name, 0, 1) : '?' }}
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <p class="text-slate-700">
-                                    <span class="font-medium text-slate-900">{{ $log->user?->name ?? 'ระบบ' }}</span>
-                                    {{ $log->description }}
-                                </p>
-                                <p class="text-xs text-slate-400 mt-0.5">{{ $log->created_at->format('d/m/Y H:i') }}</p>
-                            </div>
-                        </div>
-                    @empty
-                        <p class="px-5 py-6 text-center text-slate-400 text-sm">ยังไม่มีประวัติการเปลี่ยนแปลง</p>
-                    @endforelse
-                </div>
-                @if ($activityLogs->hasPages())
-                    <div class="mt-4 -mx-5 -mb-5 px-5 pb-2">
-                        {{ $activityLogs->onEachSide(1)->links() }}
-                    </div>
-                @endif
-            </x-card>
+            <x-activity-tree :url="route('cabinets.activity-tree', $cabinet)" :export-url="route('cabinets.activity-export', $cabinet)" subtitle="ประวัติการเปลี่ยนแปลงทั้งหมดของตู้นี้ จัดกลุ่มตามงาน เรียงล่าสุดก่อน" />
         </div>
 
         <div x-show="tab === 'attachments'" x-cloak>

@@ -2,14 +2,20 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\CascadesSoftDeletes;
 use App\Models\Concerns\HasAuditFields;
 use App\Models\Concerns\LogsActivity;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Services\ProjectLock;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Project extends Model
 {
-    use HasFactory, HasAuditFields, LogsActivity;
+    use HasFactory, HasAuditFields, LogsActivity, SoftDeletes, CascadesSoftDeletes;
+
+    /** Statuses after which the project and everything under it is read-only (see ProjectLock). */
+    public const LOCKED_STATUSES = ['completed', 'cancelled'];
 
     const STATUS_DRAFT = 'draft';
 
@@ -178,6 +184,28 @@ class Project extends Model
         }
 
         return (int) now()->startOfDay()->diffInDays($this->due_date, false);
+    }
+
+    protected static function booted(): void
+    {
+        // A closed project can only be edited to re-open it (status change). Colour is a
+        // per-user calendar preference, not project data, so it stays changeable.
+        static::updating(function (self $project) {
+            $changed = array_diff(array_keys($project->getDirty()), ['color', 'updated_by', 'updated_at']);
+
+            if ($changed && in_array($project->getOriginal('status'), self::LOCKED_STATUSES, true) && ! $project->isDirty('status')) {
+                ProjectLock::assertOpen($project->getKey());
+            }
+        });
+
+        foreach (['saved', 'deleted', 'restored'] as $event) {
+            static::$event(fn (self $project) => ProjectLock::forget($project->getKey()));
+        }
+    }
+
+    public function isLocked(): bool
+    {
+        return in_array($this->status, self::LOCKED_STATUSES, true);
     }
 
     protected function activityProjectId(): ?int

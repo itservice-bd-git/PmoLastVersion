@@ -1,7 +1,12 @@
 {{--
     Right Detail Panel: Project -> Cabinet -> Task -> Sub Task drill-down. Opens
-    without a page refresh from any Project bar/row (Calendar, Timeline, List, Day
-    panel) via openProjectPanel(group) - see _script.blade.php.
+    without a page refresh from a Project row via openProjectPanel(group) - see
+    _script.blade.php. Only reachable from Timeline's per-Project rows (a single
+    Department already selected) - Calendar/List/Day Panel are Sub Task-level now
+    and open the Work Detail Panel directly (openDetail()); Timeline's own "ทุกแผนก"
+    rows are Department-level and drill down via selectDepartment() instead, which
+    narrows to one Department (bringing back per-Project Timeline rows) rather than
+    opening this panel.
 
     Desktop (lg: and up): a docked slide-over, fixed width, Calendar/Timeline/List
     stay fully visible (and usable) to its left - no dimming backdrop, since this is
@@ -14,14 +19,15 @@
     compact Header, a one-line Summary, and a flat divided Cabinet list (no card
     per Cabinet). Sub Task rows (_subtask-row.blade.php) reuse the exact same
     dotClass()/badgeClass()/act()/openDetail() as everywhere else, so Accept/Start/
-    Checklist keep working unchanged; a row click opens the existing single-Sub-
-    Task detail modal (with the full _item-actions button set), also unchanged.
+    Checklist keep working unchanged; a row click opens the Work Detail Panel
+    (_detail-panel.blade.php, with the full _item-actions button set), also
+    unchanged.
 --}}
 <template x-if="panel">
-    {{-- z-40, strictly below the Sub Task detail modal's z-50 (components/modal.blade.php)
-         and rendered before it in the DOM - the modal must always stack ABOVE this panel,
-         otherwise this panel's own click-catcher backdrop intercepts real mouse clicks
-         meant for the modal (checkboxes, buttons) and closes the panel underneath it. --}}
+    {{-- z-40, strictly below the Work Detail Panel's z-50 (_detail-panel.blade.php)
+         and rendered before it in the DOM - that panel must always stack ABOVE this
+         one, otherwise this panel's own click-catcher backdrop intercepts real mouse
+         clicks meant for it (checkboxes, buttons) and closes this panel instead. --}}
     <div id="project-detail-panel" class="fixed inset-0 z-40" @keydown.escape.window="closeProjectPanel()">
         {{-- Transparent click-catcher (outside-click closes the panel) - intentionally
              not a dimming overlay, so the page behind stays fully legible. --}}
@@ -118,59 +124,73 @@
                     <button type="button" x-show="panelCabinets().length > 0" @click="toggleExpandAllCabinets()" class="text-xs font-medium text-blue-600 hover:underline shrink-0" x-text="anyCabinetExpanded() ? 'Collapse all' : 'Expand all'"></button>
                 </div>
                 <div class="border-t border-slate-100 divide-y divide-slate-100">
-                    <template x-for="c in panelCabinets()" :key="c.cabinet_id">
+                    <template x-for="g in cabinetGroups()" :key="g.cabinets[0].cabinet_id">
                         <div>
-                            <button type="button" @click="toggleCabinetExpand(c.cabinet_id)"
-                                    class="w-full flex items-start gap-2 px-4 py-2 text-left hover:bg-slate-50 focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-blue-300 transition"
-                                    :class="panelExpanded[c.cabinet_id] ? 'bg-blue-50/50' : ''">
-                                <svg class="shrink-0 w-3.5 h-3.5 mt-0.5 text-slate-400 transition-transform" :class="panelExpanded[c.cabinet_id] ? 'rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-                                <span class="min-w-0 flex-1">
-                                    <span class="flex items-center justify-between gap-2">
-                                        <span class="flex items-center gap-1.5 min-w-0">
-                                            <span class="text-sm font-medium truncate" :class="c.done === c.items.length ? 'text-slate-500' : 'text-slate-800'" x-text="c.cabinet_mo"></span>
-                                            <span x-show="c.overdue > 0" class="shrink-0 text-red-500 text-xs font-bold" title="มีงานเกินกำหนด">!</span>
-                                            <svg x-show="c.overdue === 0 && c.done === c.items.length" class="shrink-0 w-3 h-3 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                        </span>
-                                        <span class="shrink-0 text-xs text-slate-400" x-text="c.items.length + ' งาน'"></span>
-                                    </span>
-                                    <span class="block text-xs truncate mt-0.5" :class="c.done === c.items.length ? 'text-emerald-600' : 'text-slate-400'">
-                                        <span x-text="c.cabinet_name"></span>
-                                        <template x-if="c.done === c.items.length">
-                                            <span><span class="mx-1">·</span>เสร็จทั้งหมด</span>
-                                        </template>
-                                        <template x-if="c.done !== c.items.length && remainingDaysInfo(c.dueDate, false)">
-                                            <span>
-                                                <span class="mx-1">·</span>
-                                                <span :class="remainingDaysInfo(c.dueDate, false).class" x-text="remainingDaysInfo(c.dueDate, false).text"></span>
-                                            </span>
-                                        </template>
-                                    </span>
+                            {{-- Shared spec/name header - skipped entirely for a "group" of
+                                 one Cabinet, so a Project where every Cabinet already has a
+                                 distinct name looks exactly as it did before grouping. --}}
+                            <div x-show="g.cabinets.length > 1" class="flex items-center justify-between gap-2 px-4 py-1.5 bg-slate-50/60 border-b border-slate-100">
+                                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500 truncate" x-text="g.spec"></span>
+                                <span class="shrink-0 flex items-center gap-2 text-[11px]">
+                                    <span x-show="g.sameDueInfo" :class="g.sameDueInfo && g.sameDueInfo.class" x-text="g.sameDueInfo && g.sameDueInfo.text"></span>
+                                    <span class="text-slate-400" x-text="g.cabinets.length + ' ตู้'"></span>
                                 </span>
-                            </button>
-                            <template x-if="panelExpanded[c.cabinet_id]">
-                                <div>
-                                    {{-- A user can still manually expand a fully-completed Cabinet
-                                         (point 6 - the Cabinet row itself is never hidden) - with
-                                         every Task filtered out by hideCompletedSubtasks, show why
-                                         it's empty instead of a blank expanded Cabinet. --}}
-                                    <p x-show="visibleTasksFor(c).length === 0" class="text-xs text-slate-400 text-center py-3 pl-7">ไม่มีงานค้าง (เสร็จแล้วทั้งหมด)</p>
-                                    <template x-for="t in visibleTasksFor(c)" :key="c.cabinet_id + '-' + (t.task_name || 'x')">
-                                        <div>
-                                            {{-- Task - a group header, not a card; indented from the
-                                                 Cabinet row above so the hierarchy reads at a glance. --}}
-                                            <div class="flex items-center justify-between pl-7 pr-4 py-1.5 bg-slate-50/60 border-b border-slate-100">
-                                                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500 truncate" x-text="t.task_name"></p>
-                                                <p class="shrink-0 text-[11px] text-slate-400 ml-2" x-text="t.items.length"></p>
-                                            </div>
-                                            <div class="divide-y divide-slate-100">
-                                                <template x-for="i in t.items" :key="'p' + i.id">
-                                                    @include('my-department.partials._subtask-row', ['v' => 'i'])
+                            </div>
+                            <div class="divide-y divide-slate-100">
+                                <template x-for="c in g.cabinets" :key="c.cabinet_id">
+                                    <div>
+                                        <button type="button" @click="toggleCabinetExpand(c.cabinet_id)"
+                                                class="w-full flex items-start gap-2 px-4 py-2 text-left hover:bg-slate-50 focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-blue-300 transition"
+                                                :class="panelExpanded[c.cabinet_id] ? 'bg-blue-50/50' : ''">
+                                            <svg class="shrink-0 w-3.5 h-3.5 mt-0.5 text-slate-400 transition-transform" :class="panelExpanded[c.cabinet_id] ? 'rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                            <span class="min-w-0 flex-1">
+                                                <span class="flex items-center justify-between gap-2">
+                                                    <span class="flex items-center gap-1.5 min-w-0">
+                                                        <span class="text-sm font-medium truncate" :class="c.done === c.items.length ? 'text-slate-500' : 'text-slate-800'" x-text="c.cabinet_mo"></span>
+                                                        <span x-show="c.overdue > 0" class="shrink-0 text-red-500 text-xs font-bold" title="มีงานเกินกำหนด">!</span>
+                                                        <svg x-show="c.overdue === 0 && c.done === c.items.length" class="shrink-0 w-3 h-3 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                                    </span>
+                                                    <span class="shrink-0 text-xs text-slate-400" x-text="c.items.length + ' งาน'"></span>
+                                                </span>
+                                                {{-- Cabinet name only repeats here for a standalone (ungrouped)
+                                                     Cabinet - inside a group it's already on the header above. --}}
+                                                <span class="block text-xs truncate mt-0.5" :class="c.done === c.items.length ? 'text-emerald-600' : 'text-slate-400'">
+                                                    <span x-show="g.cabinets.length === 1" x-text="c.cabinet_name"></span>
+                                                    <span x-show="g.cabinets.length === 1 && (c.done === c.items.length || (!g.sameDueInfo && remainingDaysInfo(c.dueDate, false)))" class="mx-1">·</span>
+                                                    <span x-show="c.done === c.items.length">เสร็จทั้งหมด</span>
+                                                    <template x-if="c.done !== c.items.length && !g.sameDueInfo && remainingDaysInfo(c.dueDate, false)">
+                                                        <span :class="remainingDaysInfo(c.dueDate, false).class" x-text="remainingDaysInfo(c.dueDate, false).text"></span>
+                                                    </template>
+                                                </span>
+                                            </span>
+                                        </button>
+                                        <template x-if="panelExpanded[c.cabinet_id]">
+                                            <div>
+                                                {{-- A user can still manually expand a fully-completed Cabinet
+                                                     (point 6 - the Cabinet row itself is never hidden) - with
+                                                     every Task filtered out by hideCompletedSubtasks, show why
+                                                     it's empty instead of a blank expanded Cabinet. --}}
+                                                <p x-show="visibleTasksFor(c).length === 0" class="text-xs text-slate-400 text-center py-3 pl-7">ไม่มีงานค้าง (เสร็จแล้วทั้งหมด)</p>
+                                                <template x-for="t in visibleTasksFor(c)" :key="c.cabinet_id + '-' + (t.task_name || 'x')">
+                                                    <div>
+                                                        {{-- Task - a group header, not a card; indented from the
+                                                             Cabinet row above so the hierarchy reads at a glance. --}}
+                                                        <div class="flex items-center justify-between pl-7 pr-4 py-1.5 bg-slate-50/60 border-b border-slate-100">
+                                                            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500 truncate" x-text="t.task_name"></p>
+                                                            <p class="shrink-0 text-[11px] text-slate-400 ml-2" x-text="t.items.length"></p>
+                                                        </div>
+                                                        <div class="divide-y divide-slate-100">
+                                                            <template x-for="i in t.items" :key="'p' + i.id">
+                                                                @include('my-department.partials._subtask-row', ['v' => 'i'])
+                                                            </template>
+                                                        </div>
+                                                    </div>
                                                 </template>
                                             </div>
-                                        </div>
-                                    </template>
-                                </div>
-                            </template>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
                     </template>
                     <p x-show="panelCabinets().length === 0" class="text-sm text-slate-400 text-center py-6">ไม่มี Cabinet</p>

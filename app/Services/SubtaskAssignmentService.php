@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\DB;
  */
 class SubtaskAssignmentService
 {
+    public function __construct(private NotificationService $notifications) {}
+
     /**
      * Returns true when the department actually changed.
      */
@@ -33,6 +35,7 @@ class SubtaskAssignmentService
 
         return DB::transaction(function () use ($subtask, $departmentId, $actor) {
             $locked = CabinetSubtask::whereKey($subtask->id)->lockForUpdate()->firstOrFail();
+            ProjectLock::assertOpen($locked->cabinetTask->cabinet->project_id);
 
             // Re-submitting the current department is a no-op, not an error.
             if ($locked->department_id === $departmentId) {
@@ -68,6 +71,10 @@ class SubtaskAssignmentService
             ]);
 
             $this->syncInstance($subtask, $locked);
+
+            if ($departmentId !== null) {
+                $this->notifications->assigned($locked, $actor, moved: $oldDepartmentId !== null);
+            }
 
             return true;
         });
@@ -132,6 +139,7 @@ class SubtaskAssignmentService
     {
         return DB::transaction(function () use ($subtask, $actor, $from, $to, $action, $byColumn, $atColumn, $describe) {
             $locked = CabinetSubtask::whereKey($subtask->id)->lockForUpdate()->firstOrFail();
+            ProjectLock::assertOpen($locked->cabinetTask->cabinet->project_id);
 
             if (! $this->isInAssignedDepartment($locked, $actor)) {
                 throw new AssignmentException('คุณไม่ใช่สมาชิกแผนกที่ได้รับมอบหมายงานนี้', 403);
@@ -149,6 +157,7 @@ class SubtaskAssignmentService
 
             $locked->load('department');
             $this->log($locked, $actor, $action, $describe($locked));
+            $this->notifications->progressed($locked, $actor, $action);
 
             $this->syncInstance($subtask, $locked);
 

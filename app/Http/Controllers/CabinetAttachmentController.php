@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Services\ProjectLock;
 use App\Models\Cabinet;
 use App\Models\CabinetAttachment;
 use Illuminate\Http\Request;
@@ -23,6 +24,8 @@ class CabinetAttachmentController extends Controller
 
     public function store(Request $request, Cabinet $cabinet)
     {
+        ProjectLock::assertOpen($cabinet->project_id);
+
         $data = $request->validate([
             'file' => ['required', 'file', 'max:20480', 'mimes:'.self::ALLOWED_MIMES],
             'description' => ['nullable', 'string', 'max:1000'],
@@ -90,6 +93,7 @@ class CabinetAttachmentController extends Controller
     public function destroy(Request $request, CabinetAttachment $attachment)
     {
         $cabinet = $attachment->cabinet;
+        ProjectLock::assertOpen($cabinet->project_id);
         $filePath = public_path(self::UPLOAD_DIR.'/'.$attachment->path);
 
         if (is_file($filePath)) {

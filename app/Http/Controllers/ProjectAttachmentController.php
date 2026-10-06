@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Services\ProjectLock;
 use App\Models\Project;
 use App\Models\ProjectAttachment;
 use Illuminate\Http\Request;
@@ -20,6 +21,8 @@ class ProjectAttachmentController extends Controller
 
     public function store(Request $request, Project $project)
     {
+        ProjectLock::assertOpen($project->id);
+
         $data = $request->validate([
             'file' => ['required', 'file', 'max:20480', 'mimes:'.self::ALLOWED_MIMES],
             'description' => ['nullable', 'string', 'max:1000'],
@@ -69,6 +72,7 @@ class ProjectAttachmentController extends Controller
     public function destroy(ProjectAttachment $attachment)
     {
         $project = $attachment->project;
+        ProjectLock::assertOpen($project->id);
         $filePath = public_path(self::UPLOAD_DIR.'/'.$attachment->path);
 
         if (is_file($filePath)) {

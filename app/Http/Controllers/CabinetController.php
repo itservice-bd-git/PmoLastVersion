@@ -52,7 +52,7 @@ class CabinetController extends Controller
     public function store(Request $request, Project $project, CabinetTemplateService $templateService)
     {
         $data = $request->validate([
-            'mo_no' => ['required', 'string', 'max:100', 'unique:cabinets,mo_no'],
+            'mo_no' => ['required', 'string', 'max:100', 'unique:cabinets,mo_no,NULL,id,deleted_at,NULL'],
             'cabinet_name' => ['required', 'string', 'max:255'],
             'cabinet_type' => ['nullable', 'string', 'max:100'],
             'size' => ['nullable', 'string', 'max:100'],
@@ -85,7 +85,7 @@ class CabinetController extends Controller
     public function copy(Request $request, Cabinet $cabinet, CabinetCopyService $copyService)
     {
         $data = $request->validate([
-            'mo_no' => ['required', 'string', 'max:100', 'unique:cabinets,mo_no'],
+            'mo_no' => ['required', 'string', 'max:100', 'unique:cabinets,mo_no,NULL,id,deleted_at,NULL'],
             'cabinet_name' => ['required', 'string', 'max:255'],
         ]);
 
@@ -139,15 +139,6 @@ class CabinetController extends Controller
             return $this->jsonDetail($cabinet, $request->user());
         }
 
-        // Activity Log: system-generated events only - manual Comments (action=note)
-        // moved to their own tab/query below.
-        $activityLogs = ActivityLog::where('loggable_type', Cabinet::class)
-            ->where('loggable_id', $cabinet->id)
-            ->where('action', '!=', 'note')
-            ->with('user')
-            ->latest()
-            ->paginate(30, pageName: 'activity_page');
-
         $comments = ActivityLog::where('loggable_type', Cabinet::class)
             ->where('loggable_id', $cabinet->id)
             ->where('action', 'note')
@@ -160,7 +151,6 @@ class CabinetController extends Controller
             'subtaskStatuses' => \App\Models\CabinetSubtask::$statuses,
             'departments' => \App\Models\Department::orderBy('name')->get(),
             'users' => \App\Models\User::orderBy('name')->get(),
-            'activityLogs' => $activityLogs,
             'comments' => $comments,
         ]);
     }
@@ -280,7 +270,7 @@ class CabinetController extends Controller
     public function update(Request $request, Cabinet $cabinet)
     {
         $data = $request->validate([
-            'mo_no' => ['required', 'string', 'max:100', 'unique:cabinets,mo_no,'.$cabinet->id],
+            'mo_no' => ['required', 'string', 'max:100', 'unique:cabinets,mo_no,'.$cabinet->id.',id,deleted_at,NULL'],
             'cabinet_name' => ['required', 'string', 'max:255'],
             'cabinet_type' => ['nullable', 'string', 'max:100'],
             'size' => ['nullable', 'string', 'max:100'],

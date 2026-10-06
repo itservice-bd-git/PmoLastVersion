@@ -11,10 +11,6 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->alias([
-            'auto-login' => \App\Http\Middleware\AutoLoginDemoUser::class,
-        ]);
-
         // Every page here is a logged-in view of live data - never cacheable
         // by a browser, CDN, or hosting-level page cache. See the class docblock.
         $middleware->web(append: [

@@ -3,6 +3,7 @@
 namespace App\Models\Concerns;
 
 use App\Models\ActivityLog;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
@@ -42,6 +43,13 @@ trait LogsActivity
         static::deleted(function ($model) {
             $model->writeActivityLog('deleted', $model->activityDescription('deleted'));
         });
+
+        // Soft-deletable models (see the trash) log the way back too.
+        if (in_array(SoftDeletes::class, class_uses_recursive(static::class), true)) {
+            static::restored(function ($model) {
+                $model->writeActivityLog('restored', $model->activityDescription('restored'));
+            });
+        }
     }
 
     protected function writeActivityLog(string $action, string $description, array $changes = []): void
@@ -81,6 +89,7 @@ trait LogsActivity
         return match ($action) {
             'created' => "สร้าง{$label}",
             'deleted' => "ลบ{$label}",
+            'restored' => "กู้คืน{$label}",
             default => "แก้ไข{$label}: ".collect($changes)
                 ->map(fn ($c) => "{$c['label']} จาก \"{$c['old']}\" เป็น \"{$c['new']}\"")
                 ->implode(', '),

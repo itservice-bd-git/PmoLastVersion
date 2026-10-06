@@ -17,9 +17,14 @@
                 <button class="px-3 py-2 rounded-lg bg-slate-100 text-sm font-medium text-slate-600 hover:bg-slate-200">ค้นหา</button>
             </form>
 
-            <a href="{{ route('projects.create') }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
-                + New Project
-            </a>
+            <div class="flex items-center gap-2">
+                <a href="{{ route('projects.export', $filters) }}" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50">
+                    Export CSV
+                </a>
+                <a href="{{ route('projects.create') }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
+                    + New Project
+                </a>
+            </div>
         </div>
 
         <x-card class="!p-0">

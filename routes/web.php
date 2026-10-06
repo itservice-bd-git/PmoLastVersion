@@ -13,7 +13,9 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MyDepartmentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectAttachmentController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\TrashController;
 use App\Http\Controllers\ProjectTaskController;
 use App\Http\Controllers\Settings\DepartmentController;
 use App\Http\Controllers\Settings\JobTypeController;
@@ -24,17 +26,29 @@ Route::get('/', function () {
     return redirect()->route('dashboard');
 });
 
-// Real per-user login is required from here on (was auto-login while the
-// system was demo/single-user only). See AutoLoginDemoUser if it's ever
-// needed again for local/demo use - swap the alias below back to it.
+// Real per-user login is required for everything below.
 Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
+    Route::get('projects/export', [ProjectController::class, 'export'])->name('projects.export');
+    Route::get('projects/{project}/activity-export', [ActivityLogController::class, 'projectExport'])->name('projects.activity-export');
+    Route::get('cabinets/{cabinet}/activity-export', [ActivityLogController::class, 'cabinetExport'])->name('cabinets.activity-export');
+    Route::get('projects/{project}/activity-tree', [ActivityLogController::class, 'projectTree'])->name('projects.activity-tree');
+    Route::get('cabinets/{cabinet}/activity-tree', [ActivityLogController::class, 'cabinetTree'])->name('cabinets.activity-tree');
     Route::put('activity-logs/{activityLog}', [ActivityLogController::class, 'update'])->name('activity-logs.update');
 
     Route::get('my-department', [MyDepartmentController::class, 'index'])->name('my-department.index');
     Route::get('my-department/tasks', [MyDepartmentController::class, 'tasks'])->name('my-department.tasks');
+    Route::get('my-department/export', [MyDepartmentController::class, 'export'])->name('my-department.export');
     Route::get('my-department/subtasks/{cabinetSubtask}', [MyDepartmentController::class, 'show'])->name('my-department.show');
+
+    Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+    Route::post('notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
+
+    Route::get('trash', [TrashController::class, 'index'])->name('trash.index');
+    Route::post('trash/projects/{id}/restore', [TrashController::class, 'restoreProject'])->name('trash.projects.restore');
+    Route::post('trash/cabinets/{id}/restore', [TrashController::class, 'restoreCabinet'])->name('trash.cabinets.restore');
 
     Route::get('assignments', [AssignmentController::class, 'index'])->name('assignments.index');
 

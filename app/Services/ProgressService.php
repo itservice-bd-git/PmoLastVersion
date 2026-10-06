@@ -18,7 +18,12 @@ class ProgressService
 {
     public function toggleChecklist(CabinetChecklist $checklist, bool $completed, ?User $user = null): CabinetChecklist
     {
-        $checklist->is_completed = $completed;
+        // Sub Task checklist count before/after, kept on the log row so the Activity Log
+        // can show "1/3 → 2/3" (rows logged before this change simply don't have it).
+        $total = $checklist->subtask->checklists()->count();
+        $doneBefore = $checklist->subtask->checklists()->where('is_completed', true)->count();
+
+                $checklist->is_completed = $completed;
         $checklist->completed_by = $completed ? $user?->id : null;
         $checklist->completed_at = $completed ? now() : null;
         $checklist->save();
@@ -30,7 +35,12 @@ class ProgressService
             $user?->id,
             $checklist,
             $completed ? 'checked' : 'unchecked',
-            ($completed ? 'ทำเครื่องหมายเสร็จ Checklist "' : 'ยกเลิกเครื่องหมาย Checklist "').$checklist->name.'" ('.$cabinet->mo_no.' / '.$checklist->subtask->cabinetTask->name.')'
+            ($completed ? 'ทำเครื่องหมายเสร็จ Checklist "' : 'ยกเลิกเครื่องหมาย Checklist "').$checklist->name.'" ('.$cabinet->mo_no.' / '.$checklist->subtask->cabinetTask->name.')',
+            ['progress' => [
+                'label' => 'Checklist ที่เสร็จ',
+                'old' => "{$doneBefore}/{$total}",
+                'new' => $checklist->subtask->checklists()->where('is_completed', true)->count()."/{$total}",
+            ]]
         );
 
         $this->recalculateSubtask($checklist->subtask);

@@ -53,9 +53,14 @@
             const start = parse(config.today);
 
             return {
-                mainView: 'calendar', // 'calendar' (Month/Week/List) | 'timeline' (Gantt-style) - both grouped by Project
-                timelineSearch: '', // client-side only - filters timelineGroups(), never re-fetches or widens the department scope
-                hideCompleted: false, // now a Project-level filter (see visibleProjectGroups()) - remembered per-browser via localStorage
+                mainView: 'calendar', // 'calendar' (Month/Week/List) | 'timeline' (Gantt-style, Project rows or Department rows under "ทุกแผนก")
+                timelineSearch: '', // client-side only - filters timelineRows(), never re-fetches or widens the department scope
+                // Calendar/List: hide individual completed Sub Tasks, see visibleItems()/
+                // dayItems()/listItems(). Timeline still aggregates into one bar per group
+                // (Project, or Department under "ทุกแผนก") - see visibleProjectGroups()/
+                // visibleDepartmentGroups() below, which hide a whole group only once
+                // every Sub Task inside it is COMPLETED.
+                hideCompleted: false, // remembered per-browser via localStorage
                 view: 'calendar',
                 range: 'month', // 'month' | '7' (rolling 7 days, "สัปดาห์")
                 anchor: config.today, // first day of a rolling range
@@ -63,12 +68,14 @@
                 year: start.getFullYear(),
                 month: start.getMonth(),
                 selectedDate: config.today,
-                departmentId: config.departmentId,
+                departmentId: config.departmentId, // numeric id, or the string 'all' (PMO "ทุกแผนก")
                 departmentName: config.departmentName,
+                isAllDepartments: false, // mirrors the server's response, since departmentId can be 'all'
+                projectId: '', // '' = ทั้งหมด (point 5) - sent to the server, narrows within whatever Department scope applies
+                statusFilter: '', // '' = ทั้งหมด - ASSIGNED|ACCEPTED|IN_PROGRESS|COMPLETED|OVERDUE, sent to the server
                 items: [], // raw Sub Tasks from the server - unchanged shape/scope
-                projectGroupsList: [], // Sub Tasks grouped by Project - see computeProjectGroups()
-                dayMap: {}, // date -> Project groups active that date (Calendar day panel)
-                weekBarsMap: {}, // Calendar month/week bars, one per Project
+                projectGroupsList: [], // Sub Tasks grouped by Project - see computeProjectGroups() (Timeline, single Department)
+                departmentGroupsList: [], // Sub Tasks grouped by Department - see computeDepartmentGroups() (Timeline, "ทุกแผนก")
                 loading: false,
                 loadSeq: 0,
                 detail: null, // single Sub Task detail (existing modal, unchanged)
@@ -83,6 +90,7 @@
                 // on Calendar/Timeline/List - different granularity, different scope.
                 hideCompletedSubtasks: false,
                 dayPanelOpen: false, // open Day Detail Panel (selected day's Projects) - see selectDate()/openDayPanel()
+                detailPanelOpen: false, // open Right Side Work Detail Panel (one Sub Task) - see openDetail()/closeDetailPanel()
 
                 init() {
                     // Remembered per-browser only (not synced anywhere) - if it can't be
@@ -158,10 +166,6 @@
                     for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
                     return weeks;
                 },
-
-                // Project bars are 2 lines tall (name + Cabinet/Task count), so fewer fit
-                // per lane than the old single-line Sub Task bars did.
-                maxLanes() { return this.range === '7' ? 6 : 3; },
 
                 fmt(s) { return s ? s.split('-').reverse().join('/') : '-'; },
 
@@ -249,22 +253,44 @@
                 changeDepartment() {
                     this.load();
                 },
+                changeProjectFilter() {
+                    this.load();
+                },
+                changeStatusFilter() {
+                    this.load();
+                },
+
+                // The exact filter set the screen is showing right now (window + Department/
+                // Project/Status) - shared by the data fetch and the CSV export.
+                queryParams() {
+                    const days = this.gridDays();
+                    const params = {
+                        from: days[0].date,
+                        to: days[days.length - 1].date,
+                        department_id: this.departmentId,
+                    };
+                    // Point 5/25 - Project/Status filter together with Department,
+                    // kept across Calendar/Week/Day/Timeline/List (point 25) since
+                    // they're all read from this same Alpine state, not per-view state.
+                    if (this.projectId) params.project_id = this.projectId;
+                    if (this.statusFilter) params.status = this.statusFilter;
+                    return new URLSearchParams(params);
+                },
+                exportCsv() {
+                    window.location = config.exportUrl + '?' + this.queryParams().toString();
+                },
 
                 // ---- Data ----
                 async load() {
-                    const days = this.gridDays();
                     const seq = ++this.loadSeq;
                     this.loading = true;
                     try {
-                        const q = new URLSearchParams({
-                            from: days[0].date,
-                            to: days[days.length - 1].date,
-                            department_id: this.departmentId,
-                        });
+                        const q = this.queryParams();
                         const data = await api(config.tasksUrl + '?' + q.toString());
                         if (seq !== this.loadSeq) return; // a newer request superseded this one
                         this.items = data.items.map((i) => ({ ...i, busy: false }));
                         this.departmentName = data.department.name;
+                        this.isAllDepartments = !!data.is_all_departments;
                         this.panel = null; // department/window changed - a stale drill-down panel would show wrong data
                         this.rebuild();
                     } catch (err) {
@@ -283,24 +309,20 @@
                     return a.id - b.id;
                 },
 
-                // ---- Project grouping ----
-                // Every Sub Task that shares a project_id becomes one Project group: one
-                // Event/Bar on Calendar/Timeline, one row in List. Aggregates are derived
-                // purely from the same items[] already scoped by the server - no new
-                // endpoint, no new department/permission logic.
-                computeProjectGroups() {
+                // ---- Project/Department grouping (Timeline only - Calendar/List read
+                // items directly, one Sub Task/Assignment at a time) ----
+                // Shared aggregation core: every Sub Task is folded into whichever group
+                // keyFn() puts it in (one Project, or one Department) - same counts/dates/
+                // items shape either way, so Timeline's bar-drawing code (timelineRows())
+                // doesn't need to know which kind of group it's drawing.
+                groupItemsBy(keyFn, extra) {
                     const map = new Map();
                     for (const i of this.items) {
-                        if (!map.has(i.project_id)) {
-                            map.set(i.project_id, {
-                                project_id: i.project_id,
-                                project_no: i.project_no,
-                                project_name: i.project_name,
-                                customer_name: i.customer_name,
-                                priority: i.priority,
-                                priority_label: i.priority_label,
-                                color: i.color,
-                                project_color_url: i.project_color_url,
+                        const key = keyFn(i);
+                        if (!map.has(key)) {
+                            map.set(key, {
+                                ...extra(i),
+                                projectIds: new Set(),
                                 cabinetIds: new Set(),
                                 taskIds: new Set(),
                                 waiting: 0, accepted: 0, working: 0, done: 0, overdue: 0,
@@ -308,7 +330,8 @@
                                 items: [],
                             });
                         }
-                        const g = map.get(i.project_id);
+                        const g = map.get(key);
+                        g.projectIds.add(i.project_id);
                         g.cabinetIds.add(i.cabinet_id);
                         g.taskIds.add(i.cabinet_task_id);
                         g.items.push(i);
@@ -325,6 +348,7 @@
                         const total = g.waiting + g.accepted + g.working + g.done;
                         return {
                             ...g,
+                            project_count: g.projectIds.size,
                             cabinet_count: g.cabinetIds.size,
                             task_count: g.taskIds.size,
                             total_subtasks: total,
@@ -335,12 +359,43 @@
                     });
                 },
 
+                computeProjectGroups() {
+                    return this.groupItemsBy((i) => i.project_id, (i) => ({
+                        kind: 'project',
+                        project_id: i.project_id,
+                        project_no: i.project_no,
+                        project_name: i.project_name,
+                        customer_name: i.customer_name,
+                        priority: i.priority,
+                        priority_label: i.priority_label,
+                        color: i.color,
+                        project_color_url: i.project_color_url,
+                    }));
+                },
+
+                // One group per Department (point 41) - only meaningful once "ทุกแผนก" can
+                // mix multiple Departments' Sub Tasks together; Timeline draws one bar per
+                // Department instead of per Project in that case, since a Department's own
+                // Project-level breakdown is one click away (selectDepartment() below).
+                computeDepartmentGroups() {
+                    return this.groupItemsBy((i) => i.department_id, (i) => ({
+                        kind: 'department',
+                        department_id: i.department_id,
+                        department_name: i.department_name,
+                    }));
+                },
+
                 // Project-level equivalent of the old visibleItems(): hides a whole Project
                 // only once every one of its department Sub Tasks is COMPLETED.
                 visibleProjectGroups() {
                     return this.hideCompleted
                         ? this.projectGroupsList.filter((g) => g.progress !== 100)
                         : this.projectGroupsList;
+                },
+                visibleDepartmentGroups() {
+                    return this.hideCompleted
+                        ? this.departmentGroupsList.filter((g) => g.progress !== 100)
+                        : this.departmentGroupsList;
                 },
 
                 rankGroup(g) {
@@ -352,94 +407,154 @@
                     return a.project_id - b.project_id;
                 },
 
-                // Precompute per-visible-day Project lists and Calendar bars so the grid
-                // doesn't re-scan every group on every cell render.
+                // The Calendar itself no longer aggregates into per-Project bars
+                // (dayMap/weekBarsMap/computeWeekBars retired below) - Month/Week/Day now
+                // read items directly via dayItems(), one Sub Task/Assignment at a time,
+                // per the Department Work Schedule redesign. List (listItems()/
+                // listSections() below) does the same. Only Timeline still draws one bar
+                // per group (Project, or Department under "ทุกแผนก") - see timelineRows().
                 rebuild() {
                     this.projectGroupsList = this.computeProjectGroups();
-
-                    const visible = this.visibleProjectGroups().filter((g) => g.dept_start || g.dept_due);
-                    const map = {};
-                    for (const d of this.gridDays()) {
-                        const list = visible.filter((g) => g.dept_start <= d.date && d.date <= g.dept_due);
-                        if (list.length) map[d.date] = list.sort((a, b) => this.compareGroups(a, b));
-                    }
-                    this.dayMap = map;
-
-                    const barsMap = {};
-                    for (const week of this.weekRows()) barsMap[week[0].date] = this.computeWeekBars(week);
-                    this.weekBarsMap = barsMap;
+                    this.departmentGroupsList = this.computeDepartmentGroups();
                 },
 
-                // Bars for one week: each visible Project group gets a single div spanning
-                // from its (week-clipped) Department Start to Department Due column, stacked
-                // into the fewest lanes that avoid overlap (same greedy placement as before,
-                // just against Project date ranges instead of single Sub Task ranges).
-                computeWeekBars(week) {
-                    const weekStart = week[0].date, weekEnd = week[6].date;
-                    const dayIndex = (date) => week.findIndex((d) => d.date === date);
+                // Presentation-only Hide Completed (point 14) - hides individual
+                // completed Sub Tasks from the Calendar, never changes panel.progress/
+                // total_subtasks or any real count elsewhere.
+                visibleItems() {
+                    return this.hideCompleted ? this.items.filter((i) => i.assignment_status !== 'COMPLETED') : this.items;
+                },
 
-                    const candidates = this.visibleProjectGroups()
-                        .filter((g) => g.dept_start || g.dept_due)
-                        .filter((g) => {
-                            const from = g.dept_start || g.dept_due, to = g.dept_due || g.dept_start;
-                            return from <= weekEnd && to >= weekStart;
+                // Every Sub Task/Assignment active on one date (point 6/9) - the
+                // Calendar's actual work items, not an aggregated Project bar.
+                dayItems(date) {
+                    return this.visibleItems()
+                        .filter((i) => {
+                            const from = i.start_date || i.due_date, to = i.due_date || i.start_date;
+                            return from && to && from <= date && date <= to;
                         })
-                        .map((g) => {
-                            const from = g.dept_start || g.dept_due, to = g.dept_due || g.dept_start;
-                            const clipStart = from < weekStart ? weekStart : from;
-                            const clipEnd = to > weekEnd ? weekEnd : to;
-                            const colStart = dayIndex(clipStart) + 1;
-                            return {
-                                group: g,
-                                colStart,
-                                colSpan: dayIndex(clipEnd) - colStart + 2,
-                                continuesBefore: from < weekStart,
-                                continuesAfter: to > weekEnd,
-                            };
-                        })
-                        .sort((a, b) => a.colStart - b.colStart || b.colSpan - a.colSpan || this.compareGroups(a.group, b.group));
+                        .sort((a, b) => this.compare(a, b));
+                },
 
-                    const maxLanes = this.maxLanes();
-                    const laneEnd = []; // laneEnd[lane] = last occupied column in that lane
+                overdueCount(date) {
+                    return this.dayItems(date).filter((i) => i.is_overdue).length;
+                },
+
+                // A multi-day Sub Task is drawn as ONE continuous bar spanning its
+                // columns within the week, instead of a chip repeated in every day it
+                // touches - same lane-packing/clip technique the old per-Project calendar
+                // bars used, just against individual Sub Tasks (visibleItems()) now
+                // instead of Project aggregates, so Calendar stays Sub-Task-level
+                // everywhere else (dayItems(), the Day Panel, etc.) while still reading
+                // as one bar per task at a glance.
+                weekItemBars(week) {
+                    const weekStart = week[0].date, weekEnd = week[week.length - 1].date;
+                    const items = this.visibleItems()
+                        .filter((i) => {
+                            const from = i.start_date || i.due_date, to = i.due_date || i.start_date;
+                            return from && to && from <= weekEnd && to >= weekStart;
+                        })
+                        .sort((a, b) => this.compare(a, b));
+
+                    const laneEnd = []; // lane index -> last occupied day index (0-based) in this week
                     const bars = [];
-                    let overflow = 0;
-                    for (const c of candidates) {
-                        let lane = laneEnd.findIndex((end) => end < c.colStart);
-                        if (lane === -1) lane = laneEnd.length;
-                        if (lane >= maxLanes) { overflow++; continue; }
-                        laneEnd[lane] = c.colStart + c.colSpan - 1;
-                        bars.push({ ...c, lane });
+                    for (const i of items) {
+                        const from = i.start_date || i.due_date, to = i.due_date || i.start_date;
+                        const clipStart = from < weekStart ? weekStart : from;
+                        const clipEnd = to > weekEnd ? weekEnd : to;
+                        const colStartIdx = week.findIndex((d) => d.date === clipStart);
+                        const colEndIdx = week.findIndex((d) => d.date === clipEnd);
+                        let lane = laneEnd.findIndex((end) => end < colStartIdx);
+                        if (lane === -1) { lane = laneEnd.length; laneEnd.push(-1); }
+                        laneEnd[lane] = colEndIdx;
+                        bars.push({
+                            item: i,
+                            lane,
+                            colStart: colStartIdx + 1,
+                            colSpan: colEndIdx - colStartIdx + 1,
+                            clipStart, clipEnd,
+                            continuesBefore: from < weekStart,
+                            continuesAfter: to > weekEnd,
+                        });
                     }
-                    return { bars, overflow, laneCount: Math.min(Math.max(laneEnd.length, 1), maxLanes) };
+                    return bars;
+                },
+                // At most 2 lanes shown per week (same "2 cards, then +N งาน" budget the
+                // per-day cards used before) - overflow still opens the full Day Panel
+                // (selectDate()), never hides a Sub Task entirely.
+                weekVisibleBars(week) {
+                    return this.weekItemBars(week).filter((b) => b.lane < 2);
+                },
+                // A day's own "+N งาน" count once the 2 shown lanes don't cover everything
+                // active that day - same number dayItems(date).length always gave, minus
+                // whatever's already visible as a bar through this day's column.
+                dayOverflowCount(week, date) {
+                    const shown = this.weekVisibleBars(week).filter((b) => b.clipStart <= date && date <= b.clipEnd).length;
+                    return this.dayItems(date).length - shown;
                 },
 
-                weekBars(weekStartDate) { return this.weekBarsMap[weekStartDate] || { bars: [], overflow: 0, laneCount: 1 }; },
-
-                dayProjectGroups(date) { return this.dayMap[date] || []; },
-                overdueCount(date) { return this.dayProjectGroups(date).reduce((sum, g) => sum + g.overdue, 0); },
-
-                // Sub Tasks with no Start/Due Date at all, rolled up per Project so the area
-                // under the Calendar shows one summary line per Project instead of one row
-                // per undated Sub Task.
-                undatedProjectGroups() {
-                    return this.visibleProjectGroups()
-                        .map((g) => ({ group: g, count: g.items.filter((i) => !i.start_date && !i.due_date).length }))
-                        .filter((x) => x.count > 0);
+                // Sub Tasks with no Start/Due Date at all (point 29) - must never
+                // disappear just because they can't be placed on the grid.
+                unscheduledItems() {
+                    return this.visibleItems().filter((i) => !i.start_date && !i.due_date);
                 },
 
-                // List follows the same range as the calendar: a Project overlapping it,
-                // plus any Project with overdue or entirely-undated work.
-                inWindowGroup(g) {
-                    if (g.overdue > 0 || (!g.dept_start && !g.dept_due)) return true;
+                // Deterministic Department color (point 8) - same hash technique as
+                // taskColor() (Project color), just keyed by Department name instead;
+                // Department has no color column of its own, this is UI-only.
+                departmentColor(name) {
+                    // Same shape as taskColor() (style/dotStyle/accentStyle always present,
+                    // just empty) even though Departments have no color override - so the
+                    // legend/card markup can read either color object the same way.
+                    const base = TASK_PALETTE[hashString(name || '') % TASK_PALETTE.length];
+                    return { ...base, style: '', dotStyle: '', accentStyle: '' };
+                },
+
+                // Distinct Departments currently visible, for the Calendar's legend -
+                // only meaningful once "ทุกแผนก" can mix multiple Departments together;
+                // alphabetical so it doesn't reorder as data reloads.
+                departmentLegendItems() {
+                    const seen = new Map();
+                    for (const i of this.visibleItems()) {
+                        if (i.department_name && !seen.has(i.department_name)) {
+                            seen.set(i.department_name, this.departmentColor(i.department_name));
+                        }
+                    }
+                    return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, color]) => ({ name, color }));
+                },
+
+                // ---- List (Sub Task level, point 25/41) ----
+                // List follows the same range as the Calendar: a Sub Task overlapping it,
+                // plus any Sub Task that's overdue or has no date at all (point 29 - never
+                // hidden just because it can't be placed on the grid).
+                inWindowItem(i) {
+                    if (i.is_overdue || (!i.start_date && !i.due_date)) return true;
                     const [from, to] = this.rangeBounds();
-                    return (g.dept_start || g.dept_due) <= to && (g.dept_due || g.dept_start) >= from;
+                    const s = i.start_date || i.due_date, e = i.due_date || i.start_date;
+                    return s <= to && e >= from;
                 },
 
-                listProjectGroups() {
-                    return this.visibleProjectGroups().filter((g) => this.inWindowGroup(g)).sort((a, b) => {
-                        const da = a.dept_due || '9999-99-99', db = b.dept_due || '9999-99-99';
-                        return da === db ? a.project_id - b.project_id : (da < db ? -1 : 1);
-                    });
+                // One row per Sub Task/Assignment - same granularity as the Calendar now,
+                // not an aggregated Project row (point 41's redesign direction applied to
+                // List too).
+                listItems() {
+                    return this.visibleItems().filter((i) => this.inWindowItem(i)).sort((a, b) => this.compare(a, b));
+                },
+
+                // Grouped under a Department header only once "ทุกแผนก" can mix multiple
+                // Departments together; a single-department view returns one section with
+                // no header shown (see the List table's x-show on the header row).
+                listSections() {
+                    const rows = this.listItems();
+                    if (!this.isAllDepartments) return [{ department_id: null, department_name: null, rows }];
+                    const map = new Map();
+                    for (const i of rows) {
+                        if (!map.has(i.department_id)) {
+                            map.set(i.department_id, { department_id: i.department_id, department_name: i.department_name, rows: [] });
+                        }
+                        map.get(i.department_id).rows.push(i);
+                    }
+                    return [...map.values()].sort((a, b) => (a.department_name || '').localeCompare(b.department_name || ''));
                 },
 
                 // ---- Timeline (Gantt-style) ----
@@ -474,16 +589,22 @@
                     if (idx === -1) return null;
                     return 200 + idx * this.timelineColWidth() + this.timelineColWidth() / 2;
                 },
-                // One row per Project, spanning its Department Start -> Department Due,
-                // clipped to the visible window (same clip/column technique as
-                // computeWeekBars, just against the whole window instead of one week).
-                timelineGroups() {
+                // One row per group - Project normally, or Department when "ทุกแผนก" is
+                // selected (point 41: a Department's own Sub Tasks can span many
+                // Projects at once, so one bar per Project there would be far too many
+                // rows to scan; drilling into one Department via selectDepartment()
+                // below switches this back to the familiar per-Project rows). Each bar
+                // spans its group's Start -> Due, clipped to the visible window (same
+                // clip/column technique as the old computeWeekBars, just against the
+                // whole window instead of one week).
+                timelineRows() {
                     const days = this.timelineDays();
                     if (!days.length) return [];
                     const winStart = days[0].date, winEnd = days[days.length - 1].date;
                     const dayIndex = (date) => days.findIndex((d) => d.date === date);
+                    const groups = this.isAllDepartments ? this.visibleDepartmentGroups() : this.visibleProjectGroups();
 
-                    let result = this.visibleProjectGroups()
+                    let result = groups
                         .filter((g) => g.dept_start && !(g.dept_start > winEnd || g.dept_due < winStart))
                         .map((g) => {
                             const from = g.dept_start, to = g.dept_due;
@@ -498,36 +619,73 @@
                                 continuesAfter: to > winEnd,
                             };
                         })
-                        .sort((a, b) => a.colStart - b.colStart || this.compareGroups(a.group, b.group));
+                        .sort((a, b) => {
+                            if (a.colStart !== b.colStart) return a.colStart - b.colStart;
+                            if (this.isAllDepartments) {
+                                const oa = a.group.overdue > 0 ? 0 : 1, ob = b.group.overdue > 0 ? 0 : 1;
+                                return oa !== ob ? oa - ob : a.group.department_id - b.group.department_id;
+                            }
+                            return this.compareGroups(a.group, b.group);
+                        });
 
-                    // Search: matches the Project (no./name/customer), or any Cabinet/Sub
-                    // Task name inside it - a matching Sub Task keeps its whole Project row
-                    // visible (not just a fragment of it) so the Gantt context stays intact.
+                    // Search: matches the group's own identity (Project no./name/customer,
+                    // or Department name), or any Cabinet/Sub Task/Project inside it - a
+                    // matching Sub Task keeps its whole row visible (not just a fragment
+                    // of it) so the Gantt context stays intact.
                     const q = this.timelineSearch.trim().toLowerCase();
                     if (q) {
                         result = result.filter((r) => {
                             const g = r.group;
-                            return g.project_no.toLowerCase().includes(q) ||
-                                g.project_name.toLowerCase().includes(q) ||
-                                (g.customer_name || '').toLowerCase().includes(q) ||
-                                g.items.some((i) =>
-                                    i.cabinet_mo.toLowerCase().includes(q) ||
-                                    i.cabinet_name.toLowerCase().includes(q) ||
-                                    i.name.toLowerCase().includes(q)
-                                );
+                            const identity = g.kind === 'department'
+                                ? (g.department_name || '').toLowerCase().includes(q)
+                                : g.project_no.toLowerCase().includes(q) ||
+                                    g.project_name.toLowerCase().includes(q) ||
+                                    (g.customer_name || '').toLowerCase().includes(q);
+                            return identity || g.items.some((i) =>
+                                i.project_no.toLowerCase().includes(q) ||
+                                i.cabinet_mo.toLowerCase().includes(q) ||
+                                i.cabinet_name.toLowerCase().includes(q) ||
+                                i.name.toLowerCase().includes(q)
+                            );
                         });
                     }
                     return result;
                 },
-                // Projects that can't be drawn as a bar in the current window: no dated
+                // Groups that can't be drawn as a bar in the current window: no dated
                 // work at all, or entirely outside it (e.g. an old overdue Project before
                 // this month).
                 timelineOffWindowCount() {
                     const days = this.timelineDays();
-                    const groups = this.visibleProjectGroups();
+                    const groups = this.isAllDepartments ? this.visibleDepartmentGroups() : this.visibleProjectGroups();
                     if (!days.length) return groups.length;
                     const winStart = days[0].date, winEnd = days[days.length - 1].date;
                     return groups.filter((g) => !g.dept_start || g.dept_start > winEnd || g.dept_due < winStart).length;
+                },
+                // Drills from a Department's aggregate Timeline bar into that single
+                // Department (point 41) - same as picking it from the toolbar's select,
+                // just one click from the bar itself. Switches Timeline's own rows back
+                // to per-Project (isAllDepartments becomes false), where the existing
+                // openProjectPanel() drill-down already works.
+                selectDepartment(departmentId) {
+                    this.departmentId = departmentId;
+                    this.changeDepartment();
+                },
+                // Bar color: Department identity color under "ทุกแผนก" (same palette
+                // Calendar's legend uses), Project identity color otherwise - unchanged.
+                rowColor(g) {
+                    return g.kind === 'department' ? this.departmentColor(g.department_name) : this.taskColor(g);
+                },
+                rowTitle(g) {
+                    return g.kind === 'department'
+                        ? g.department_name + ' — ' + g.project_count + ' Project' +
+                            ' — รอ ' + g.waiting + ' · รับงานแล้ว ' + g.accepted + ' · กำลังทำ ' + g.working + ' · เสร็จ ' + g.done +
+                            (g.overdue ? ' · เกินกำหนด ' + g.overdue : '')
+                        : this.groupTitle(g);
+                },
+                rowSummaryText(g) {
+                    return g.kind === 'department'
+                        ? '· ' + g.project_count + ' Project · รอ ' + g.waiting + ' · ทำ ' + g.working + ' · เสร็จ ' + g.done
+                        : '· ' + g.cabinet_count + ' Cab · ' + g.task_count + ' Task · รอ ' + g.waiting + ' · ทำ ' + g.working + ' · เสร็จ ' + g.done;
                 },
 
                 // ---- Visuals ----
@@ -749,6 +907,43 @@
                         });
                 },
 
+                // Cabinets sharing the exact same cabinet_name (often an equipment/
+                // spec type on real data, e.g. "RMU Siemens 3 Function (LOCAL)"
+                // repeated across many cabinets of the same kind) are grouped so
+                // that name renders once as a section header instead of being
+                // repeated on every row underneath it - pure presentation, no data
+                // change. A "group" of exactly one Cabinet renders with no header at
+                // all (point below), so Projects where every Cabinet already has a
+                // distinct name look exactly as before.
+                //
+                // If every Cabinet in a group also shares the identical due date
+                // (and none of them are fully done), the "เหลือ/เกินกำหนด" line is
+                // likewise shown once on the group header instead of being repeated
+                // identically on every row - this is the exact pattern that made an
+                // 18-Cabinet list look like 18x the same two lines of text.
+                cabinetGroups() {
+                    const cabinets = this.panelCabinets();
+                    const groups = [];
+                    const bySpec = new Map();
+                    for (const c of cabinets) {
+                        const key = c.cabinet_name || '';
+                        if (!bySpec.has(key)) {
+                            const group = { spec: key, cabinets: [] };
+                            bySpec.set(key, group);
+                            groups.push(group);
+                        }
+                        bySpec.get(key).cabinets.push(c);
+                    }
+                    for (const g of groups) {
+                        const allDone = g.cabinets.every((c) => c.done === c.items.length);
+                        const dueDates = [...new Set(g.cabinets.map((c) => c.dueDate))];
+                        g.sameDueInfo = (g.cabinets.length > 1 && !allDone && dueDates.length === 1)
+                            ? this.remainingDaysInfo(dueDates[0], false)
+                            : null;
+                    }
+                    return groups;
+                },
+
                 // What a Cabinet's Task groups actually render, once hideCompletedSubtasks
                 // is applied - a COMPLETED Sub Task drops out of its Task's item list, and
                 // a Task left with none drops out entirely (point 5), so e.g. an all-done
@@ -826,14 +1021,16 @@
                     }
                 },
 
-                // Opens the Sub Task detail/Checklist modal. Deliberately does not touch
-                // `this.panel` - the Right Detail Panel stays open underneath, so closing
-                // this modal drops the user right back into the same Cabinet/Task they were
-                // browsing instead of needing to reopen the Project panel from scratch.
+                // Opens the Sub Task Right Side Work Detail Panel. Deliberately does not
+                // touch `this.panel`/`this.dayPanelOpen` - whichever panel the user drilled
+                // down from (Project Panel or Day Panel) stays open underneath, so closing
+                // this one drops them right back into the same Cabinet/Task/Day they were
+                // browsing instead of needing to reopen it from scratch. Stacks above both
+                // (z-50 - see _detail-panel.blade.php) for that reason.
                 async openDetail(item) {
                     this.detail = { ...item, busy: false, checklists: [] };
                     this.detailLoading = true;
-                    this.$dispatch('open-modal', 'my-department-detail');
+                    this.detailPanelOpen = true;
                     try {
                         const data = await api(item.urls.detail);
                         // Sync back into the shared item so calendar/list/detail stay one object.
@@ -843,6 +1040,9 @@
                     } finally {
                         this.detailLoading = false;
                     }
+                },
+                closeDetailPanel() {
+                    this.detailPanelOpen = false;
                 },
 
                 async toggleChecklist(c, event) {

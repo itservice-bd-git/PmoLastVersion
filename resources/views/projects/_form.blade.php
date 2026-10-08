@@ -55,6 +55,18 @@
         </select>
         <x-input-error :messages="$errors->get('job_type_id')" class="mt-1" />
     </div>
+    @if (($boards ?? collect())->isNotEmpty())
+        <div>
+            <x-input-label for="board_id" value="บอร์ด (Planning)" />
+            <select id="board_id" name="board_id" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
+                <option value="">PMO (บอร์ดหลัก)</option>
+                @foreach ($boards as $board)
+                    <option value="{{ $board->id }}" @selected(old('board_id', $p?->board_id ?? request()->integer('board')) == $board->id)>{{ $board->name }}</option>
+                @endforeach
+            </select>
+            <x-input-error :messages="$errors->get('board_id')" class="mt-1" />
+        </div>
+    @endif
     <div>
         <x-input-label for="payment_terms" value="เงื่อนไขการชำระ" />
         <x-text-input id="payment_terms" name="payment_terms" class="mt-1 block w-full" :value="old('payment_terms', $p?->payment_terms)" />

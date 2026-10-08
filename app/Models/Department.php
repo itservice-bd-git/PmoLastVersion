@@ -13,6 +13,9 @@ class Department extends Model
         'name',
         'code',
         'description',
+        'color',
+        'icon',
+        'sees_all',
         'is_active',
     ];
 
@@ -20,6 +23,7 @@ class Department extends Model
     {
         return [
             'is_active' => 'boolean',
+            'sees_all' => 'boolean',
         ];
     }
 

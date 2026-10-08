@@ -4,6 +4,7 @@
     </x-slot>
 
     <div class="max-w-5xl mx-auto space-y-4">
+        <x-settings-nav />
         <div class="flex justify-end">
             <a href="{{ route('settings.users.create') }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
                 + New User

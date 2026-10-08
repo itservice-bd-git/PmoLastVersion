@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
+use App\Services\AutomationService;
 use App\Services\ProgressService;
+use App\Services\SubtaskAssignmentService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -182,7 +184,7 @@ class CabinetChecklistController extends Controller
         return back()->with('success', 'บันทึกหมายเหตุเรียบร้อยแล้ว');
     }
 
-    public function toggle(Request $request, CabinetChecklist $checklist, ProgressService $progressService)
+    public function toggle(Request $request, CabinetChecklist $checklist, ProgressService $progressService, AutomationService $automation, SubtaskAssignmentService $assignments)
     {
         abort_unless($checklist->subtask->isChecklistEditableBy($request->user()), 403, 'คุณไม่มีสิทธิ์แก้ไข Checklist นี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)');
 
@@ -192,7 +194,11 @@ class CabinetChecklistController extends Controller
 
         $progressService->toggleChecklist($checklist, $data['is_completed'], $request->user());
 
-        $subtask = $checklist->subtask;
+        // Admin-defined rules (Settings > Automation) may start/close the Sub Task now. Ticking only -
+        // un-ticking never reverts a workflow step.
+        $statusChanged = $data['is_completed'] ? $automation->afterChecklistTicked($checklist->subtask, $request->user()) : false;
+
+        $subtask = $checklist->subtask->fresh();
         $task = $subtask->cabinetTask;
         $cabinet = $task->cabinet;
 
@@ -207,6 +213,8 @@ class CabinetChecklistController extends Controller
             $cabinetCounts = $cabinet->fresh('tasks.subtasks.checklists')->checklist_counts;
 
             return response()->json([
+                // present only when a rule moved the Sub Task's workflow status, so the UI can re-render its buttons/badge
+                'assignment' => $statusChanged ? $assignments->payload($subtask, $request->user()) : null,
                 'checklist' => [
                     'id' => $checklist->id,
                     'is_completed' => $checklist->is_completed,

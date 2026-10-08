@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cabinet;
+use App\Models\Department;
 use App\Models\Project;
+use App\Services\DepartmentDashboard;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(Request $request, DepartmentDashboard $departmentDashboard)
     {
         $projects = Project::withAvg('cabinets', 'progress')
             ->withAvg('projectTasks', 'progress')
@@ -32,6 +35,14 @@ class DashboardController extends Controller
 
         $recentProjects = $projects->sortByDesc('created_at')->take(10);
 
+        // Department section. Same scoping rule as My Department: admin/PM may look at
+        // any department (or all); everyone else only ever gets their own - a hand-edited
+        // ?department= is ignored for them, not just hidden in the UI.
+        $user = $request->user();
+        $canViewOthers = $user->canViewOtherDepartments();
+        $filterDepartmentId = $canViewOthers ? ($request->integer('department') ?: null) : null;
+        $scopeIds = DepartmentDashboard::scopeFor($user, $filterDepartmentId);
+
         return view('dashboard', [
             'activeProjectsCount' => $activeProjects->count(),
             'nearDueCount' => $nearDue->count(),
@@ -42,6 +53,10 @@ class DashboardController extends Controller
             'inProductionCabinets' => $inProductionCabinets,
             'avgProduction' => $avgProduction,
             'recentProjects' => $recentProjects,
+            'canViewOthers' => $canViewOthers,
+            'filterDepartmentId' => $filterDepartmentId,
+            'filterDepartments' => $canViewOthers ? Department::where('is_active', true)->orderBy('name')->get(['id', 'name']) : collect(),
+            'dept' => $departmentDashboard->build($scopeIds, today()),
         ]);
     }
 }

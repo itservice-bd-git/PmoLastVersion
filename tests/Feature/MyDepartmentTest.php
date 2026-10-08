@@ -88,7 +88,7 @@ class MyDepartmentTest extends TestCase
         $user = $this->user(null);
 
         $this->window($user)->assertForbidden();
-        $this->actingAs($user)->get(route('my-department.index'))->assertOk()->assertSee('ยังไม่ได้ผูกกับแผนก');
+        $this->actingAs($user)->get(route('planning.board'))->assertOk()->assertSee('ยังไม่ได้ผูกกับแผนก');
     }
 
     public function test_admin_and_pm_can_view_other_departments(): void
@@ -185,13 +185,19 @@ class MyDepartmentTest extends TestCase
         $this->assertNull(collect($items2)->firstWhere('id', $noOwner->id)['owner_name']);
     }
 
-    public function test_page_renders_for_member_and_admin(): void
+    public function test_the_old_pages_land_on_the_one_planning_page(): void
     {
-        $this->actingAs($this->user($this->busbar))->get(route('my-department.index'))
-            ->assertOk()->assertSee('My Department')->assertDontSee('aria-label="Department"', false);
+        $member = $this->user($this->busbar);
 
-        $this->actingAs($this->user($this->busbar, 'admin'))->get(route('my-department.index'))
-            ->assertOk()->assertSee('aria-label="Department"', false);
+        $this->actingAs($member)->get(route('my-department.index'))->assertRedirect(route('planning.board'));
+        $this->actingAs($member)->get(route('my-department.index', ['project' => 7]))->assertRedirect(route('planning.board', ['project' => 7]));
+        $this->actingAs($member)->get(route('planning.index'))->assertRedirect(route('planning.board'));
+        $this->app['auth']->guard()->logout();
+        $this->get(route('my-department.index'))->assertRedirect(route('login'));
+
+        // the one page carries what My Department had: the CSV export of the month on screen (the same endpoint)
+        $page = $this->actingAs($member)->get(route('planning.board'))->assertOk()->assertSee('Export CSV');
+        $this->assertSame(route('my-department.export'), $page->viewData('config')['urls']['export']);
     }
 
     public function test_window_dates_are_validated(): void

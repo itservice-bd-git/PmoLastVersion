@@ -22,8 +22,11 @@ class DepartmentController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:50', 'unique:departments,code'],
             'description' => ['nullable', 'string'],
+            'color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'icon' => ['nullable', 'string', 'max:8'],
         ]);
         $data['is_active'] = true;
+        $data['sees_all'] = $request->boolean('sees_all');
 
         Department::create($data);
 
@@ -37,8 +40,11 @@ class DepartmentController extends Controller
             'code' => ['required', 'string', 'max:50', 'unique:departments,code,'.$department->id],
             'description' => ['nullable', 'string'],
             'is_active' => ['sometimes', 'boolean'],
+            'color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'icon' => ['nullable', 'string', 'max:8'],
         ]);
         $data['is_active'] = $request->boolean('is_active');
+        $data['sees_all'] = $request->boolean('sees_all');
 
         $department->update($data);
 

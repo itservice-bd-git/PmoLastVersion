@@ -4,6 +4,7 @@
     </x-slot>
 
     <div class="max-w-3xl mx-auto space-y-4">
+        <x-settings-nav />
         <x-card title="Job Types">
             <x-slot name="actions">
                 <button type="button" x-data @click="$dispatch('open-modal', 'add-job-type')" class="text-sm font-medium text-blue-600 hover:underline">+ Add Job Type</button>

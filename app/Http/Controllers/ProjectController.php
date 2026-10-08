@@ -92,6 +92,7 @@ class ProjectController extends Controller
             'statuses' => Project::$statuses,
             'priorities' => Project::$priorities,
             'jobTypes' => JobType::where('is_active', true)->orderBy('name')->get(),
+            'boards' => \App\Models\Board::orderBy('sort')->orderBy('id')->get(),
         ]);
     }
 
@@ -147,6 +148,7 @@ class ProjectController extends Controller
             'statuses' => Project::$statuses,
             'priorities' => Project::$priorities,
             'jobTypes' => JobType::where('is_active', true)->orderBy('name')->get(),
+            'boards' => \App\Models\Board::orderBy('sort')->orderBy('id')->get(),
         ]);
     }
 
@@ -227,6 +229,7 @@ class ProjectController extends Controller
             'description' => ['nullable', 'string'],
             'payment_terms' => ['nullable', 'string', 'max:255'],
             'job_type_id' => ['nullable', 'exists:job_types,id'],
+            'board_id' => ['nullable', 'exists:boards,id'],
             'status' => ['required', 'in:'.implode(',', array_keys(Project::$statuses))],
             'priority' => ['required', 'in:'.implode(',', array_keys(Project::$priorities))],
         ]);

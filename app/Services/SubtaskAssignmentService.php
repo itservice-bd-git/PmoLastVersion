@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\AssignmentException;
 use App\Models\ActivityLog;
+use App\Models\AppSetting;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
 use App\Models\User;
@@ -94,6 +95,11 @@ class SubtaskAssignmentService
 
     public function complete(CabinetSubtask $subtask, User $actor): CabinetSubtask
     {
+        // Settings > กฎการทำงาน: "งานกดเสร็จไม่ได้ ถ้าเช็คลิสต์ยังไม่ครบ" (only once the work really has a checklist)
+        if (AppSetting::get('block_done_needs_checklist') && $subtask->checklists()->where('is_completed', false)->exists()) {
+            throw new AssignmentException('ปิดงานไม่ได้ — เช็คลิสต์ยังติ๊กไม่ครบ (ตั้งค่าไว้ที่ ตั้งค่า › กฎการทำงาน)');
+        }
+
         return $this->transition($subtask, $actor, CabinetSubtask::ASSIGNMENT_IN_PROGRESS, CabinetSubtask::ASSIGNMENT_COMPLETED, 'completed', 'completed_by', 'completed_at',
             fn ($s) => "แผนก {$s->department->name} ทำงาน {$this->label($s)} เสร็จแล้ว");
     }

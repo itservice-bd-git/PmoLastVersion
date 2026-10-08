@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Services\ProjectLock;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Validation\ValidationException;
 
 class Project extends Model
 {
@@ -73,6 +74,8 @@ class Project extends Model
         'status',
         'priority',
         'color',
+        'board_id',
+        'board_status_id',
     ];
 
     protected function casts(): array
@@ -96,6 +99,21 @@ class Project extends Model
     public function projectManager()
     {
         return $this->belongsTo(User::class, 'project_manager_id');
+    }
+
+    public function board()
+    {
+        return $this->belongsTo(Board::class);
+    }
+
+    public function boardStatus()
+    {
+        return $this->belongsTo(BoardStatus::class);
+    }
+
+    public function boardLabels()
+    {
+        return $this->belongsToMany(BoardLabel::class);
     }
 
     public function jobType()
@@ -195,6 +213,18 @@ class Project extends Model
 
             if ($changed && in_array($project->getOriginal('status'), self::LOCKED_STATUSES, true) && ! $project->isDirty('status')) {
                 ProjectLock::assertOpen($project->getKey());
+            }
+        });
+
+        // Settings > กฎการทำงาน: "โครงการกดเสร็จไม่ได้ ถ้ายังมีงานที่แผนกยังไม่เสร็จ"
+        static::updating(function (self $project) {
+            if ($project->isDirty('status') && $project->status === 'completed' && AppSetting::get('block_project_done_needs_work')
+                && CabinetSubtask::query()
+                    ->whereHas('cabinetTask.cabinet', fn ($q) => $q->where('project_id', $project->getKey()))
+                    ->whereNotNull('department_id')
+                    ->whereIn('assignment_status', [CabinetSubtask::ASSIGNMENT_ASSIGNED, CabinetSubtask::ASSIGNMENT_ACCEPTED, CabinetSubtask::ASSIGNMENT_IN_PROGRESS])
+                    ->exists()) {
+                throw ValidationException::withMessages(['status' => 'ปิดโครงการไม่ได้ — ยังมีงานของแผนกที่ไม่เสร็จ (ตั้งค่าไว้ที่ ตั้งค่า › กฎการทำงาน)']);
             }
         });
 

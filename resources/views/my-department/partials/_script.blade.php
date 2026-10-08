@@ -23,6 +23,16 @@
             { bar: 'bg-fuchsia-100 text-fuchsia-800', dot: 'bg-fuchsia-500', accent: 'border-l-fuchsia-400', hex: '#d946ef' },
             { bar: 'bg-lime-100 text-lime-800', dot: 'bg-lime-500', accent: 'border-l-lime-400', hex: '#84cc16' },
         ];
+        // Avatar Planning status colours (the 5 dots in its toolbar legend, same order): a bar/chip is tinted with its
+        // status colour and carries a 3px border in the solid colour. Key = assignment status, plus the derived 'overdue'.
+        const STATUS_STYLES = {
+            assigned: { hex: '#98a2b3', label: 'รอรับงาน' },
+            in_progress: { hex: '#3b82f6', label: 'กำลังทำ' },
+            accepted: { hex: '#f59e0b', label: 'รับงานแล้ว' },
+            completed: { hex: '#10b981', label: 'เสร็จแล้ว' },
+            overdue: { hex: '#ef4444', label: 'เกินกำหนด' },
+        };
+        const MAX_LANES = 4; // bars shown per week before "+N" takes over
         const hashString = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
         const hexToRgba = (hex, alpha) => {
             const full = hex.replace('#', '').replace(/^([0-9a-f]{3})$/i, '$1$1');
@@ -54,13 +64,28 @@
 
             return {
                 mainView: 'calendar', // 'calendar' (Month/Week/List) | 'timeline' (Gantt-style, Project rows or Department rows under "ทุกแผนก")
-                timelineSearch: '', // client-side only - filters timelineRows(), never re-fetches or widens the department scope
                 // Calendar/List: hide individual completed Sub Tasks, see visibleItems()/
                 // dayItems()/listItems(). Timeline still aggregates into one bar per group
                 // (Project, or Department under "ทุกแผนก") - see visibleProjectGroups()/
                 // visibleDepartmentGroups() below, which hide a whole group only once
                 // every Sub Task inside it is COMPLETED.
                 hideCompleted: false, // remembered per-browser via localStorage
+                // Personal quick filters (Avatar Planning "👤 งานของฉัน" / "⭐"), client-side only, remembered per-browser.
+                // They narrow the already-loaded items; they never widen the server's department scope.
+                mineOnly: false,
+                starredOnly: false,
+                userId: config.userId,
+                search: '', // free-text filter over project / customer / cabinet / sub task / department (Avatar's search box)
+                priorityFilter: 'all', // 'all' | 'urgent' | 'high'
+                splitBars: false, // false = one bar per Project (Avatar Planning), true = one bar per Sub Task (the original schedule)
+                moreOpen: false, // "ตัวเลือก" popover
+                focusDate: config.today, // the left panel's "งานที่ต้องเสร็จ" day
+                dash: null, // data for the แดชบอร์ด tab (my-department.dashboard)
+                dashLoading: false,
+                statusStyles: STATUS_STYLES,
+                // project modal (the wide "โครงการ" dialog)
+                pmOpen: false, pm: null, pmLoading: false, pmSaving: false, pmSavedAt: '', pmError: '',
+                pmExpanded: {}, pmComment: '', pmFiles: [], pmAlertDept: '', pmPosting: false,
                 view: 'calendar',
                 range: 'month', // 'month' | '7' (rolling 7 days, "สัปดาห์")
                 anchor: config.today, // first day of a rolling range
@@ -98,6 +123,8 @@
                     try {
                         this.hideCompleted = localStorage.getItem('myDepartment.hideCompleted') === '1';
                         this.hideCompletedSubtasks = localStorage.getItem('avatar_pmo_hide_completed_subtasks') === '1';
+                        this.mineOnly = localStorage.getItem('myDepartment.mineOnly') === '1';
+                        this.starredOnly = localStorage.getItem('myDepartment.starredOnly') === '1';
                     } catch (e) { /* ignore */ }
                     this.load();
                 },
@@ -105,6 +132,13 @@
                     this.rebuild();
                     try {
                         localStorage.setItem('myDepartment.hideCompleted', this.hideCompleted ? '1' : '0');
+                    } catch (e) { /* ignore */ }
+                },
+                toggleQuickFilter(key) {
+                    this[key] = !this[key];
+                    this.rebuild();
+                    try {
+                        localStorage.setItem('myDepartment.' + key, this[key] ? '1' : '0');
                     } catch (e) { /* ignore */ }
                 },
                 toggleHideCompletedSubtasks() {
@@ -129,18 +163,18 @@
                 },
 
                 rangeLabel() {
-                    if (this.range === 'month') return MONTHS[this.month] + ' ' + this.year;
+                    if (this.range === 'month') return MONTHS[this.month] + ' ' + (this.year + 543);
                     const [from, to] = this.rangeBounds();
                     return this.fmt(from) + ' – ' + this.fmt(to);
                 },
 
-                // Month/30-day: Sunday-aligned weeks (days outside the range are dimmed). 7-day: exactly 7 cells from the anchor.
+                // Month: Monday-aligned weeks like Avatar Planning (days outside the range are dimmed). 7-day: exactly 7 cells from the anchor.
                 gridDays() {
                     const [first, last] = this.rangeBounds();
                     let from = parse(first), to = parse(last);
                     if (this.range !== '7') {
-                        from.setDate(from.getDate() - from.getDay());
-                        to.setDate(to.getDate() + (6 - to.getDay()));
+                        from.setDate(from.getDate() - ((from.getDay() + 6) % 7));
+                        to.setDate(to.getDate() + ((7 - to.getDay()) % 7));
                     }
                     const days = [];
                     for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
@@ -151,9 +185,9 @@
                 },
 
                 weekdayHeaders() {
-                    const names = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+                    const names = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.']; // Monday first
                     return this.range === '7'
-                        ? this.gridDays().map((d) => names[parse(d.date).getDay()])
+                        ? this.gridDays().map((d) => names[(parse(d.date).getDay() + 6) % 7])
                         : names;
                 },
 
@@ -252,6 +286,7 @@
                 },
                 changeDepartment() {
                     this.load();
+                    if (this.mainView === 'dashboard') this.loadDashboard();
                 },
                 changeProjectFilter() {
                     this.load();
@@ -317,7 +352,7 @@
                 // doesn't need to know which kind of group it's drawing.
                 groupItemsBy(keyFn, extra) {
                     const map = new Map();
-                    for (const i of this.items) {
+                    for (const i of this.scopedItems()) {
                         const key = keyFn(i);
                         if (!map.has(key)) {
                             map.set(key, {
@@ -422,7 +457,40 @@
                 // completed Sub Tasks from the Calendar, never changes panel.progress/
                 // total_subtasks or any real count elsewhere.
                 visibleItems() {
-                    return this.hideCompleted ? this.items.filter((i) => i.assignment_status !== 'COMPLETED') : this.items;
+                    const items = this.scopedItems();
+                    return this.hideCompleted ? items.filter((i) => i.assignment_status !== 'COMPLETED') : items;
+                },
+
+                // items after the personal quick filters (งานของฉัน = I am the Sub Task's owner, ⭐ = my stars)
+                scopedItems() {
+                    const q = this.search.trim().toLowerCase();
+                    return this.items.filter((i) =>
+                        (!this.mineOnly || i.owner_id === this.userId)
+                        && (!this.starredOnly || i.is_starred)
+                        && (this.priorityFilter === 'all' || i.priority === this.priorityFilter)
+                        && (!q || [i.project_no, i.project_name, i.customer_name, i.cabinet_mo, i.cabinet_name, i.name, i.department_name]
+                            .some((v) => (v || '').toLowerCase().includes(q)))
+                    );
+                },
+
+                // "งานที่ต้องเสร็จวันนี้" - unfinished Sub Tasks whose due date is today
+                dueTodayItems() {
+                    return this.visibleItems()
+                        .filter((i) => i.due_date === this.today && i.assignment_status !== 'COMPLETED')
+                        .sort((a, b) => this.compare(a, b));
+                },
+
+                async toggleStar(item) {
+                    try {
+                        const data = await api(item.urls.star, 'POST');
+                        item.is_starred = data.starred;
+                        const shared = this.items.find((i) => i.id === item.id);
+                        if (shared) shared.is_starred = data.starred;
+                        if (this.detail && this.detail.id === item.id) this.detail.is_starred = data.starred;
+                        if (this.starredOnly) this.rebuild();
+                    } catch (err) {
+                        window.showToast(err.message, 'error');
+                    }
                 },
 
                 // Every Sub Task/Assignment active on one date (point 6/9) - the
@@ -602,9 +670,9 @@
                     if (!days.length) return [];
                     const winStart = days[0].date, winEnd = days[days.length - 1].date;
                     const dayIndex = (date) => days.findIndex((d) => d.date === date);
-                    const groups = this.isAllDepartments ? this.visibleDepartmentGroups() : this.visibleProjectGroups();
+                    const groups = this.visibleProjectGroups(); // Avatar Planning: one row per Project, whatever the department filter
 
-                    let result = groups
+                    return groups
                         .filter((g) => g.dept_start && !(g.dept_start > winEnd || g.dept_due < winStart))
                         .map((g) => {
                             const from = g.dept_start, to = g.dept_due;
@@ -619,44 +687,14 @@
                                 continuesAfter: to > winEnd,
                             };
                         })
-                        .sort((a, b) => {
-                            if (a.colStart !== b.colStart) return a.colStart - b.colStart;
-                            if (this.isAllDepartments) {
-                                const oa = a.group.overdue > 0 ? 0 : 1, ob = b.group.overdue > 0 ? 0 : 1;
-                                return oa !== ob ? oa - ob : a.group.department_id - b.group.department_id;
-                            }
-                            return this.compareGroups(a.group, b.group);
-                        });
-
-                    // Search: matches the group's own identity (Project no./name/customer,
-                    // or Department name), or any Cabinet/Sub Task/Project inside it - a
-                    // matching Sub Task keeps its whole row visible (not just a fragment
-                    // of it) so the Gantt context stays intact.
-                    const q = this.timelineSearch.trim().toLowerCase();
-                    if (q) {
-                        result = result.filter((r) => {
-                            const g = r.group;
-                            const identity = g.kind === 'department'
-                                ? (g.department_name || '').toLowerCase().includes(q)
-                                : g.project_no.toLowerCase().includes(q) ||
-                                    g.project_name.toLowerCase().includes(q) ||
-                                    (g.customer_name || '').toLowerCase().includes(q);
-                            return identity || g.items.some((i) =>
-                                i.project_no.toLowerCase().includes(q) ||
-                                i.cabinet_mo.toLowerCase().includes(q) ||
-                                i.cabinet_name.toLowerCase().includes(q) ||
-                                i.name.toLowerCase().includes(q)
-                            );
-                        });
-                    }
-                    return result;
+                        .sort((a, b) => (a.colStart !== b.colStart ? a.colStart - b.colStart : this.compareGroups(a.group, b.group)));
                 },
                 // Groups that can't be drawn as a bar in the current window: no dated
                 // work at all, or entirely outside it (e.g. an old overdue Project before
                 // this month).
                 timelineOffWindowCount() {
                     const days = this.timelineDays();
-                    const groups = this.isAllDepartments ? this.visibleDepartmentGroups() : this.visibleProjectGroups();
+                    const groups = this.visibleProjectGroups();
                     if (!days.length) return groups.length;
                     const winStart = days[0].date, winEnd = days[days.length - 1].date;
                     return groups.filter((g) => !g.dept_start || g.dept_start > winEnd || g.dept_due < winStart).length;
@@ -686,6 +724,262 @@
                     return g.kind === 'department'
                         ? '· ' + g.project_count + ' Project · รอ ' + g.waiting + ' · ทำ ' + g.working + ' · เสร็จ ' + g.done
                         : '· ' + g.cabinet_count + ' Cab · ' + g.task_count + ' Task · รอ ' + g.waiting + ' · ทำ ' + g.working + ' · เสร็จ ' + g.done;
+                },
+
+                // ---- Avatar Planning style views: toolbar switch, chips, left panel, dashboard ----
+                showMonth() {
+                    this.mainView = 'calendar';
+                    this.view = 'calendar';
+                    if (this.range !== 'month') this.setRange('month');
+                },
+                showTimeline() {
+                    this.mainView = 'timeline';
+                    this.$nextTick(() => requestAnimationFrame(() => this.scrollTimelineToToday()));
+                },
+                showDashboard() {
+                    this.mainView = 'dashboard';
+                    this.loadDashboard();
+                },
+                async loadDashboard() {
+                    this.dashLoading = true;
+                    try {
+                        this.dash = await api(config.dashboardUrl + '?department_id=' + encodeURIComponent(this.departmentId));
+                    } catch (err) {
+                        window.showToast(err.message, 'error');
+                    } finally {
+                        this.dashLoading = false;
+                    }
+                },
+                setPriorityFilter(v) { this.priorityFilter = v; this.rebuild(); },
+
+                statusColor(key) { return (STATUS_STYLES[key] || STATUS_STYLES.assigned).hex; },
+                statusLabel(key) { return (STATUS_STYLES[key] || STATUS_STYLES.assigned).label; },
+                // chip / bar look: tinted fill + solid 3px left border, both from the status colour
+                chipStyle(key) {
+                    const hex = this.statusColor(key);
+                    return 'background-color:' + hexToRgba(hex, 0.16) + ';border-left-color:' + hex;
+                },
+                // a single Sub Task's status colour key
+                itemStatusKey(i) {
+                    if (i.assignment_status === 'COMPLETED') return 'completed';
+                    if (i.is_overdue) return 'overdue';
+                    return { IN_PROGRESS: 'in_progress', ACCEPTED: 'accepted' }[i.assignment_status] || 'assigned';
+                },
+                // a Project's status colour key: the worst thing going on inside it
+                groupStatusKey(g) {
+                    if (g.overdue > 0) return 'overdue';
+                    if (g.total_subtasks > 0 && g.done === g.total_subtasks) return 'completed';
+                    if (g.working > 0) return 'in_progress';
+                    if (g.accepted > 0) return 'accepted';
+                    return 'assigned';
+                },
+                // priority flag colour (urgent red / high orange / low blue; normal = no flag), for Projects and Sub Tasks alike
+                flagClass(x) { return this.priorityFlagClass(x); },
+
+                // Bars for one calendar week, as ONE shape for both modes so the template draws them identically:
+                // per Project (default, Avatar Planning: title + cabinet-count badge + flag) or per Sub Task (splitBars).
+                weekBars(week) {
+                    const ws = week[0].date, we = week[week.length - 1].date;
+                    const entries = this.splitBars
+                        ? this.visibleItems().map((i) => ({
+                            kind: 'item', ref: i, key: 'i' + i.id,
+                            from: i.start_date || i.due_date, to: i.due_date || i.start_date,
+                            status: this.itemStatusKey(i),
+                            title: i.name,
+                            sub: i.cabinet_mo + ' · ' + i.cabinet_name + (i.department_name ? ' · ' + i.department_name : ''),
+                            badge: i.checklists_total > 0 ? i.checklists_completed + '/' + i.checklists_total : '',
+                            done: i.assignment_status === 'COMPLETED',
+                        })).sort((a, b) => this.compare(a.ref, b.ref))
+                        : this.visibleProjectGroups().filter((g) => g.dept_start).map((g) => ({
+                            kind: 'project', ref: g, key: 'p' + g.project_id,
+                            from: g.dept_start, to: g.dept_due,
+                            status: this.groupStatusKey(g),
+                            title: g.project_no + ' ' + g.project_name,
+                            sub: g.cabinet_count + ' ตู้ · เสร็จ ' + g.done + '/' + g.total_subtasks + ' งาน',
+                            badge: String(g.cabinet_count),
+                            done: g.total_subtasks > 0 && g.done === g.total_subtasks,
+                        })).sort((a, b) => (a.from === b.from ? this.compareGroups(a.ref, b.ref) : a.from.localeCompare(b.from)));
+
+                    const laneEnd = [];
+                    const bars = [];
+                    for (const e of entries) {
+                        if (!e.from || !e.to || e.from > we || e.to < ws) continue;
+                        const clipStart = e.from < ws ? ws : e.from;
+                        const clipEnd = e.to > we ? we : e.to;
+                        const colStartIdx = week.findIndex((d) => d.date === clipStart);
+                        const colEndIdx = week.findIndex((d) => d.date === clipEnd);
+                        let lane = laneEnd.findIndex((end) => end < colStartIdx);
+                        if (lane === -1) { lane = laneEnd.length; laneEnd.push(-1); }
+                        laneEnd[lane] = colEndIdx;
+                        bars.push({
+                            ...e, lane, clipStart, clipEnd,
+                            colStart: colStartIdx + 1, colSpan: colEndIdx - colStartIdx + 1,
+                            continuesBefore: e.from < ws, continuesAfter: e.to > we,
+                        });
+                    }
+                    return bars;
+                },
+                weekShownBars(week) { return this.weekBars(week).filter((b) => b.lane < MAX_LANES); },
+                // bars hidden by the lane cap that are active on this date -> the "+N" under that day
+                weekHiddenCount(week, date) {
+                    return this.weekBars(week).filter((b) => b.lane >= MAX_LANES && b.clipStart <= date && date <= b.clipEnd).length;
+                },
+                openBar(b) { b.kind === 'project' ? this.openProjectModal(b.ref.project_id) : this.openDetail(b.ref); },
+
+                // Left panel "งานที่ต้องเสร็จ": the work due on focusDate, grouped by Project (+ what is overdue when looking at today)
+                fmtBE(s) { if (!s) return '-'; const [y, m, d] = s.split('-'); return d + '/' + m + '/' + (Number(y) + 543); },
+                shiftFocus(n) {
+                    this.focusDate = this.addDays(this.focusDate, n);
+                    const days = this.gridDays();
+                    if (this.range === 'month' && (this.focusDate < days[0].date || this.focusDate > days[days.length - 1].date)) {
+                        const d = parse(this.focusDate);
+                        this.year = d.getFullYear();
+                        this.month = d.getMonth();
+                        this.load();
+                    }
+                },
+                focusToday() { this.focusDate = this.today; },
+                groupByProject(items) {
+                    const map = new Map();
+                    for (const i of items) {
+                        if (!map.has(i.project_id)) map.set(i.project_id, { project_id: i.project_id, project_no: i.project_no, project_name: i.project_name, priority: i.priority, items: [] });
+                        map.get(i.project_id).items.push(i);
+                    }
+                    return [...map.values()];
+                },
+                focusAll() { return this.scopedItems().filter((i) => i.due_date === this.focusDate); },
+                focusDueGroups() {
+                    return this.groupByProject(this.focusAll().filter((i) => i.assignment_status !== 'COMPLETED').sort((a, b) => this.compare(a, b)));
+                },
+                focusOverdueGroups() {
+                    if (this.focusDate !== this.today) return [];
+                    return this.groupByProject(this.scopedItems().filter((i) => i.is_overdue).sort((a, b) => this.compare(a, b)));
+                },
+                focusCounts() {
+                    const all = this.focusAll();
+                    const done = all.filter((i) => i.assignment_status === 'COMPLETED').length;
+                    return { total: all.length, done, pct: all.length ? Math.round((done / all.length) * 100) : 0 };
+                },
+                // sections of the left panel: overdue (only when looking at today) then due that day
+                focusSections() {
+                    const sections = [];
+                    const overdue = this.focusOverdueGroups();
+                    if (overdue.length) sections.push({ key: 'overdue', label: 'เลยกำหนด', tone: 'text-red-600', groups: overdue, count: this.groupCount(overdue) });
+                    const due = this.focusDueGroups();
+                    sections.push({ key: 'due', label: this.focusDate === this.today ? 'ครบกำหนดวันนี้' : 'ครบกำหนด ' + this.fmtBE(this.focusDate), tone: 'text-slate-500', groups: due, count: this.groupCount(due) });
+                    return sections;
+                },
+                isWeekend(date) { const n = parse(date).getDay(); return n === 0 || n === 6; },
+                groupCount(groups) { return groups.reduce((n, g) => n + g.items.length, 0); },
+
+                // ---- Project modal ----
+                async openProjectModal(projectId) {
+                    this.pmOpen = true;
+                    this.pm = null;
+                    this.pmLoading = true;
+                    this.pmError = '';
+                    this.pmSavedAt = '';
+                    this.pmComment = '';
+                    this.pmFiles = [];
+                    this.pmAlertDept = '';
+                    this.pmExpanded = {};
+                    try {
+                        this.pm = await api(config.projectUrl.replace('__ID__', projectId));
+                    } catch (err) {
+                        this.pmOpen = false;
+                        window.showToast(err.message, 'error');
+                    } finally {
+                        this.pmLoading = false;
+                    }
+                },
+                closeProjectModal() {
+                    this.pmOpen = false;
+                    this.pm = null;
+                },
+                // re-read the modal's data in place (after a Sub Task moved on, a checklist was ticked, or a save was refused)
+                async reloadProjectModal() {
+                    if (!this.pm) return;
+                    const id = this.pm.project.id;
+                    try {
+                        const fresh = await api(config.projectUrl.replace('__ID__', id));
+                        if (this.pm && this.pm.project.id === id) this.pm = { ...this.pm, project: fresh.project, departments: fresh.departments, cabinets: fresh.cabinets };
+                    } catch (e) { /* the modal keeps what it has */ }
+                },
+                // Autosave: every edit is sent as soon as it is made (no บันทึก button), like Avatar Planning's task modal.
+                async saveProject(field, value) {
+                    if (!this.pm || !this.pm.project.can_edit) return;
+                    this.pmSaving = true;
+                    this.pmError = '';
+                    try {
+                        const data = await api(this.pm.project.urls.update, 'PATCH', { [field]: value });
+                        this.pm.project = data.project;
+                        this.pmSavedAt = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+                        this.load(); // flags / dates on the calendar follow the edit
+                    } catch (err) {
+                        this.pmError = err.message;
+                        window.showToast(err.message, 'error');
+                        await this.reloadProjectModal(); // put the fields back to what is really saved
+                    } finally {
+                        this.pmSaving = false;
+                    }
+                },
+                // dd/mm/yyyy date field (flatpickr, same as the rest of the app) that autosaves on change
+                initDate(el, field) {
+                    if (!window.flatpickr) { el.type = 'date'; el.value = this.pm.project[field] || ''; el.addEventListener('change', () => this.saveProject(field, el.value || null)); return; }
+                    window.flatpickr(el, {
+                        dateFormat: 'Y-m-d', altInput: true, altFormat: 'd/m/Y', allowInput: true,
+                        altInputClass: 'w-[6.75rem] rounded-lg border-slate-300 px-2 py-1 text-sm',
+                        defaultDate: this.pm.project[field] || null,
+                        onChange: (dates, str) => { if (str !== (this.pm.project[field] || '')) this.saveProject(field, str || null); },
+                    });
+                },
+                toggleCabinet(id) { this.pmExpanded = { ...this.pmExpanded, [id]: !this.pmExpanded[id] }; },
+                cabinetStatusKey(c) {
+                    const keys = c.items.map((i) => this.itemStatusKey(i));
+                    if (keys.includes('overdue')) return 'overdue';
+                    if (keys.length && keys.every((k) => k === 'completed')) return 'completed';
+                    if (keys.includes('in_progress')) return 'in_progress';
+                    if (keys.includes('accepted')) return 'accepted';
+                    return 'assigned';
+                },
+                dueLabel(date) {
+                    if (!date) return '';
+                    if (date === this.today) return 'วันนี้';
+                    return this.fmt(date).slice(0, 5);
+                },
+                pickFiles(event) { this.pmFiles = [...event.target.files].slice(0, 5); },
+                async postComment() {
+                    const text = this.pmComment.trim();
+                    if (!text || this.pmPosting || !this.pm) return;
+                    this.pmPosting = true;
+                    const form = new FormData();
+                    form.append('note', text);
+                    this.pmFiles.forEach((f) => form.append('attachments[]', f));
+                    if (this.pmAlertDept) form.append('alert_department_id', this.pmAlertDept);
+                    try {
+                        const res = await fetch(this.pm.project.urls.note, { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf() }, body: form });
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) throw new Error(data.message || 'ส่งไม่สำเร็จ กรุณาลองใหม่');
+                        this.pm.activity.unshift(data.activity);
+                        this.pmComment = '';
+                        this.pmFiles = [];
+                        this.pmAlertDept = '';
+                        if (this.$refs.pmFileInput) this.$refs.pmFileInput.value = '';
+                        if (data.notified) window.showToast('ส่งแจ้งเตือนถึง ' + data.notified + ' คนแล้ว');
+                    } catch (err) {
+                        window.showToast(err.message, 'error');
+                    } finally {
+                        this.pmPosting = false;
+                    }
+                },
+                deleteProject() {
+                    if (!this.pm || !confirm('ย้ายโครงการ ' + this.pm.project.project_no + ' ไปถังขยะ? (กู้คืนได้จากหน้าถังขยะ)')) return;
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = this.pm.project.urls.destroy;
+                    form.innerHTML = '<input type="hidden" name="_token" value="' + csrf() + '"><input type="hidden" name="_method" value="DELETE">';
+                    document.body.appendChild(form);
+                    form.submit();
                 },
 
                 // ---- Visuals ----
@@ -794,6 +1088,11 @@
                     if (i.is_overdue) return 'text-slate-900 font-semibold';
                     if (i.assignment_status === 'IN_PROGRESS') return 'text-slate-800 font-medium';
                     return 'text-slate-700 font-medium';
+                },
+                // Priority flag colour for the calendar bar (Avatar Planning style). `normal` shows no
+                // flag at all - same as "none" there - so only the priorities worth noticing add noise.
+                priorityFlagClass(i) {
+                    return { urgent: 'text-red-600', high: 'text-orange-500', low: 'text-sky-500' }[i.priority] || '';
                 },
                 priorityClass(i) {
                     return this.isHigh(i) ? 'bg-red-50 text-red-700 font-semibold' : 'bg-slate-100 text-slate-600';
@@ -1010,6 +1309,12 @@
                         this.detail.checklist_editable = ['ACCEPTED', 'IN_PROGRESS'].includes(a.assignment_status) && (a.can_start || a.can_complete);
                     }
 
+                    // the project modal holds its own copies of the Sub Tasks - patch the one that changed, then re-read the totals
+                    if (this.pm) {
+                        this.pm.cabinets.forEach((c) => c.items.forEach((i) => { if (i.id === id) Object.assign(i, patch); }));
+                        this.reloadProjectModal();
+                    }
+
                     this.rebuild();
 
                     // A status transition changes its Project's aggregate counts (waiting/
@@ -1043,6 +1348,7 @@
                 },
                 closeDetailPanel() {
                     this.detailPanelOpen = false;
+                    if (this.pmOpen) this.reloadProjectModal(); // checklists may have been ticked meanwhile
                 },
 
                 async toggleChecklist(c, event) {
@@ -1059,6 +1365,12 @@
                             checklists_completed: data.subtask.completed_checklists,
                             checklists_total: data.subtask.total_checklists,
                         };
+                        // An automation rule (Settings > Automation) may have started/closed the Sub Task as a result
+                        // of this tick - the server sends the new workflow state only in that case.
+                        if (data.assignment) {
+                            Object.assign(patch, data.assignment, { is_overdue: data.assignment.assignment_status === 'COMPLETED' ? false : this.detail.is_overdue });
+                            window.showToast('ระบบอัปเดตสถานะงานให้อัตโนมัติ: ' + data.assignment.assignment_status_label);
+                        }
                         Object.assign(this.detail, patch);
                         const shared = this.items.find((i) => i.id === this.detail.id);
                         if (shared) Object.assign(shared, patch);

@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\CabinetSubtask;
+use App\Models\DateLimitRule;
 use App\Models\Department;
 use App\Services\SubtaskAssignmentService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class CabinetSubtaskController extends Controller
 {
@@ -21,6 +23,19 @@ class CabinetSubtaskController extends Controller
             'due_date' => ['nullable', 'date', 'after_or_equal:start_date'],
             'remark' => ['nullable', 'string'],
         ]);
+
+        // Date limit rules (Settings > Automation): checked BEFORE anything is saved, against the department
+        // this Sub Task will have after this request, and only when the due date is actually changing - so an
+        // unrelated edit (remark, owner) is never blocked because some other department's date moved.
+        if (! empty($data['due_date']) && $data['due_date'] !== $cabinetSubtask->due_date?->format('Y-m-d')) {
+            $targetDepartment = $request->has('department_id')
+                ? ($data['department_id'] ? (int) $data['department_id'] : null)
+                : $cabinetSubtask->department_id;
+
+            if ($message = DateLimitRule::violationFor($cabinetSubtask->cabinetTask->cabinet_id, $targetDepartment, $data['due_date'])) {
+                throw ValidationException::withMessages(['due_date' => $message]);
+            }
+        }
 
         // Department goes through the assignment service so the lock rule
         // (no change once accepted) and its activity log apply here too.

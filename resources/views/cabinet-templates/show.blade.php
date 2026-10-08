@@ -9,6 +9,7 @@
     </x-slot>
 
     <div class="max-w-4xl mx-auto space-y-6">
+        <x-settings-nav />
         <x-card>
             <div class="flex items-start justify-between">
                 <div>

@@ -4,6 +4,7 @@ import Sortable from 'sortablejs';
 
 window.Alpine = Alpine;
 window.Sortable = Sortable;
+window.flatpickr = flatpickr; // for date fields created after page load (e.g. the project modal on My Department)
 
 Alpine.start();
 

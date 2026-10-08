@@ -2,9 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
 use App\Models\Project;
+use App\Services\CommentAttachmentUploader;
+use App\Services\DepartmentDashboard;
+use App\Services\NotificationService;
+use App\Services\ProjectEditor;
+use App\Services\WorkScope;
 use App\Services\SubtaskAssignmentService;
 use App\Support\Csv;
 use Carbon\Carbon;
@@ -55,6 +61,190 @@ class MyDepartmentController extends Controller
             'is_all_departments' => $department === null,
             'today' => $today->format('Y-m-d'),
             'items' => $subtasks->map(fn ($s) => $this->item($s, $user, $today))->values(),
+        ]);
+    }
+
+    // ---- Project modal (the wide "โครงการ" dialog opened from a calendar bar) ----
+
+    /**
+     * A user may open a Project here if they are PMO-level, or their own department has dispatched work in it -
+     * the same visibility as the calendar itself (not "any project by id").
+     */
+    private function authorizeProject(Request $request, Project $project): void
+    {
+        $user = $request->user();
+
+        abort_unless(
+            $user->canViewOtherDepartments() || $this->projectSubtasks($project, $user)->exists(),
+            403,
+            'คุณไม่มีสิทธิ์ดูโครงการนี้'
+        );
+    }
+
+    /** Dispatched Sub Tasks of a Project the user may see (PMO: all departments, others: their own) - see WorkScope. */
+    private function projectSubtasks(Project $project, $user)
+    {
+        return WorkScope::projectSubtasks($project, $user);
+    }
+
+    private function projectBlock(Project $project, $user): array
+    {
+        $project->loadMissing('projectManager');
+
+        return [
+            'id' => $project->id,
+            'project_no' => $project->project_no,
+            'project_name' => $project->project_name,
+            'customer_name' => $project->customer_name,
+            'status' => $project->status,
+            'priority' => $project->priority,
+            'start_date' => $project->start_date?->format('Y-m-d'),
+            'due_date' => $project->due_date?->format('Y-m-d'),
+            'description' => $project->description,
+            'manager_name' => $project->projectManager?->name,
+            'locked' => $project->isLocked(),
+            'can_edit' => $user->canDispatchWork(),
+            'statuses' => Project::$statuses,
+            'priorities' => Project::$priorities,
+            'urls' => [
+                'show' => route('projects.show', $project),
+                'update' => route('my-department.project.update', $project),
+                'note' => route('my-department.project.note', $project),
+                'destroy' => route('projects.destroy', $project),
+            ],
+        ];
+    }
+
+    private function activityItem(ActivityLog $log): array
+    {
+        return [
+            'id' => $log->id,
+            'user_name' => $log->user?->name ?? 'ระบบ',
+            'action' => $log->action,
+            'is_note' => $log->action === 'note',
+            'description' => $log->description,
+            'created_at' => $log->created_at?->format('d/m/Y H:i'),
+            'attachments' => $log->attachments->map(fn ($a) => ['name' => $a->original_name, 'url' => $a->url, 'size' => $a->size_for_humans])->values(),
+        ];
+    }
+
+    public function project(Request $request, Project $project)
+    {
+        $this->authorizeProject($request, $project);
+        $user = $request->user();
+        $today = today();
+
+        $subtasks = $this->projectSubtasks($project, $user)
+            ->with('cabinetTask.cabinet.project', 'owner', 'department')
+            ->withCount([
+                'checklists',
+                'checklists as completed_checklists_count' => fn ($q) => $q->where('is_completed', true),
+            ])
+            ->orderBy('due_date')->orderBy('id')->get();
+
+        $items = $subtasks->map(fn ($s) => $this->item($s, $user, $today));
+
+        // "ส่งต่อแผนก": one chip per department with work in this project
+        $departments = $items->groupBy('department_id')->map(function ($rows) {
+            $done = $rows->where('assignment_status', 'COMPLETED')->count();
+            $checkTotal = $rows->sum('checklists_total');
+
+            return [
+                'id' => $rows->first()['department_id'],
+                'name' => $rows->first()['department_name'],
+                'total' => $rows->count(),
+                'done' => $done,
+                'overdue' => $rows->where('is_overdue', true)->count(),
+                'due_date' => $rows->pluck('due_date')->filter()->max(),
+                'pct' => $checkTotal > 0 ? (int) round($rows->sum('checklists_completed') / $checkTotal * 100) : ($rows->count() ? (int) round($done / $rows->count() * 100) : 0),
+            ];
+        })->sortBy(fn ($d) => $d['due_date'] ?? '9999-12-31')->values();
+
+        $cabinets = $items->groupBy('cabinet_id')->map(function ($rows) {
+            $first = $rows->first();
+            $checkTotal = $rows->sum('checklists_total');
+            $checkDone = $rows->sum('checklists_completed');
+
+            return [
+                'id' => $first['cabinet_id'],
+                'mo' => $first['cabinet_mo'],
+                'name' => $first['cabinet_name'],
+                'checklists_total' => $checkTotal,
+                'checklists_completed' => $checkDone,
+                'pct' => $checkTotal > 0 ? (int) round($checkDone / $checkTotal * 100) : 0,
+                'due_date' => $rows->pluck('due_date')->filter()->max(),
+                'items' => $rows->values(),
+            ];
+        })->sortBy('mo')->values();
+
+        $feed = ActivityLog::query()->where('project_id', $project->id)
+            // everyone sees the discussion; the system's own change log is for PMO roles only
+            ->when(! $user->canViewOtherDepartments(), fn ($q) => $q->where('action', 'note'))
+            // "created" rows of cabinets/tasks/checklists are bulk noise (a template creates hundreds) - keep only the Project's own
+            ->where(fn ($q) => $q->where('action', '!=', 'created')->orWhere('loggable_type', Project::class))
+            ->with('user', 'attachments')->latest('id')->limit(40)->get();
+
+        return response()->json([
+            'project' => $this->projectBlock($project, $user),
+            'departments' => $departments,
+            'cabinets' => $cabinets,
+            'activity' => $feed->map(fn ($l) => $this->activityItem($l))->values(),
+            'alert_departments' => $user->canDispatchWork() ? Department::where('is_active', true)->orderBy('name')->get(['id', 'name']) : [],
+        ]);
+    }
+
+    /** Autosave from the modal: one or more fields of the Project, PMO-level roles only. */
+    public function updateProject(Request $request, Project $project, ProjectEditor $editor)
+    {
+        abort_unless($request->user()->canDispatchWork(), 403, 'เฉพาะผู้ดูแลระบบ (Admin) หรือ Project Manager เท่านั้นที่แก้ไขโครงการได้');
+
+        $editor->update($project, $request->all());
+
+        return response()->json(['project' => $this->projectBlock($project->fresh(), $request->user())]);
+    }
+
+    /** A comment (optionally with files, optionally sent as an alert to a department) on the Project's Activity. */
+    public function storeProjectNote(Request $request, Project $project, CommentAttachmentUploader $uploader, NotificationService $notifications)
+    {
+        $this->authorizeProject($request, $project);
+        $user = $request->user();
+
+        $data = $request->validate([
+            'note' => ['required', 'string', 'max:2000'],
+            'attachments' => ['nullable', 'array', 'max:5'],
+            'attachments.*' => ['file', 'max:20480', 'mimes:'.CommentAttachmentUploader::ALLOWED_MIMES],
+            'alert_department_id' => ['nullable', 'integer', 'exists:departments,id'],
+        ]);
+
+        $alertTo = ! empty($data['alert_department_id']) ? Department::find($data['alert_department_id']) : null;
+        abort_if($alertTo && ! $user->canDispatchWork(), 403, 'เฉพาะผู้ดูแลระบบ (Admin) หรือ Project Manager เท่านั้นที่ส่งแจ้งเตือนไปแผนกได้');
+
+        $log = ActivityLog::record($project->id, $user->id, $project, 'note', $data['note']);
+        foreach ($request->file('attachments', []) as $file) {
+            $uploader->store($log, $file, $user->id);
+        }
+
+        $notified = $alertTo ? $notifications->projectAlert($project, $alertTo, $user, $data['note']) : 0;
+
+        return response()->json([
+            'activity' => $this->activityItem($log->load('user', 'attachments')),
+            'notified' => $notified,
+        ]);
+    }
+
+    /**
+     * Numbers for the page's "แดชบอร์ด" tab. Department scope comes from resolveDepartment() (the one place that
+     * decides what this user may look at), so a department user cannot ask for another department's figures.
+     */
+    public function dashboard(Request $request, DepartmentDashboard $dashboard)
+    {
+        $department = $this->resolveDepartment($request);
+        $scope = $department ? [$department->id] : null;
+        $today = today();
+
+        return response()->json($dashboard->build($scope, $today) + [
+            'projects' => $dashboard->projects($scope, $today),
+            'department' => $department ? ['id' => $department->id, 'name' => $department->name] : ['id' => null, 'name' => 'ทุกแผนก'],
         ]);
     }
 
@@ -213,7 +403,8 @@ class MyDepartmentController extends Controller
         $user = $request->user();
         $requested = $request->input('department_id');
 
-        if ($user->canViewOtherDepartments()) {
+        // read-only lists / CSV: a department marked "sees everything" (Settings > แผนก) may ask for every department too
+        if ($user->canSeeAllWork()) {
             if ($requested === 'all') {
                 return null;
             }
@@ -231,6 +422,43 @@ class MyDepartmentController extends Controller
         abort_if($requested && ((int) $requested !== $user->department_id), 403, 'คุณไม่มีสิทธิ์ดูงานของแผนกอื่น');
 
         return $user->department;
+    }
+
+    /**
+     * The signed-in user's starred Sub Task ids - one query per request, kept on the
+     * request itself (not on this controller) so it can never outlive that request.
+     */
+    private function starredIds($user): \Illuminate\Support\Collection
+    {
+        $bag = request()->attributes;
+        $key = 'starred_subtask_ids.'.$user->id;
+
+        if (! $bag->has($key)) {
+            $bag->set($key, $user->starredSubtasks()->pluck('cabinet_subtasks.id'));
+        }
+
+        return $bag->get($key);
+    }
+
+    /**
+     * Toggle the signed-in user's personal star on a Sub Task. Same visibility rule as
+     * show(): you can only star work you are allowed to see.
+     */
+    public function toggleStar(Request $request, CabinetSubtask $cabinetSubtask)
+    {
+        $user = $request->user();
+
+        abort_unless(
+            $cabinetSubtask->department_id !== null
+                && ($user->canViewOtherDepartments() || $user->department_id === $cabinetSubtask->department_id),
+            403,
+            'คุณไม่มีสิทธิ์ดูงานของแผนกนี้'
+        );
+
+        $starred = ! $user->starredSubtasks()->where('cabinet_subtasks.id', $cabinetSubtask->id)->exists();
+        $starred ? $user->starredSubtasks()->attach($cabinetSubtask->id) : $user->starredSubtasks()->detach($cabinetSubtask->id);
+
+        return response()->json(['starred' => $starred]);
     }
 
     private function item(CabinetSubtask $subtask, $user, Carbon $today): array
@@ -265,6 +493,7 @@ class MyDepartmentController extends Controller
             // the same shape.
             'department_id' => $subtask->department_id,
             'department_name' => $subtask->department?->name,
+            'owner_id' => $subtask->owner_id,
             'owner_name' => $subtask->owner?->name,
             'start_date' => $subtask->start_date?->format('Y-m-d'),
             'due_date' => $subtask->due_date?->format('Y-m-d'),
@@ -280,11 +509,13 @@ class MyDepartmentController extends Controller
             'checklists_total' => $subtask->checklists_count ?? 0,
             'checklists_completed' => $subtask->completed_checklists_count ?? 0,
             'is_department_locked' => $subtask->is_department_locked,
+            'is_starred' => $this->starredIds($user)->contains($subtask->id),
             'urls' => [
                 'accept' => route('cabinet-subtasks.accept', $subtask),
                 'start' => route('cabinet-subtasks.start', $subtask),
                 'complete' => route('cabinet-subtasks.complete', $subtask),
                 'detail' => route('my-department.show', $subtask),
+                'star' => route('my-department.star', $subtask),
             ],
         ] + $this->assignments->actionsFor($subtask, $user);
     }

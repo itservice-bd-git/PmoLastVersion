@@ -4,6 +4,7 @@
     </x-slot>
 
     <div class="max-w-2xl mx-auto">
+        <x-settings-nav />
         <x-card>
             <form method="POST" action="{{ route('cabinet-templates.store') }}">
                 @csrf

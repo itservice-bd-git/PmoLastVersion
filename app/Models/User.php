@@ -38,9 +38,20 @@ class User extends Authenticatable
 
     const ROLE_MEMBER = 'member';
 
+    public function notificationPreference()
+    {
+        return $this->hasOne(NotificationPreference::class);
+    }
+
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    /** Sub Tasks this user bookmarked ("ติดดาว") - personal, see MyDepartmentController::toggleStar(). */
+    public function starredSubtasks()
+    {
+        return $this->belongsToMany(CabinetSubtask::class, 'subtask_stars')->withTimestamps();
     }
 
     /**
@@ -50,6 +61,12 @@ class User extends Authenticatable
     public function canViewOtherDepartments(): bool
     {
         return in_array($this->role, [self::ROLE_ADMIN, self::ROLE_PROJECT_MANAGER], true);
+    }
+
+    /** May SEE every project (read only): a PMO role, or a member of a department an admin marked "sees everything". */
+    public function canSeeAllWork(): bool
+    {
+        return $this->canViewOtherDepartments() || (bool) $this->department?->sees_all;
     }
 
     public function isAdmin(): bool

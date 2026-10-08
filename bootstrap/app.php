@@ -13,6 +13,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Every page here is a logged-in view of live data - never cacheable
         // by a browser, CDN, or hosting-level page cache. See the class docblock.
+        $middleware->alias([
+            'admin' => \App\Http\Middleware\EnsureAdmin::class,
+            'gzip' => \App\Http\Middleware\GzipResponse::class,
+        ]);
+
         $middleware->web(append: [
             \App\Http\Middleware\DisableResponseCaching::class,
         ]);

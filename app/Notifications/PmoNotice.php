@@ -20,6 +20,7 @@ class PmoNotice extends Notification
         public string $body,
         public string $url,
         public ?string $key = null,
+        public ?int $projectId = null,   // the project it is about ("ของฉัน" on Planning lists projects that tagged / alerted you)
     ) {}
 
     public function via(object $notifiable): array
@@ -35,6 +36,7 @@ class PmoNotice extends Notification
             'body' => $this->body,
             'url' => $this->url,
             'key' => $this->key,
+            'project_id' => $this->projectId,
         ];
     }
 }

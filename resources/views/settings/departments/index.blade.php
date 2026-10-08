@@ -4,6 +4,7 @@
     </x-slot>
 
     <div class="max-w-3xl mx-auto space-y-4">
+        <x-settings-nav />
         <x-card title="Departments">
             <x-slot name="actions">
                 <button type="button" x-data @click="$dispatch('open-modal', 'add-department')" class="text-sm font-medium text-blue-600 hover:underline">+ Add Department</button>
@@ -49,6 +50,21 @@
                     <x-input-label value="Description" />
                     <textarea name="description" rows="2" class="mt-1 block w-full rounded-lg border-slate-300 text-sm"></textarea>
                 </div>
+                <div class="flex gap-4">
+                    <div>
+                        <x-input-label value="สี" />
+                        <input type="color" name="color" value="{{ '#7b68ee' }}" class="mt-1 h-9 w-16 rounded border-slate-300">
+                    </div>
+                    <div class="flex-1">
+                        <x-input-label value="ไอคอน (อีโมจิ)" />
+                        <x-text-input name="icon" maxlength="8" class="mt-1 block w-full" :value="''" />
+                    </div>
+                </div>
+                <label class="flex items-start gap-2 text-sm text-slate-600">
+                    <input type="checkbox" name="sees_all" value="1"  class="mt-0.5 rounded border-slate-300 text-blue-600">
+                    <span>เห็นงานของทุกแผนก (อ่านอย่างเดียว เหมือน PM มองเห็น แต่ไม่ได้สิทธิ์จ่ายงาน/ลบ)</span>
+                </label>
+
             </div>
             <div class="mt-6 flex justify-end gap-3">
                 <button type="button" x-data @click="$dispatch('close-modal', 'add-department')" class="px-4 py-2 text-sm font-medium text-slate-600">ยกเลิก</button>
@@ -75,6 +91,21 @@
                         <x-input-label value="Description" />
                         <textarea name="description" rows="2" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">{{ $department->description }}</textarea>
                     </div>
+                <div class="flex gap-4">
+                    <div>
+                        <x-input-label value="สี" />
+                        <input type="color" name="color" value="{{ $department->color ?: '#7b68ee' }}" class="mt-1 h-9 w-16 rounded border-slate-300">
+                    </div>
+                    <div class="flex-1">
+                        <x-input-label value="ไอคอน (อีโมจิ)" />
+                        <x-text-input name="icon" maxlength="8" class="mt-1 block w-full" :value="$department->icon" />
+                    </div>
+                </div>
+                <label class="flex items-start gap-2 text-sm text-slate-600">
+                    <input type="checkbox" name="sees_all" value="1" @checked($department->sees_all) class="mt-0.5 rounded border-slate-300 text-blue-600">
+                    <span>เห็นงานของทุกแผนก (อ่านอย่างเดียว เหมือน PM มองเห็น แต่ไม่ได้สิทธิ์จ่ายงาน/ลบ)</span>
+                </label>
+
                     <label class="flex items-center gap-2 text-sm text-slate-600">
                         <input type="checkbox" name="is_active" value="1" @checked($department->is_active) class="rounded border-slate-300 text-blue-600">
                         Active

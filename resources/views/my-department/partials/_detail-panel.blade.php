@@ -41,7 +41,11 @@
                                 <span x-show="detail.is_overdue" class="rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700">เกินกำหนด</span>
                             </div>
                         </div>
-                        <button type="button" @click="closeDetailPanel()" class="shrink-0 text-slate-400 hover:text-slate-600 text-2xl leading-none" aria-label="ปิด">&times;</button>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <button type="button" @click="toggleStar(detail)" :aria-pressed="!!detail.is_starred" :title="detail.is_starred ? 'เอาดาวออก' : 'ติดดาว'"
+                                    :class="detail.is_starred ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'" class="text-2xl leading-none" aria-label="ติดดาว">★</button>
+                            <button type="button" @click="closeDetailPanel()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none" aria-label="ปิด">&times;</button>
+                        </div>
                     </div>
 
                     <div class="flex-1 overflow-y-auto px-4 py-3">

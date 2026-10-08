@@ -29,18 +29,4 @@ class WorkingDaysCalculator
         return $days;
     }
 
-    public function addWorkingDays(Carbon $start, int $days): Carbon
-    {
-        $cursor = $start->copy();
-        $added = 0;
-
-        while ($added < $days) {
-            $cursor->addDay();
-            if (! $cursor->isWeekend()) {
-                $added++;
-            }
-        }
-
-        return $cursor;
-    }
 }

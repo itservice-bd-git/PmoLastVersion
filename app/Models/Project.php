@@ -86,16 +86,6 @@ class Project extends Model
         ];
     }
 
-    public function owner()
-    {
-        return $this->belongsTo(User::class, 'owner_id');
-    }
-
-    public function salesPerson()
-    {
-        return $this->belongsTo(User::class, 'sales_person_id');
-    }
-
     public function projectManager()
     {
         return $this->belongsTo(User::class, 'project_manager_id');

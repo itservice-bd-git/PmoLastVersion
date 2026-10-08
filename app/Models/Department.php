@@ -32,11 +32,6 @@ class Department extends Model
         return $this->hasMany(User::class);
     }
 
-    public function cabinetSubtaskTemplates()
-    {
-        return $this->hasMany(CabinetSubtaskTemplate::class);
-    }
-
     public function cabinetSubtasks()
     {
         return $this->hasMany(CabinetSubtask::class);

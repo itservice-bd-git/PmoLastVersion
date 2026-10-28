@@ -58,6 +58,7 @@ class PlanningSync
         'accept' => CabinetSubtask::ASSIGNMENT_ASSIGNED,
         'start' => CabinetSubtask::ASSIGNMENT_ACCEPTED,
         'complete' => CabinetSubtask::ASSIGNMENT_IN_PROGRESS,
+        'reject' => CabinetSubtask::ASSIGNMENT_ASSIGNED,   // "ไม่รับงาน" + reason: back to PMO
     ];
 
     private const PRIORITY = ['none' => 'normal', 'medium' => 'normal', 'low' => 'low', 'high' => 'high', 'urgent' => 'urgent'];
@@ -126,6 +127,7 @@ class PlanningSync
                 'alert_ack' => $this->alertAck($user, $op),
                 'stage_done' => $this->stageDone($user, $op),
                 'stage_step' => $this->stageStep($user, $op),
+                'subtasks_step' => $this->subtasksStep($user, $op),
                 'delete' => $this->delete($user, $op),
                 'unsupported' => throw new PlanningRejected((string) ($op['what'] ?? 'การแก้ไขนี้ยังไม่รองรับในหน้านี้')),
                 default => throw new PlanningRejected('ไม่รู้จักการแก้ไขนี้'),
@@ -212,8 +214,14 @@ class PlanningSync
         if ((bool) $item->is_completed === $done) {
             return null;
         }
-        if (! $subtask->isChecklistEditableBy($user)) {
+        $accepted = $done && $this->assignments->acceptByTick($subtask, $user);   // work still waiting: ticking accepts it (Settings > กฎการทำงาน)
+        if (! $accepted && ! $subtask->isChecklistEditableBy($user)) {
             throw new PlanningRejected('ติ๊ก Checklist ได้เฉพาะแผนกที่รับงานแล้ว — ต้อง "รับงาน" ก่อน');
+        }
+        if ($accepted) {
+            $subtask = $subtask->fresh();
+            $item->setRelation('subtask', $subtask);
+            $this->notes[] = 'รับงาน "'.$subtask->name.'" ให้แล้ว (ติ๊ก Checklist ของงานที่รอรับ)';
         }
 
         $this->progress->toggleChecklist($item, $done, $user);
@@ -362,14 +370,14 @@ class PlanningSync
                 $notes[] = 'ส่งแจ้งเตือนแผนกได้เฉพาะ Admin / Project Manager';
             } else {
                 $dept = Department::find($this->id($op['alertDept'], 'd_')) ?? throw new PlanningRejected('ไม่พบแผนกที่จะแจ้งเตือน');
-                $n = $this->notifications->projectAlert($project, $dept, $user, $text);
+                $n = $this->notifications->projectAlert($project, $dept, $user, $text, $this->lastNote);
                 $notes[] = $n ? "ส่งแจ้งเตือนถึงแผนก {$dept->name} {$n} คนแล้ว" : "⚠️ แผนก {$dept->name} ยังไม่มีผู้ใช้ในระบบ — ไม่มีใครได้รับแจ้งเตือนนี้";
             }
         }
 
         if (! empty($op['mentions']) && is_array($op['mentions'])) {
             [$targets, $skipped] = $this->mentionTargets($user, $project, $op['mentions']);
-            $sent = $targets->sum(fn (User $t) => $this->notifications->mentioned($project, $user, $t, $text));
+            $sent = $targets->sum(fn (User $t) => $this->notifications->mentioned($project, $user, $t, $text, $this->lastNote));
             $told = $targets->pluck('id')->all();
             if ($sent) {
                 $notes[] = "แจ้งเตือนผู้ถูกแท็ก {$sent} คน";
@@ -553,6 +561,10 @@ class PlanningSync
             throw new PlanningRejected('ขั้นตอนไม่ถูกต้อง');
         }
 
+        $reason = trim((string) ($op['reason'] ?? ''));
+        if ($step === 'reject' && $reason === '') {
+            throw new PlanningRejected('ใส่เหตุผลที่ไม่รับงาน');
+        }
         $project = $this->projectFor($user, $op['taskId'] ?? null);
         $eligible = $this->deptSubtasks($project, $user, $op['deptId'] ?? null)->where('assignment_status', self::STEP_FROM[$step])->values();
         if ($eligible->isEmpty()) {
@@ -560,10 +572,46 @@ class PlanningSync
         }
 
         foreach ($eligible as $s) {
-            $this->assignments->{$step}($s, $user);   // refuses (403-style) unless the user belongs to that department
+            // refuses (403-style) unless the user belongs to that department
+            $step === 'reject' ? $this->assignments->reject($s, $user, $reason) : $this->assignments->{$step}($s, $user);
         }
 
-        return ['accept' => 'รับงาน', 'start' => 'เริ่มงาน', 'complete' => 'ปิดงาน'][$step].' '.$eligible->count().' รายการแล้ว';
+        return ['accept' => 'รับงาน', 'start' => 'เริ่มงาน', 'complete' => 'ปิดงาน', 'reject' => 'ส่งงานคืน PM'][$step].' '.$eligible->count().' รายการแล้ว';
+    }
+
+    /**
+     * "เลือกรับ…": accept, or send back with a reason, only the picked pieces of work still waiting for the department (the
+     * same service calls as the whole stage; work that moved on meanwhile is skipped and said so).
+     */
+    private function subtasksStep(User $user, array $op): ?string
+    {
+        $step = (string) ($op['step'] ?? '');
+        if (! in_array($step, ['accept', 'reject'], true)) {
+            throw new PlanningRejected('ขั้นตอนไม่ถูกต้อง');
+        }
+        $reason = trim((string) ($op['reason'] ?? ''));
+        if ($step === 'reject' && $reason === '') {
+            throw new PlanningRejected('ใส่เหตุผลที่ไม่รับงาน');
+        }
+        $project = $this->projectFor($user, $op['taskId'] ?? null);
+        $ids = collect(is_array($op['ids'] ?? null) ? $op['ids'] : [])->map(fn ($k) => $this->id((string) $k, 's'))->unique()->values();
+        if ($ids->isEmpty()) {
+            throw new PlanningRejected('ยังไม่ได้เลือกงาน');
+        }
+        $picked = WorkScope::projectSubtasks($project, $user)->whereKey($ids)->with('cabinetTask.cabinet')->orderBy('id')->get();
+        if ($picked->count() !== $ids->count()) {
+            throw new PlanningRejected('ไม่พบงานบางรายการในโครงการนี้');
+        }
+        $waiting = $picked->where('assignment_status', CabinetSubtask::ASSIGNMENT_ASSIGNED);
+        if ($waiting->isEmpty()) {
+            throw new PlanningRejected('งานที่เลือกไม่ได้รอรับแล้ว');
+        }
+        foreach ($waiting as $s) {
+            $step === 'reject' ? $this->assignments->reject($s, $user, $reason) : $this->assignments->accept($s, $user);   // each checks the user's department
+        }
+        $skipped = $picked->count() - $waiting->count();
+
+        return ($step === 'reject' ? 'ส่งงานคืน PM ' : 'รับงาน ').$waiting->count().' งานแล้ว'.($skipped ? " · ข้าม {$skipped} งานที่ไม่ได้รอรับแล้ว" : '');
     }
 
     /** One extra field (Settings > ฟิลด์เพิ่มเติม) of a department's part of a project: PMO roles any department's, members their own. */

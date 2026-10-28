@@ -141,7 +141,7 @@
                         <tr class="bg-[#26282E] text-left text-white">
                             @foreach (array_filter([['เลขที่ SO', 'SO'], ['โครงการ / ลูกค้า', 'Project'], $hasPm ? ['ผู้จัดการโครงการ', 'PM'] : null, ['กำหนดส่ง', 'Due date'], ['ผลิตแล้ว เทียบเวลา', 'Progress vs time'], ['สถานะ', 'Status']]) as [$th, $en])
                                 <th scope="col" class="whitespace-nowrap px-4 py-2.5 align-bottom font-semibold {{ $loop->first ? 'rounded-l-lg' : '' }} {{ $loop->last ? 'rounded-r-lg' : '' }}">
-                                    {{ $th }}<span class="block text-[11px] font-medium uppercase tracking-wider text-slate-400">{{ $en }}</span>
+                                    {{ $th }}<span class="block text-[12px] font-medium uppercase tracking-wider text-slate-400">{{ $en }}</span>
                                 </th>
                             @endforeach
                         </tr>

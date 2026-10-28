@@ -47,7 +47,12 @@ class SubtaskPairs
         $before = $sub->pairSources()->pluck('cabinet_subtasks.id')->sort()->values();
         $sub->pairSources()->sync($valid->pluck('id')->all());
         app(HandoffService::class)->forgetPairs();
-        $this->share(fn (SharedChecklist $shared) => $shared->syncReceivers([$sub->id]));
+        // this one first (a dropped pair frees its copies), then those comparing with it: an item that was a copy here can now be theirs
+        $receivers = DB::table('cabinet_subtask_pairs')->where('source_subtask_id', $sub->id)->pluck('cabinet_subtask_id');
+        $this->share(function (SharedChecklist $shared) use ($sub, $receivers) {
+            $shared->syncReceivers([$sub->id]);
+            $shared->syncReceivers($receivers);
+        });
 
         if ($before->all() !== $valid->pluck('id')->sort()->values()->all()) {
             \App\Models\ActivityLog::record($cabinet->project_id, $actor?->id, $sub, 'updated', $valid->isEmpty()

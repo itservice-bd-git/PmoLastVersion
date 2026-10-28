@@ -30,7 +30,7 @@
                             <span class="absolute -top-1.5 right-2 w-2.5 h-2.5 rounded-full ring-2 ring-white" :style="'background-color:' + statusColor(r.t)"></span>
                             <span x-show="r.before" class="shrink-0">◄</span>
                             <span class="truncate font-semibold" :class="r.done ? 'line-through text-slate-500' : 'text-slate-800'" x-text="r.t.so + ' ' + r.t.title"></span>
-                            <span class="truncate text-[10px]" :class="r.late ? 'font-semibold text-red-600' : 'text-slate-500'" x-text="r.late ? '· เลยกำหนด ' + daysFromToday(r.end) * -1 + ' วัน' : (r.c ? '' : '· ' + r.t.subtasks.length + ' ตู้')"></span>
+                            <span class="truncate text-[11.5px]" :class="r.late ? 'font-semibold text-red-600' : 'text-slate-500'" x-text="r.late ? '· เลยกำหนด ' + daysFromToday(r.end) * -1 + ' วัน' : (r.c ? '' : '· ' + r.t.subtasks.length + ' ตู้')"></span>
                             <span x-show="r.after" class="shrink-0 ml-auto">►</span>
                         </div>
                     </div>

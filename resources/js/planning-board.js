@@ -61,6 +61,7 @@ export default function registerPlanningBoard() {
             cabOpen: {},                      // expanded cabinet rows: { c12: { loading, cabinet, subtasks } }
             cabDialog: null,                  // the "new cabinet" window: MO, name, template, and which department gets each of its sub tasks
             dispatch: null,                   // the "hand out work" window: { taskId, cabId, preset, assign: { s12: 'd_5' } }
+            pick: null,                       // "เลือกรับ…": { t, deptId, on: { s12: true } } - which waiting work of a department to accept / send back
             me: config.me || { id: config.userId, name: config.userName, avatar: null, deptId: '' },
             canTrash: !!config.canTrash,
             perms: config.perms || {},        // Settings > สิทธิ์การใช้งาน (the server leaves out / refuses the rest anyway)
@@ -616,10 +617,17 @@ export default function registerPlanningBoard() {
                 if (value) s.fields[f.id] = value; else delete s.fields[f.id];
                 this.send([{ type: 'stage_field', taskId: t.id, deptId, fieldId: f.id, value }]);
             },
-            step(t, deptId, step) {
+            async step(t, deptId, step) {
                 if (step === 'accept' && !confirm('ยืนยันรับงาน? หลังรับงานแล้วจะเปลี่ยนแผนกที่รับผิดชอบไม่ได้')) return;
+                let reason;
+                if (step === 'reject') {   // "ไม่รับงาน": every piece still waiting for this department in the project goes back to PMO
+                    const s = this.stageOf(t, deptId);
+                    reason = await window.askRejectReason({ title: 'ไม่รับงาน' + (s && s.pmo && s.pmo.waiting ? ' ' + s.pmo.waiting + ' งาน' : ''),
+                        detail: [t.so, t.title, this.deptOf(deptId).name].filter(Boolean).join(' · ') });
+                    if (!reason) return;
+                }
                 this.stageDept = null;
-                this.send([{ type: 'stage_step', taskId: t.id, deptId, step }]);
+                this.send([{ type: 'stage_step', taskId: t.id, deptId, step, reason }]);
             },
             // ---- @ picker ----
             mentionList() { const q = this.mentionQuery.toLowerCase(); return this.people.filter((p) => !q || p.name.toLowerCase().includes(q)).slice(0, 6); },
@@ -761,8 +769,8 @@ export default function registerPlanningBoard() {
                 const groups = new Map();
                 this.dispatchCabinets().forEach((c) => (c.free || []).forEach((s) => {
                     const key = s.task + ' › ' + s.name;
-                    const g = groups.get(key) || { key, task: s.task, name: s.name, ids: [], checklists: 0, usual: '' };
-                    g.ids.push(s.id); g.checklists += s.checklists; g.usual = g.usual || s.usual || '';
+                    const g = groups.get(key) || { key, task: s.task, name: s.name, ids: [], checklists: 0, usual: '', rejected: '' };
+                    g.ids.push(s.id); g.checklists += s.checklists; g.usual = g.usual || s.usual || ''; g.rejected = g.rejected || s.rejected || '';
                     groups.set(key, g);
                 }));
                 return [...groups.values()];
@@ -888,8 +896,9 @@ export default function registerPlanningBoard() {
             startReply(c) { this.replyTo = c; this.$nextTick(() => this.$refs.commentBox && this.$refs.commentBox.focus()); },
             commentById(id) { return (this.cur ? this.cur.comments : []).find((c) => c.id === id) || null; },
             ackAlert(c) {
-                c.alert.acked = true; c.alert.acks = c.alert.acks.concat({ name: this.me.name, at: Date.now() });
-                this.cur.alertPending = this.cur.comments.some((x) => x.alert && x.alert.forMe && !x.alert.acked);
+                if (c.alert) { c.alert.acked = true; c.alert.acks = c.alert.acks.concat({ name: this.me.name, at: Date.now() }); }
+                if (c.receipt && c.receipt.askMe) { c.receipt = { ...c.receipt, askMe: false, acked: c.receipt.acked + 1, pending: c.receipt.pending.filter((n) => n !== this.me.name) }; }
+                this.cur.alertPending = this.cur.comments.some((x) => (x.alert && x.alert.forMe && !x.alert.acked) || (x.receipt && x.receipt.askMe));
                 this.send([{ type: 'alert_ack', taskId: this.cur.id, commentId: c.id }]);
             },
             openFile(f, ev) {
@@ -948,10 +957,21 @@ export default function registerPlanningBoard() {
                 s[key] = value;
                 this.send([{ type: 'subtask_info', taskId: t.id, subtaskId: s.id, fields: { [key]: value } }]);
             },
+            // "วัน": working days from the start (today when there is none) - start and due go in one save
+            editSubDays(t, s, days) {
+                const n = parseInt(days, 10);
+                if (!(n >= 1)) return;
+                const now = new Date();
+                const startDate = s.startDate || [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+                const dueDate = window.addWorkDays(startDate, n);
+                Object.assign(s, { startDate, dueDate });
+                this.send([{ type: 'subtask_info', taskId: t.id, subtaskId: s.id, fields: { startDate, dueDate } }]);
+            },
             stateLabel(state) { return { ASSIGNED: 'รอรับ', ACCEPTED: 'รับแล้ว', IN_PROGRESS: 'กำลังทำ', COMPLETED: 'เสร็จ', UNASSIGNED: 'ยังไม่จ่าย' }[state] || state; },
             // ---- what is still missing on a project ----
             warningList(t) {
                 const w = t.warnings || {}, out = [];
+                if (w.rejected) out.push({ text: w.rejected + ' งานถูกส่งคืน (แผนกไม่รับงาน) — จ่ายใหม่', act: 'dispatch' });
                 if (w.free) out.push({ text: w.free + ' งานย่อยยังไม่ได้จ่ายให้แผนก', act: 'dispatch' });
                 if (w.undated) out.push({ text: w.undated + ' งานที่จ่ายแล้วยังไม่มีวันส่ง', act: '' });
                 if (w.cabNoDue) out.push({ text: w.cabNoDue + ' ตู้ยังไม่มีวันครบกำหนด', act: '' });
@@ -1001,6 +1021,51 @@ export default function registerPlanningBoard() {
                     .sort((a, b) => b.days - a.days || String(a.s.end || '9999').localeCompare(String(b.s.end || '9999')));
             },
             waitingCount() { return this.waitingList().reduce((n, w) => n + w.s.pmo.waiting, 0); },
+            // ---- "เลือกรับ…": pick which of a department's waiting work to accept (or send back) ----
+            openPick(t, deptId) {
+                const on = {};
+                this.pickCabinets(t, deptId).forEach((c) => c.rows.forEach((r) => { on[r.id] = true; }));   // all ticked: accepting everything stays one click
+                this.stageDept = null;
+                this.pick = { t, deptId, on, view: 'cabinet', q: '', open: {} };   // cabinet by cabinet first; "ตามงาน" one click away
+            },
+            pickCabinets(t, deptId, q = '') {
+                const needle = q.trim().toLowerCase();
+                return (t.subtasks || []).map((c) => ({ id: c.id, mo: c.mo, name: c.text,
+                    rows: (c.works || []).filter((w) => w.deptId === deptId && w.state === 'ASSIGNED')
+                        .map((w) => ({ ...w, mo: c.mo, waited: w.since ? Math.max(0, diffDays(this.today, w.since)) : 0, soon: !!w.due && diffDays(w.due, this.today) <= 3 }))
+                        .filter((w) => !needle || (c.mo + ' ' + c.text + ' ' + w.task + ' ' + w.name).toLowerCase().includes(needle)) }))
+                    .filter((c) => c.rows.length);
+            },
+            // "ตามงาน": one row per Task › Sub Task, holding that work of every cabinet
+            pickWorks() {
+                const groups = new Map();
+                this.pickCabinets(this.pick.t, this.pick.deptId, this.pick.q).forEach((c) => c.rows.forEach((r) => {
+                    const key = r.task + ' › ' + r.name, g = groups.get(key) || { key, task: r.task, name: r.name, rows: [], items: 0, soon: 0, due: null };
+                    g.rows.push(r); g.items += r.items; g.soon += r.soon ? 1 : 0;
+                    if (r.due && (!g.due || r.due < g.due)) g.due = r.due;
+                    groups.set(key, g);
+                }));
+                return [...groups.values()];
+            },
+            pickRows() { return this.pick ? this.pickCabinets(this.pick.t, this.pick.deptId, this.pick.q).flatMap((c) => c.rows) : []; },
+            // what will be sent: every ticked one, the search only narrows what is shown
+            pickIds() { return this.pick ? this.pickCabinets(this.pick.t, this.pick.deptId).flatMap((c) => c.rows).filter((r) => this.pick.on[r.id]).map((r) => r.id) : []; },
+            pickTotal() { return this.pick ? this.pickCabinets(this.pick.t, this.pick.deptId).reduce((n, c) => n + c.rows.length, 0) : 0; },
+            // a cabinet's block in "ตามตู้": open when opened, when searching, or when there are only a few cabinets
+            pickCabOpen(c) { const o = this.pick.open['c' + c.id]; return o !== undefined ? o : (!!this.pick.q || this.pickCabinets(this.pick.t, this.pick.deptId).length <= 3); },
+            pickSet(rows, value) { const on = { ...this.pick.on }; rows.forEach((r) => { on[r.id] = value; }); this.pick.on = on; },
+            pickAllOn(rows) { return rows.length > 0 && rows.every((r) => this.pick.on[r.id]); },
+            async pickSend(step) {
+                const p = this.pick, ids = this.pickIds();
+                if (!ids.length) return;
+                let reason;
+                if (step === 'reject') {
+                    reason = await window.askRejectReason({ title: 'ไม่รับงาน ' + ids.length + ' งาน', detail: [p.t.so, p.t.title, this.deptOf(p.deptId).name].filter(Boolean).join(' · ') });
+                    if (!reason) return;
+                }
+                this.pick = null;
+                this.send([{ type: 'subtasks_step', taskId: p.t.id, step, ids, reason }]);
+            },
             acceptAll() {
                 const list = this.waitingList();
                 if (!list.length || !confirm('รับงานทั้งหมด ' + this.waitingCount() + ' งาน ใน ' + new Set(list.map((w) => w.t.id)).size + ' โครงการ?\nหลังรับงานแล้วจะเปลี่ยนแผนกที่รับผิดชอบไม่ได้')) return;

@@ -68,8 +68,10 @@ class NotificationsLiveTest extends TestCase
 
         $feed = $this->actingAs($worker)->getJson(route('notifications.feed'))->assertOk()->json();
         $this->assertSame(1, $feed['unread']);
-        $this->assertSame('alert', $feed['items'][0]['kind']);
-        $this->assertSame([$feed['items'][0]['id'].':1'], $feed['urgent']);
+        $this->assertSame('alert', $feed['todo'][0]['kind']);
+        $this->assertTrue($feed['todo'][0]['new']);
+        $this->assertSame([], $feed['feed'], 'an alert is something to do, not news');
+        $this->assertSame([$feed['todo'][0]['id'].':1'], $feed['urgent']);
         $this->get(route('dashboard'))->assertOk()->assertSee('pmoBell(', false);   // every page carries the live bell
 
         $this->get(route('notifications.index', ['filter' => 'unread']))->assertOk()->assertSee('ยังไม่อ่าน (1)')->assertSee('ด่วน');
@@ -250,8 +252,96 @@ class NotificationsLiveTest extends TestCase
         $this->assertCount(1, $mine, 'the worker: the project\'s one notice');
         $this->assertSame('⚠ เกินกำหนด 10 งาน (สุด 7 วัน) · ใกล้ครบกำหนด 8 งาน', $mine[0]->data['body']);
         $this->assertTrue($mine[0]->data['urgent']);
-        $lead = $pm->fresh()->notifications;
-        $this->assertCount(1, $lead, 'the PM: still one notice for the project');
-        $this->assertSame('Busbar รับงาน 18 · ⚠ เกินกำหนด 10 งาน (สุด 7 วัน)', $lead[0]->data['body']);
+        // the PM: the news ("รับงาน") and what needs doing (overdue) are two notices, so the overdue one is not lost in the news
+        $lead = $pm->fresh()->notifications->sortBy(fn ($n) => $n->data['todo'] ? 1 : 0)->values();
+        $this->assertCount(2, $lead);
+        $this->assertSame('Busbar รับงาน 18', $lead[0]->data['body']);
+        $this->assertSame('⚠ เกินกำหนด 10 งาน (สุด 7 วัน)', $lead[1]->data['body']);
+        $this->assertTrue($lead[1]->data['todo']);
+    }
+
+    // ---- seen / รับทราบ ----
+
+    public function test_opening_the_bell_resets_the_number_and_the_next_event_starts_a_new_notice(): void
+    {
+        $worker = $this->user($this->busbar);
+        $pm = $this->user(null, 'project_manager');
+        $this->project->update(['project_manager_id' => $pm->id]);
+        $accept = function (int $n) use ($worker) {
+            foreach (range(1, $n) as $i) {
+                $this->sub('ASSIGNED', $this->busbar);
+            }
+            $this->assertTrue($this->apply($worker, ['type' => 'stage_step', 'taskId' => 'p'.$this->project->id, 'deptId' => 'd_'.$this->busbar->id, 'step' => 'accept'])['ok']);
+        };
+
+        $accept(3);
+        $this->travel(1)->minutes();
+        $accept(2);   // not seen yet: adds up
+        $feed = $this->actingAs($pm)->getJson(route('notifications.feed'))->json();
+        $this->assertSame(1, $feed['unread']);
+        $this->assertSame('Busbar รับงาน 5', $feed['feed'][0]['body']);
+        $this->assertTrue($feed['feed'][0]['new']);
+
+        $this->travel(1)->minutes();
+        $seen = $this->postJson(route('notifications.seen'))->assertOk()->json();
+        $this->assertSame(0, $seen['unread']);
+        $this->assertFalse($seen['feed'][0]['new'], 'seen');
+        $this->assertNotNull($pm->fresh()->notifications_seen_at);
+
+        $this->travel(1)->minutes();
+        $accept(1);   // after looking: a new notice counting from 1, the old one stays as it was
+        $notes = $pm->fresh()->notifications()->get();
+        $this->assertSame(['Busbar รับงาน 1', 'Busbar รับงาน 5'], $notes->map(fn ($n) => $n->data['body'])->all());
+        $this->assertSame(1, $this->getJson(route('notifications.feed'))->json('unread'));
+    }
+
+    public function test_an_alert_waits_under_todo_until_acknowledged_and_its_sender_sees_who_has(): void
+    {
+        [$a, $b] = [$this->user($this->busbar), $this->user($this->busbar)];
+        $pm = $this->user(null, 'project_manager');
+        $this->sub('ASSIGNED', $this->busbar);   // Busbar has work here, so it sees the project
+        $this->apply($pm, ['type' => 'comment', 'taskId' => 'p'.$this->project->id, 'text' => 'เลื่อนส่ง', 'alertDept' => 'd_'.$this->busbar->id]);
+        $note = ActivityLog::where('action', 'note')->latest('id')->first();
+        $this->assertEqualsCanonicalizing([$a->id, $b->id], $note->changes['ack_targets']);
+
+        $this->actingAs($a)->postJson(route('notifications.seen'))->assertOk();
+        $this->assertSame(1, $this->getJson(route('notifications.feed'))->json('todoOpen'), 'seeing it is not acknowledging it');
+
+        $id = $a->notifications()->first()->id;
+        $feed = $this->postJson(route('notifications.ack', $id))->assertOk()->json();
+        $this->assertSame(0, $feed['todoOpen']);
+        $this->assertTrue($feed['todo'][0]['acked']);
+        $this->assertSame([$a->id], collect($note->fresh()->changes['acks'])->pluck('user_id')->all());
+        $receipt = $pm->fresh()->notifications()->get()->filter(fn ($n) => $n->data['kind'] === 'receipt');
+        $this->assertCount(1, $receipt);
+        $this->assertSame('รับทราบแล้ว 1/2 คน · P-1', $receipt->first()->data['title']);
+        $this->assertStringContainsString('ยังไม่รับทราบ: '.$b->name, $receipt->first()->data['body']);
+
+        // the second one, from Planning's own button: the same notice, now complete - not one notice per person
+        $this->assertTrue($this->apply($b, ['type' => 'alert_ack', 'taskId' => 'p'.$this->project->id, 'commentId' => 'a'.$note->id])['ok']);
+        $this->assertNotNull($b->notifications()->first()->read_at, 'its notice is acknowledged too');
+        $receipt = $pm->fresh()->notifications()->get()->filter(fn ($n) => $n->data['kind'] === 'receipt');
+        $this->assertCount(1, $receipt);
+        $this->assertSame('รับทราบครบ 2/2 คน · P-1', $receipt->first()->data['title']);
+        $this->assertNull($receipt->first()->read_at, 'back on top as new');
+    }
+
+    public function test_a_tag_is_acknowledged_by_opening_it_and_only_ones_own_notices_can_be_acknowledged(): void
+    {
+        $worker = $this->user($this->busbar);
+        $other = $this->user($this->busbar);
+        $pm = $this->user(null, 'project_manager');
+        $this->sub('ASSIGNED', $this->busbar);
+        $this->apply($pm, ['type' => 'comment', 'taskId' => 'p'.$this->project->id, 'text' => '@'.$worker->name.' ช่วยดู', 'mentions' => [$worker->id]]);
+        $notice = $worker->notifications()->first();
+        $this->assertSame('mention', $notice->data['kind']);
+        $this->assertTrue($notice->data['todo']);
+
+        $this->actingAs($other)->postJson(route('notifications.ack', $notice->id))->assertOk();
+        $this->assertNull($notice->fresh()->read_at, 'someone else\'s notice: untouched');
+
+        $this->actingAs($worker)->post(route('notifications.read', $notice->id))->assertRedirect();
+        $this->assertNotNull($notice->fresh()->read_at);
+        $this->assertSame('รับทราบครบ 1/1 คน · P-1', $pm->fresh()->notifications()->get()->firstWhere('data.kind', 'receipt')->data['title']);
     }
 }

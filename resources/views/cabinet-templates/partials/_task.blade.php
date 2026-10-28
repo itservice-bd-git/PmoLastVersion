@@ -7,7 +7,7 @@
                 <span class="w-3 shrink-0 text-xs text-slate-400" x-text="open ? '▾' : '▸'"></span>
                 <span class="truncate font-semibold text-slate-800" data-task-name="{{ $taskTemplate->id }}">{{ $taskTemplate->name }}</span>
             </button>
-            <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-500 ring-1 ring-slate-200">{{ $taskTemplate->subtaskTemplates->count() }} Sub Task</span>
+            <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[12px] text-slate-500 ring-1 ring-slate-200">{{ $taskTemplate->subtaskTemplates->count() }} Sub Task</span>
         </div>
         <div class="flex items-center gap-1 shrink-0 text-xs">
             @edittemplates

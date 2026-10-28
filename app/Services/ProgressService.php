@@ -45,10 +45,47 @@ class ProgressService
 
         $this->recalculateSubtask($checklist->subtask);
         if ($completed) {
-            app(HandoffService::class)->ticked($checklist, $user);   // Settings > การส่งต่องาน: the next department hears it
+            $this->announceTick($checklist, $doneBefore + 1 === $total, $user);
+        }
+        if ($checklist->source_checklist_id) {
+            $this->followCopy($checklist, $completed, $user);
         }
 
         return $checklist->fresh();
+    }
+
+    /** A receiver ticked / unticked its copy (SharedChecklist): the source's item goes with it, logged, and its department hears it. */
+    private function followCopy(CabinetChecklist $copy, bool $completed, ?User $user): void
+    {
+        $source = app(SharedChecklist::class)->copyTicked($copy, $completed, $user);
+        if (! $source) {
+            return;
+        }
+        $cabinet = $source->subtask->cabinetTask->cabinet;
+        $by = $copy->subtask->department?->name ?? $copy->subtask->name;
+        ActivityLog::record($cabinet->project_id, $user?->id, $source, $completed ? 'checked' : 'unchecked',
+            ($completed ? "{$by} รับแล้ว — ทำเครื่องหมายเสร็จ Checklist \"" : "{$by} ยกเลิกการรับ — ยกเลิกเครื่องหมาย Checklist \"")
+            .$source->name.'" ของ '.($source->subtask->department?->name ?? $source->subtask->name).' ('.$cabinet->mo_no.' / '.$source->subtask->cabinetTask->name.')');
+
+        $this->recalculateSubtask($source->subtask);
+        if ($completed && ! app(ChecklistNoticeRules::class)->covers('tick', $copy->subtask)) {   // a "ติ๊กรายการ" rule of the receiver says it instead
+            app(HandoffService::class)->receivedBack($copy, $source, $user);
+        }
+    }
+
+    /**
+     * Who hears a tick: Settings > แจ้งเตือน Checklist's rules of the department ("ติ๊กรายการ", and "ครบทั้งตู้" when this
+     * tick finished its list); a department with neither keeps the built-in notice to the Sub Tasks paired with it.
+     */
+    private function announceTick(CabinetChecklist $checklist, bool $finished, ?User $user): void
+    {
+        $rules = app(ChecklistNoticeRules::class);
+        $sub = $checklist->subtask;
+        $ticked = $rules->fire('tick', $sub, collect([$checklist]), $user);
+        $whole = $finished && $rules->fire('cabinet', $sub, $sub->checklists()->get(), $user);
+        if (! $ticked && ! $whole && ! $rules->covers('cabinet', $sub)) {
+            app(HandoffService::class)->ticked($checklist, $user);   // the next department hears it
+        }
     }
 
     public function recalculateSubtask(CabinetSubtask $subtask): void

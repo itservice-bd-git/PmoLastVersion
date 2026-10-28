@@ -27,7 +27,7 @@
                                     <tr class="group border-b border-slate-100 hover:bg-blue-50/40">
                                         <td class="sticky left-0 z-10 bg-white px-4 py-2 shadow-[1px_0_0_#e2e8f0] group-hover:bg-blue-50">
                                             <p class="font-medium text-slate-800">{{ $label }}</p>
-                                            @if ($hint)<p class="text-[11px] text-slate-500">{{ $hint }}</p>@endif
+                                            @if ($hint)<p class="text-[12px] text-slate-500">{{ $hint }}</p>@endif
                                         </td>
                                         <td class="px-2 py-2 text-center text-emerald-600" title="Admin / PM ทำได้เสมอ">✓</td>
                                         @foreach ($columns as $c)

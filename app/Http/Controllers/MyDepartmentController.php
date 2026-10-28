@@ -108,7 +108,7 @@ class MyDepartmentController extends Controller
             $uploader->store($log, $file, $user->id);
         }
 
-        $notified = $alertTo ? $notifications->projectAlert($project, $alertTo, $user, $data['note']) : 0;
+        $notified = $alertTo ? $notifications->projectAlert($project, $alertTo, $user, $data['note'], $log) : 0;
         $notifications->commented($project, $user, $log, $alertTo ? \App\Models\User::where('department_id', $alertTo->id)->pluck('id')->all() : []);
 
         return response()->json([

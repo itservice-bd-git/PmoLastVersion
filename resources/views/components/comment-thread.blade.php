@@ -20,7 +20,7 @@
         <div>
             <input type="file" name="attachments[]" multiple
                    class="text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-slate-100 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-200">
-            <p class="text-[11px] text-slate-400 mt-0.5">แนบไฟล์ได้สูงสุด 5 ไฟล์ — PDF, Word, Excel, รูปภาพ, DWG/DXF (ไม่เกิน 20 MB ต่อไฟล์)</p>
+            <p class="text-[12px] text-slate-400 mt-0.5">แนบไฟล์ได้สูงสุด 5 ไฟล์ — PDF, Word, Excel, รูปภาพ, DWG/DXF (ไม่เกิน 20 MB ต่อไฟล์)</p>
         </div>
     </form>
 

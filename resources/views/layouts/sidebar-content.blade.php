@@ -2,7 +2,7 @@
     <img src="{{ asset('images/logo.png') }}" alt="Avatar Electric" class="w-9 h-9 object-contain shrink-0">
     <div class="sidebar-label leading-tight">
         <p class="text-sm font-semibold text-white">Avatar Electric</p>
-        <p class="text-[11px] text-slate-400">Project &amp; Production Tracking</p>
+        <p class="text-[12px] text-slate-400">Project &amp; Production Tracking</p>
     </div>
 </div>
 
@@ -60,6 +60,6 @@
     </a>
 </nav>
 
-<div class="sidebar-label p-4 border-t border-white/10 text-[11px] text-slate-500">
+<div class="sidebar-label p-4 border-t border-white/10 text-[12px] text-slate-500">
     V1 &middot; Core Architecture
 </div>

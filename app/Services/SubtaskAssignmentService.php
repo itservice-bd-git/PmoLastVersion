@@ -57,7 +57,7 @@ class SubtaskAssignmentService
                     ? CabinetSubtask::ASSIGNMENT_ASSIGNED
                     : CabinetSubtask::ASSIGNMENT_UNASSIGNED,
                 'assigned_at' => $departmentId ? now() : null,   // the "waiting since" of the รอรับเกิน n วัน reminder
-            ])->saveQuietly();
+            ] + ($departmentId ? ['rejected_department_id' => null, 'rejected_by' => null, 'rejected_at' => null, 'rejected_reason' => null] : []))->saveQuietly();   // handed out again: the old "ไม่รับงาน" is history (the log keeps it)
 
             $oldName = $this->departmentName($oldDepartmentId);
             $newName = $this->departmentName($departmentId);
@@ -138,6 +138,62 @@ class SubtaskAssignmentService
             fn ($s) => "แผนก {$s->department->name} รับงาน {$this->label($s)} แล้ว");
     }
 
+    /** A department member ticked an item of work still waiting for them (Settings > กฎการทำงาน): that accepts it first. */
+    public function acceptByTick(CabinetSubtask $subtask, User $actor): bool
+    {
+        if (! $subtask->tickWouldAccept($actor)) {
+            return false;
+        }
+        $this->transition($subtask, $actor, CabinetSubtask::ASSIGNMENT_ASSIGNED, CabinetSubtask::ASSIGNMENT_ACCEPTED, 'accepted', 'accepted_by', 'accepted_at',
+            fn ($s) => "แผนก {$s->department->name} รับงาน {$this->label($s)} แล้ว (จากการติ๊ก Checklist)");
+
+        return true;
+    }
+
+    /**
+     * "ไม่รับงาน": the department sends work still waiting for it back to PMO with a reason. It becomes unassigned again
+     * (with who sent it back and why, until it is handed out again) and whoever handed it out hears it.
+     */
+    public function reject(CabinetSubtask $subtask, User $actor, string $reason): CabinetSubtask
+    {
+        $reason = mb_substr(trim($reason), 0, 500);
+        if ($reason === '') {
+            throw new AssignmentException('ใส่เหตุผลที่ไม่รับงาน');
+        }
+
+        return DB::transaction(function () use ($subtask, $actor, $reason) {
+            $locked = CabinetSubtask::whereKey($subtask->id)->lockForUpdate()->firstOrFail();
+            ProjectLock::assertOpen($locked->cabinetTask->cabinet->project_id);
+            if (! $this->canActFor($locked, $actor)) {
+                throw new AssignmentException('คุณไม่ใช่สมาชิกแผนกที่ได้รับมอบหมายงานนี้', 403);
+            }
+            if ($locked->assignment_status !== CabinetSubtask::ASSIGNMENT_ASSIGNED) {
+                throw new AssignmentException($locked->assignment_status === CabinetSubtask::ASSIGNMENT_UNASSIGNED
+                    ? 'งานนี้ยังไม่ได้จ่ายให้แผนก' : 'ไม่รับงานได้เฉพาะงานที่ยังรอรับ — งานนี้แผนกรับไปแล้ว');
+            }
+            $department = $locked->department;
+
+            $locked->forceFill([
+                'department_id' => null,
+                'assignment_status' => CabinetSubtask::ASSIGNMENT_UNASSIGNED,
+                'assigned_at' => null,
+                'rejected_department_id' => $department?->id,
+                'rejected_by' => $actor->id,
+                'rejected_at' => now(),
+                'rejected_reason' => $reason,
+            ])->saveQuietly();
+
+            $this->log($locked, $actor, 'rejected', "แผนก {$department?->name} ไม่รับงาน {$this->label($locked)} — เหตุผล: {$reason}"
+                .($this->isInAssignedDepartment($subtask, $actor) ? '' : " (ทำแทนโดย {$actor->name})"), [
+                'department_id' => ['label' => 'แผนก', 'old' => (string) $department?->name, 'new' => '-'],
+            ]);
+            $this->notifications->rejected($locked, (string) $department?->name, $actor, $reason);
+            $this->syncInstance($subtask, $locked);
+
+            return $subtask;
+        });
+    }
+
     public function start(CabinetSubtask $subtask, User $actor): CabinetSubtask
     {
         return $this->transition($subtask, $actor, CabinetSubtask::ASSIGNMENT_ACCEPTED, CabinetSubtask::ASSIGNMENT_IN_PROGRESS, 'started', 'started_by', 'started_at',
@@ -164,6 +220,7 @@ class SubtaskAssignmentService
 
         return [
             'can_accept' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_ASSIGNED,
+            'can_reject' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_ASSIGNED,   // "ไม่รับงาน" with a reason
             'can_start' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_ACCEPTED,
             'can_complete' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_IN_PROGRESS,
         ];

@@ -126,6 +126,7 @@ class CabinetController extends Controller
             'tasks.subtasks.pairSources',   // "แก้คู่เทียบ"
         ]);
 
+        \App\Services\WorkScope::trimCabinet($cabinet, $request->user());   // only their own department's work, unless they may see all
         $cabinet->tasks->each(fn ($task) => $task->setRelation('cabinet', $cabinet));
 
         $comments = ActivityLog::where('loggable_type', Cabinet::class)

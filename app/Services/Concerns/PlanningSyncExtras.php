@@ -491,24 +491,26 @@ trait PlanningSyncExtras
         return null;
     }
 
-    /** "รับทราบ" on an alert sent to my department: recorded on the alert (who, when) and its notice is marked read. */
+    /**
+     * "รับทราบ" on an alert sent to my department / a comment I was tagged in: recorded on it (who, when), its author hears
+     * "รับทราบ n/N", and my notice of it is acknowledged too (NotificationService::ackNote).
+     */
     private function alertAck(User $user, array $op): ?string
     {
         $project = $this->projectFor($user, $op['taskId'] ?? null);
         $note = $this->noteOf($project, $op['commentId'] ?? null);
         $changes = $note->changes ?? [];
-        if (empty($changes['alert_department_id'])) {
+        $asked = in_array($user->id, array_map('intval', $changes['ack_targets'] ?? []), true);
+        if (empty($changes['alert_department_id']) && ! $asked) {
             throw new PlanningRejected('คอมเมนต์นี้ไม่ใช่การแจ้งเตือน');
         }
-        if ((int) $changes['alert_department_id'] !== (int) $user->department_id) {
+        if (! $asked && (int) ($changes['alert_department_id'] ?? 0) !== (int) $user->department_id) {
             throw new PlanningRejected('รับทราบได้เฉพาะแผนกที่ถูกแจ้งเตือน');
         }
-        if (! collect($changes['acks'] ?? [])->contains('user_id', $user->id)) {
-            $changes['acks'] = array_values(array_merge($changes['acks'] ?? [], [['user_id' => $user->id, 'name' => $user->name, 'at' => now()->getTimestampMs()]]));
-            $note->forceFill(['changes' => $changes])->save();
-        }
+        $this->notifications->ackNote($user, $note);
         $user->unreadNotifications()->get()
-            ->filter(fn ($n) => ($n->data['kind'] ?? null) === 'alert' && (int) ($n->data['project_id'] ?? 0) === $project->id)
+            ->filter(fn ($n) => (int) ($n->data['note_id'] ?? 0) === $note->id
+                || (empty($n->data['note_id']) && ($n->data['kind'] ?? null) === 'alert' && (int) ($n->data['project_id'] ?? 0) === $project->id))
             ->each->markAsRead();
 
         return null;

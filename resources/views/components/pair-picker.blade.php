@@ -37,13 +37,13 @@
                 class="rounded-full border border-dashed border-slate-300 px-2 py-0.5 font-medium text-slate-600 hover:border-blue-400 hover:text-blue-700"
                 x-text="chosen.length ? '⇄ แก้คู่เทียบ' : '＋ เทียบกับ…'"></button>
         <div x-show="open" x-cloak :style="pos" class="fixed z-50 flex flex-col rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
-            <p class="px-1 pb-1.5 text-[11px] font-semibold text-slate-500">{{ $hint }}</p>
+            <p class="px-1 pb-1.5 text-[12px] font-semibold text-slate-500">{{ $hint }}</p>
             <div class="min-h-0 flex-1 overflow-y-auto">
                 <template x-for="o in options" :key="o.id">
                     <label class="flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1.5 hover:bg-slate-50">
                         <input type="checkbox" :value="o.id" x-model.number="sel" class="mt-0.5 rounded border-slate-300 text-blue-600">
                         <span class="min-w-0 leading-snug"><span class="block text-[13px] text-slate-800" x-text="o.name"></span>
-                            <span class="text-[11px] text-slate-500" x-text="o.task + (o.dept ? ' · ' + o.dept : '')"></span></span>
+                            <span class="text-[12px] text-slate-500" x-text="o.task + (o.dept ? ' · ' + o.dept : '')"></span></span>
                     </label>
                 </template>
                 <p x-show="!options.length" class="px-1.5 py-2 text-slate-400">ยังไม่มี Sub Task อื่น</p>

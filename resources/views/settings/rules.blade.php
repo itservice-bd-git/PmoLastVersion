@@ -43,6 +43,10 @@
                     </label>
                     <x-input-error :messages="$errors->get('waiting_reminder_days')" />
                     <label class="flex items-start gap-3 text-sm">
+                        <input type="checkbox" name="tick_accepts" value="1" @checked($values['tick_accepts']) class="mt-0.5 rounded border-slate-300 text-blue-600">
+                        <span><span class="font-semibold text-slate-800">ติ๊ก Checklist ของงานที่รอรับ = รับงานให้อัตโนมัติ</span><br><span class="text-xs text-slate-500">คนในแผนกติ๊กได้เลยโดยไม่ต้องกด "รับงาน" ก่อน — ระบบรับงานให้ (บันทึกในประวัติว่า "จากการติ๊ก Checklist") แล้วเปลี่ยนแผนกไม่ได้อีก · ปิด = ต้องกดรับงานก่อนถึงจะติ๊กได้</span></span>
+                    </label>
+                    <label class="flex items-start gap-3 text-sm">
                         <input type="checkbox" name="pmo_acts_for_departments" value="1" @checked($values['pmo_acts_for_departments']) class="mt-0.5 rounded border-slate-300 text-blue-600">
                         <span><span class="font-semibold text-slate-800">Admin / PM กดรับงาน เริ่มงาน และเสร็จงานแทนแผนกได้</span><br><span class="text-xs text-slate-500">สำหรับแผนกที่ยังไม่มีคนใช้ระบบ — บันทึกในประวัติว่า "ทำแทนโดย …" (ปิดอยู่ = เฉพาะสมาชิกของแผนกนั้น)</span></span>
                     </label>

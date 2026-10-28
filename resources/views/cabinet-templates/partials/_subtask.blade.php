@@ -4,7 +4,7 @@
             <span class="drag-handle shrink-0 select-none" title="ลากเพื่อจัดลำดับ">⋮⋮</span>
             <span class="text-sm font-medium text-slate-700" data-subtask-name="{{ $subtaskTemplate->id }}">{{ $subtaskTemplate->name }}</span>
             {{-- the page's script rewrites this text after an edit; empty = no department, then hidden --}}
-            <span class="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 empty:hidden" title="แผนกที่ทำ" data-subtask-department="{{ $subtaskTemplate->id }}">{{ $subtaskTemplate->department?->name }}</span>
+            <span class="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[12px] font-medium text-indigo-700 empty:hidden" title="แผนกที่ทำ" data-subtask-department="{{ $subtaskTemplate->id }}">{{ $subtaskTemplate->department?->name }}</span>
         </div>
         <div class="flex items-center gap-1 shrink-0 text-xs">
             @edittemplates

@@ -11,10 +11,6 @@
     <style>
         .work-summary:fullscreen { background: #f8fafc; padding: 24px; overflow-y: auto; max-width: none; }
         .work-summary:fullscreen .hide-in-fullscreen { display: none !important; }
-        /* this page's range calendar: weekday names and month arrows readable on the dark header */
-        .work-summary-calendar span.flatpickr-weekday { color: #cbd5e1; }
-        .work-summary-calendar .flatpickr-months .flatpickr-prev-month svg, .work-summary-calendar .flatpickr-months .flatpickr-next-month svg { fill: #fff; }
-        .work-summary-calendar .flatpickr-months .flatpickr-prev-month:hover svg, .work-summary-calendar .flatpickr-months .flatpickr-next-month:hover svg { fill: #93c5fd; }
     </style>
 
     @if ($noDepartment)
@@ -91,10 +87,10 @@
                     :class="feedFilter === NEW_CABINET ? 'border-blue-600 ring-2 ring-blue-600' : 'border-slate-200 hover:border-slate-300'">
                 <p class="flex items-center gap-2 text-base font-medium text-slate-600">
                     <svg class="h-4 w-4 text-violet-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                    <span x-text="'ตู้/อุปกรณ์เข้าใหม่' + periodWord()"></span>
+                    <span x-text="'ตู้ใหม่' + periodWord()"></span>
                 </p>
                 <p class="mt-1 text-5xl font-semibold text-slate-900 lg:text-6xl" x-text="summary.totals.newCabinetQuantity">{{ $data['totals']['newCabinetQuantity'] }}</p>
-                <p class="mt-1 text-sm text-slate-500" x-text="summary.totals.newCabinetQuantity ? 'ตู้ · ' + summary.totals.newCabinetCount + ' รายการ จาก ' + summary.totals.newCabinetProjectCount + ' โครงการ' : 'ยังไม่มีของเข้า'"></p>
+                <p class="mt-1 text-sm text-slate-500" x-text="summary.totals.newCabinetQuantity ? 'ตู้ · ' + summary.totals.newCabinetCount + ' รายการ จาก ' + summary.totals.newCabinetProjectCount + ' โครงการ' : 'ยังไม่มีตู้ใหม่'"></p>
             </button>
             <div class="rounded-xl border bg-white p-4 shadow-sm" :class="summary.totals.overdue ? 'border-red-200' : 'border-slate-200'">
                 <p class="text-base font-medium text-slate-600">ค้างอยู่ตอนนี้</p>
@@ -126,6 +122,7 @@
                                 <h4 class="text-base font-semibold leading-snug text-slate-900"><span x-show="department.icon" x-text="department.icon + ' '"></span><span x-text="department.name"></span></h4>
                                 <span x-show="department.overdue" class="shrink-0 rounded-full bg-red-50 px-2.5 py-0.5 text-sm font-semibold text-red-700">⚠ เลยกำหนด <span x-text="department.overdue"></span></span>
                             </header>
+                            <p x-show="department.rejected" x-cloak class="mt-1 text-sm font-medium text-red-700" x-text="'⛔ ไม่รับงาน ' + department.rejected + ' งาน — รอ PM จ่ายใหม่'"></p>
 
                             <div class="mt-2 grid grid-cols-2 gap-3">
                                 <div>
@@ -250,6 +247,7 @@
                                                     <span x-show="event.departmentId" class="font-medium text-slate-700" x-text="departmentName(event.departmentId)"></span>
                                                 </p>
                                                 <p class="mt-0.5 truncate text-slate-500" :title="eventDetail(event)" x-text="eventDetail(event)"></p>
+                                                <p x-show="event.reason" class="mt-0.5 line-clamp-2 text-red-700" x-text="'เหตุผล: ' + event.reason"></p>
                                             </div>
                                         </a>
                                     </li>
@@ -269,7 +267,7 @@
     @push('scripts')
     <script>
         window.workSummary = (config) => ({
-            NEW_CABINET: 'new_cabinet',   // DailyWork::EVENT_NEW_CABINET: the feed type, and the filter of the "ตู้/อุปกรณ์เข้าใหม่" tile
+            NEW_CABINET: 'new_cabinet',   // DailyWork::EVENT_NEW_CABINET: the feed type, and the filter of the "ตู้ใหม่" tile
             config,
             summary: config.summary,
             viewMode: 'cards',            // cards | table
@@ -363,7 +361,6 @@
                 if (!this.datePicker) {
                     this.datePicker = window.flatpickr(this.$refs.datePickerInput, {
                         mode: 'range', dateFormat: 'Y-m-d', positionElement: this.$refs.datePickerButton,
-                        onReady: (selectedDates, dateText, picker) => picker.calendarContainer.classList.add('work-summary-calendar'),
                         locale: {
                             firstDayOfWeek: 1, rangeSeparator: ' ถึง ',
                             weekdays: { shorthand: ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'], longhand: ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'] },
@@ -430,7 +427,7 @@
                 return department ? department.name : '';
             },
             feedFilterName() {
-                return this.feedFilter === this.NEW_CABINET ? 'ตู้/อุปกรณ์เข้าใหม่' : this.departmentName(this.feedFilter);
+                return this.feedFilter === this.NEW_CABINET ? 'ตู้ใหม่' : this.departmentName(this.feedFilter);
             },
             barHeight(value) {
                 return 'height:' + (value ? Math.max(10, Math.round(value / this.summary.chartMax * 100)) : 0) + '%';
@@ -445,6 +442,7 @@
                     started: 'bg-amber-50 text-amber-800',
                     completed: 'bg-emerald-50 text-emerald-700',
                     new_cabinet: 'bg-violet-50 text-violet-700',
+                    rejected: 'bg-red-50 text-red-700',
                 }[type] || 'bg-slate-100 text-slate-700';
             },
             liveBadgeClass() {

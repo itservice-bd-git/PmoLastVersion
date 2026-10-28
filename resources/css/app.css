@@ -176,6 +176,8 @@ details.group[open] > summary {
  * untouched - these rules just retarget the classes flatpickr already renders.
  */
 .flatpickr-calendar {
+    color-scheme: light;   /* one look whatever the computer's light / dark setting (the month list is the system's own) */
+    background: #fff;
     border-radius: 0.5rem;
     box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     border: 1px solid var(--ae-border);
@@ -192,12 +194,39 @@ details.group[open] > summary {
 .flatpickr-current-month .flatpickr-monthDropdown-months,
 .flatpickr-current-month input.cur-year {
     color: #fff;
+    background: transparent;
 }
 
-.flatpickr-weekday {
+.flatpickr-current-month .flatpickr-monthDropdown-months option {
+    color: #0f172a;
+    background: #fff;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months:hover,
+.flatpickr-current-month input.cur-year:hover,
+.flatpickr-current-month .numInputWrapper:hover {
+    background: rgb(255 255 255 / 0.12);
+}
+
+/* the library's own "span.flatpickr-weekday" / arrow rules are more specific than a bare class */
+.flatpickr-calendar span.flatpickr-weekday {
     background: var(--ae-primary-dark);
     color: #cbd5e1;
 }
+
+.flatpickr-months .flatpickr-prev-month,
+.flatpickr-months .flatpickr-next-month {
+    color: #fff;
+    fill: #fff;
+}
+
+.flatpickr-current-month .numInputWrapper span.arrowUp:after { border-bottom-color: #fff; }
+.flatpickr-current-month .numInputWrapper span.arrowDown:after { border-top-color: #fff; }
+
+.flatpickr-day { color: #334155; }
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay,
+.flatpickr-day.flatpickr-disabled { color: #cbd5e1; }
 
 .flatpickr-months .flatpickr-prev-month:hover svg,
 .flatpickr-months .flatpickr-next-month:hover svg {
@@ -228,6 +257,9 @@ details.group[open] > summary {
 
 /* keep the page width the same whether or not it scrolls (pages and settings tabs do not jump sideways) */
 html { scrollbar-gutter: stable; }
+
+/* the app has one (light) look: native controls (select lists, date / number fields, scrollbars) don't follow the computer's dark mode */
+html { color-scheme: light; }
 
 /* Project page "ภาพรวม": one row per cabinet. Narrow (phone, or beside the facts panel on a small laptop): name + %,
    the step cells, then where it is now. Wide enough: name | a cell per step | where it is now | % | actions. */

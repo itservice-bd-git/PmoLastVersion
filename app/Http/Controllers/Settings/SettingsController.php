@@ -54,7 +54,7 @@ class SettingsController extends Controller
         if (isset($data['waiting_reminder_days'])) {
             AppSetting::put('waiting_reminder_days', (int) $data['waiting_reminder_days']);
         }
-        foreach (['cross_mention', 'block_done_needs_checklist', 'block_project_done_needs_work', 'pmo_acts_for_departments'] as $key) {
+        foreach (['cross_mention', 'block_done_needs_checklist', 'block_project_done_needs_work', 'pmo_acts_for_departments', 'tick_accepts'] as $key) {
             AppSetting::put($key, $request->boolean($key));
         }
         AppSetting::put('automation_locked_statuses', array_values($data['automation_locked_statuses'] ?? []));

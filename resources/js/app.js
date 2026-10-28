@@ -3,6 +3,7 @@ import flatpickr from 'flatpickr';
 import Sortable from 'sortablejs';
 import checklistEditor from './checklist-editor';
 import registerPlanningBoard from './planning-board';
+import { registerWorkDays } from './work-days';
 
 window.Alpine = Alpine;
 window.Sortable = Sortable;
@@ -10,6 +11,7 @@ window.flatpickr = flatpickr; // for date fields created after page load (e.g. t
 
 Alpine.data('checklistEditor', checklistEditor);   // x-checklist-editor (cabinet + template pages)
 registerPlanningBoard();                           // /planning/board's x-data="planningBoard(...)" 
+registerWorkDays();                                // "จำนวนวัน" beside a Sub Task's start / due dates (work-days.js)
 Alpine.start();
 
 /**
@@ -121,6 +123,11 @@ function showToast(message, type = 'success') {
 }
 
 window.showToast = showToast;
+
+// "ไม่รับงาน": opens the reason dialog (components/reject-dialog, in layouts/app); resolves to the reason, or null when cancelled
+window.askRejectReason = ({ title, detail } = {}) => new Promise((resolve) => {
+    window.dispatchEvent(new CustomEvent('ask-reject-reason', { detail: { title, detail, resolve } }));
+});
 
 // A page's tab (?tab=...) kept in the address bar as it changes, so the browser's Back / a reload / a shared link
 // returns to the same tab. The default tab is left out of the URL.

@@ -15,7 +15,7 @@
                         <input form="status-form" type="color" name="statuses[{{ $s->id }}][color]" value="{{ $s->color }}" class="h-9 w-12 rounded border-slate-300">
                         <input form="status-form" type="text" name="statuses[{{ $s->id }}][name]" value="{{ $s->name }}" maxlength="40" required class="min-w-0 flex-1 rounded-lg border-slate-300 text-sm">
                         @if ($s->key)
-                            <span class="w-24 text-center text-[11px] text-slate-400">อัตโนมัติ{{ $s->is_done ? ' · เสร็จ' : '' }}</span>
+                            <span class="w-24 text-center text-[12px] text-slate-400">อัตโนมัติ{{ $s->is_done ? ' · เสร็จ' : '' }}</span>
                         @else
                             <label class="flex w-24 items-center gap-1 text-xs text-slate-600" title="ถือเป็นเสร็จ — ขีดฆ่าและนับเป็นงานที่เสร็จ">
                                 <input form="status-form" type="checkbox" name="statuses[{{ $s->id }}][is_done]" value="1" @checked($s->is_done) class="rounded border-slate-300 text-blue-600"> เสร็จ

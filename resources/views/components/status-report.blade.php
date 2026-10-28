@@ -45,10 +45,10 @@
                         </div>
                         <div class="overflow-y-auto px-5 py-4 space-y-4">
                             <div class="grid grid-cols-4 gap-3 rounded-xl bg-slate-50 p-3 text-center">
-                                <div><p class="text-xl font-bold text-slate-900 tabular-nums" x-text="data.totals.pending"></p><p class="text-[11px] text-slate-500">งานค้าง</p></div>
-                                <div><p class="text-xl font-bold text-emerald-600 tabular-nums" x-text="data.totals.completed"></p><p class="text-[11px] text-slate-500">เสร็จแล้ว</p></div>
-                                <div><p class="text-xl font-bold text-red-600 tabular-nums" x-text="data.totals.overdue"></p><p class="text-[11px] text-slate-500">เลยกำหนด</p></div>
-                                <div><p class="text-xl font-bold text-slate-900 tabular-nums" x-text="data.totals.checklist_pct + '%'"></p><p class="text-[11px] text-slate-500" x-text="'เช็คลิสต์ ' + data.totals.checklist_done + '/' + data.totals.checklist_total"></p></div>
+                                <div><p class="text-xl font-bold text-slate-900 tabular-nums" x-text="data.totals.pending"></p><p class="text-[12px] text-slate-500">งานค้าง</p></div>
+                                <div><p class="text-xl font-bold text-emerald-600 tabular-nums" x-text="data.totals.completed"></p><p class="text-[12px] text-slate-500">เสร็จแล้ว</p></div>
+                                <div><p class="text-xl font-bold text-red-600 tabular-nums" x-text="data.totals.overdue"></p><p class="text-[12px] text-slate-500">เลยกำหนด</p></div>
+                                <div><p class="text-xl font-bold text-slate-900 tabular-nums" x-text="data.totals.checklist_pct + '%'"></p><p class="text-[12px] text-slate-500" x-text="'เช็คลิสต์ ' + data.totals.checklist_done + '/' + data.totals.checklist_total"></p></div>
                             </div>
 
                             <div>

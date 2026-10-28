@@ -78,6 +78,8 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::get('notifications/feed', [NotificationController::class, 'feed'])->name('notifications.feed');
     Route::post('notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+    Route::post('notifications/seen', [NotificationController::class, 'seen'])->name('notifications.seen');   // the bell opened: the red number resets
+    Route::post('notifications/{id}/ack', [NotificationController::class, 'ack'])->name('notifications.ack');   // "รับทราบ"
     Route::post('notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
 
     Route::get('trash', [TrashController::class, 'index'])->name('trash.index');
@@ -106,6 +108,9 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::delete('cabinets/{cabinet}', [CabinetController::class, 'destroy'])->middleware('pmo')->name('cabinets.destroy');
     Route::get('cabinets', [CabinetController::class, 'index'])->middleware('perm:page.cabinets')->name('cabinets.index');
 
+    // "+ เพิ่ม Task / Sub Task" on the cabinet page: this cabinet only, the template is never touched
+    Route::post('cabinets/{cabinet}/tasks', [CabinetTaskController::class, 'store'])->middleware('pmo')->name('cabinet-tasks.store');
+    Route::post('cabinet-tasks/{cabinetTask}/subtasks', [CabinetSubtaskController::class, 'store'])->middleware('pmo')->name('cabinet-subtasks.store');
     Route::put('cabinet-tasks/{cabinetTask}', [CabinetTaskController::class, 'update'])->middleware('pmo')->name('cabinet-tasks.update');
     Route::put('cabinet-subtasks/{cabinetSubtask}/pairs', [\App\Http\Controllers\TemplatePairController::class, 'updateCabinet'])->name('cabinet-subtasks.pairs');   // "แก้คู่เทียบ" of one cabinet (Admin / PM)
     Route::post('cabinet-subtasks/remind', [CabinetSubtaskController::class, 'remind'])->name('cabinet-subtasks.remind');   // "ทวงถาม" work still รอรับ
@@ -115,6 +120,7 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::delete('cabinet-subtasks/{cabinetSubtask}', [CabinetSubtaskController::class, 'destroy'])->middleware('pmo')->name('cabinet-subtasks.destroy');
     Route::patch('cabinet-subtasks/{cabinetSubtask}/department', [CabinetSubtaskController::class, 'updateDepartment'])->name('cabinet-subtasks.department');
     Route::post('cabinet-subtasks/{cabinetSubtask}/accept', [CabinetSubtaskController::class, 'accept'])->name('cabinet-subtasks.accept');
+    Route::post('cabinet-subtasks/{cabinetSubtask}/reject', [CabinetSubtaskController::class, 'reject'])->name('cabinet-subtasks.reject');   // "ไม่รับงาน" + reason
     Route::post('cabinet-subtasks/{cabinetSubtask}/start', [CabinetSubtaskController::class, 'start'])->name('cabinet-subtasks.start');
     Route::post('cabinet-subtasks/{cabinetSubtask}/complete', [CabinetSubtaskController::class, 'complete'])->name('cabinet-subtasks.complete');
 
@@ -201,6 +207,14 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::resource('settings/departments', DepartmentController::class)->parameters(['departments' => 'department'])->names('settings.departments')->only(['index', 'store', 'update', 'destroy'])->middleware('admin');
     // Admin-only (checked inside the controller): workflow automation + date-limit rules.
     Route::get('settings/automation', [AutomationController::class, 'index'])->name('settings.automation.index');
+    // Settings > แจ้งเตือน Checklist: who hears what when a paired checklist moves (App\Services\ChecklistNoticeRules)
+    Route::middleware('admin')->controller(\App\Http\Controllers\Settings\ChecklistNoticeRuleController::class)->group(function () {
+        Route::get('settings/notice-rules', 'index')->name('settings.notice-rules.index');
+        Route::post('settings/notice-rules', 'store')->name('settings.notice-rules.store');
+        Route::put('settings/notice-rules/{rule}', 'update')->name('settings.notice-rules.update');
+        Route::delete('settings/notice-rules/{rule}', 'destroy')->name('settings.notice-rules.destroy');
+        Route::post('settings/notice-rules/{rule}/test', 'test')->name('settings.notice-rules.test');
+    });
     Route::post('settings/automation/rules', [AutomationController::class, 'storeRule'])->name('settings.automation.rules.store');
     Route::patch('settings/automation/rules/{rule}', [AutomationController::class, 'toggleRule'])->name('settings.automation.rules.toggle');
     Route::delete('settings/automation/rules/{rule}', [AutomationController::class, 'destroyRule'])->name('settings.automation.rules.destroy');

@@ -30,11 +30,11 @@
                     <select x-model="newProject.jobTypeId" class="mt-1 w-full rounded-lg border-slate-300 text-sm"><option value="">—</option><template x-for="j in jobTypes" :key="'nj' + j.id"><option :value="j.id" x-text="j.name"></option></template></select></label>
                 <label x-show="perms.finance" class="text-xs font-semibold text-slate-600">มูลค่างาน (บาท)<input inputmode="decimal" x-model="newProject.contractValue" maxlength="20" placeholder="1,250,000" class="mt-1 w-full rounded-lg border-slate-300 text-sm"></label>
                 <label x-show="perms.finance" class="text-xs font-semibold text-slate-600">Margin (บาท)<input inputmode="decimal" x-model="newProject.margin" maxlength="20" placeholder="225,000" class="mt-1 w-full rounded-lg border-slate-300 text-sm">
-                    <span x-show="marginPct(newProject)" class="text-[11px] font-normal text-slate-400" x-text="'คิดเป็น ' + marginPct(newProject)"></span></label>
+                    <span x-show="marginPct(newProject)" class="text-[12px] font-normal text-slate-400" x-text="'คิดเป็น ' + marginPct(newProject)"></span></label>
                 <label x-show="boards.length > 1" class="text-xs font-semibold text-slate-600">บอร์ด
                     <select x-model="newProject.boardId" class="mt-1 w-full rounded-lg border-slate-300 text-sm"><template x-for="b in boards" :key="b.id"><option :value="b.id === 'main' ? '' : b.id" x-text="b.name"></option></template></select></label>
             </div>
-            <p class="text-[11px] text-slate-400">สร้างแล้วเพิ่มตู้และแผนกได้ในหน้าต่างโครงการ (ข้อมูลอื่น เช่น PO / เงื่อนไขชำระเงิน แก้ได้ที่หน้าโครงการ)</p>
+            <p class="text-[12px] text-slate-400">สร้างแล้วเพิ่มตู้และแผนกได้ในหน้าต่างโครงการ (ข้อมูลอื่น เช่น PO / เงื่อนไขชำระเงิน แก้ได้ที่หน้าโครงการ)</p>
             <div class="flex justify-end gap-2">
                 <button type="button" @click="newProject = null" class="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">ยกเลิก</button>
                 <button class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">สร้าง</button>
@@ -68,7 +68,7 @@
                         <template x-for="p in trash" :key="p.id">
                             <div class="flex items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-slate-50">
                                 <span class="shrink-0 font-semibold" x-text="p.so"></span><span class="min-w-0 flex-1 truncate text-slate-600" x-text="p.title"></span>
-                                <span class="shrink-0 text-[11px] text-slate-400" x-text="fmtDateTime(p.at)"></span>
+                                <span class="shrink-0 text-[12px] text-slate-400" x-text="fmtDateTime(p.at)"></span>
                                 <button type="button" @click="restoreProject(p)" class="shrink-0 rounded-lg border border-slate-300 px-2 py-0.5 text-xs font-semibold text-blue-600 hover:bg-blue-50">กู้คืน</button>
                             </div>
                         </template>
@@ -99,7 +99,7 @@
 <template x-if="statusPop">
     <div class="fixed inset-0 z-[65]" @click="statusPop = null">
         <div class="absolute w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl" :style="'top:' + statusPop.top + 'px;left:' + statusPop.left + 'px'" @click.stop role="listbox" aria-label="เลือกสถานะ">
-            <p class="px-2 pb-1 pt-0.5 text-[10.5px] font-bold text-slate-400" x-text="statusPop.cabId ? 'สถานะตู้' : 'สถานะโครงการ'"></p>
+            <p class="px-2 pb-1 pt-0.5 text-[12px] font-bold text-slate-400" x-text="statusPop.cabId ? 'สถานะตู้' : 'สถานะโครงการ'"></p>
             <button type="button" @click="pickStatus('')" class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50" x-text="statusPop.cabId ? '⟳ อัตโนมัติ (จากงานในตู้)' : '⟳ ตามสถานะ PMO'"></button>
             <template x-for="s in statuses" :key="s.id">
                 <button type="button" @click="pickStatus(s.id)" class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-slate-50">
@@ -138,11 +138,12 @@
                     <div class="space-y-1.5 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                         <p class="font-semibold">ช่วงวันของแต่ละแผนก <span class="font-normal text-slate-400">— งานทั้งหมดของแผนกในโครงการนี้ใช้เริ่ม–ส่งเดียวกัน แผนกจัดลำดับงานเอง</span></p>
                         <template x-for="dp in chosenDepts(cabDialog)" :key="'cabDialog' + dp">
-                            <div class="flex flex-wrap items-center gap-2">
+                            <div class="flex flex-wrap items-center gap-2" data-span>
                                 <span class="inline-flex w-44 items-center gap-1.5 truncate font-semibold text-slate-700"><span class="h-2 w-2 shrink-0 rounded-full" :style="'background-color:' + deptOf(dp).color"></span><span class="truncate" x-text="deptOf(dp).name"></span></span>
-                                <span>เริ่ม</span><input type="date" x-model="deptRange(cabDialog, dp).start" class="h-8 rounded-lg border-slate-300 py-0 text-xs">
-                                <span>ส่ง</span><input type="date" x-model="deptRange(cabDialog, dp).due" class="h-8 rounded-lg border-slate-300 py-0 text-xs">
-                                <span x-show="stageOf(cur, dp) && stageOf(cur, dp).end" class="text-[11px] text-slate-400">(ช่วงเดิมของแผนกนี้)</span>
+                                <span>เริ่ม</span><input type="date" x-model="deptRange(cabDialog, dp).start" data-span-start class="h-8 rounded-lg border-slate-300 py-0 text-xs">
+                                <span>ส่ง</span><input type="date" x-model="deptRange(cabDialog, dp).due" data-span-due class="h-8 rounded-lg border-slate-300 py-0 text-xs">
+                                <input type="number" min="1" max="999" inputmode="numeric" data-span-days :value="workDaysBetween(deptRange(cabDialog, dp).start, deptRange(cabDialog, dp).due)" aria-label="จำนวนวันทำงาน" title="จำนวนวันทำงาน (ไม่นับเสาร์-อาทิตย์) — ไม่ใส่วันเริ่ม = เริ่มวันนี้" class="h-8 w-14 rounded-lg border-slate-300 py-0 text-xs"><span>วัน</span>
+                                <span x-show="stageOf(cur, dp) && stageOf(cur, dp).end" class="text-[12px] text-slate-400">(ช่วงเดิมของแผนกนี้)</span>
                             </div>
                         </template>
                         <p x-show="!chosenDepts(cabDialog).length" class="text-slate-400">เลือกแผนกให้งานด้านล่างก่อน</p>
@@ -161,8 +162,9 @@
                         <div class="divide-y divide-slate-50">
                             <template x-for="s in templateOf(cabDialog.templateId).subtasks" :key="s.id">
                                 <div class="flex items-center gap-2 px-3 py-1.5 text-xs">
-                                    <span class="min-w-0 flex-1 truncate"><span class="text-slate-400" x-text="s.task + ' › '"></span><span class="font-medium text-slate-800" x-text="s.name"></span></span>
-                                    <span class="shrink-0 text-[11px] text-slate-400" x-text="'☑ ' + s.checklists"></span>
+                                    <span class="min-w-0 flex-1"><span class="block truncate"><span class="text-slate-400" x-text="s.task + ' › '"></span><span class="font-medium text-slate-800" x-text="s.name"></span></span>
+                                    <span x-show="s.rejected" class="block truncate text-[12px] font-medium text-red-600" x-text="'⛔ ' + s.rejected" :title="s.rejected"></span></span>
+                                    <span class="shrink-0 text-[12px] text-slate-400" x-text="'☑ ' + s.checklists"></span>
                                     <select x-model="cabDialog.assign[s.id]" class="h-7 w-40 shrink-0 rounded-lg border-slate-300 py-0 text-xs">
                                         <option value="">— ยังไม่จ่าย —</option>
                                         <template x-for="d in departments" :key="s.id + d.id"><option :value="d.id" x-text="d.name" :selected="cabDialog.assign[s.id] === d.id"></option></template>
@@ -179,6 +181,122 @@
                 <button class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">เพิ่มตู้</button>
             </div>
         </form>
+    </div>
+</template>
+
+{{-- "เลือกรับ…": a department picks which of its waiting work in a project to accept, or send back with a reason --}}
+<template x-if="pick">
+    <div class="fixed inset-0 z-[56] flex items-end justify-center p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="pick-title" @keydown.escape.window="pick = null">
+        <div class="absolute inset-0 bg-ae-navy/70" @click="pick = null"></div>
+        <div class="relative flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div class="flex items-start gap-3 px-6 pb-4 pt-5">
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#EAF4FF] text-[#0F4C81]">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m9 11 3 3 8-8M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>
+                </span>
+                <div class="min-w-0 flex-1">
+                    <h2 id="pick-title" class="text-base font-bold text-ae-navy" x-text="'รับงาน · ' + deptOf(pick.deptId).name"></h2>
+                    <p class="mt-0.5 truncate text-sm text-slate-500"
+                       x-text="[pick.t.so, pick.t.title].filter(Boolean).join(' · ') + ' · รอรับ ' + pickTotal() + ' งาน ใน ' + pickCabinets(pick.t, pick.deptId).length + ' ตู้'"></p>
+                </div>
+                <button type="button" @click="pick = null" class="-mr-2 -mt-1 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="ปิด">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+            </div>
+
+            <div class="space-y-2 border-y border-slate-100 bg-slate-50 px-6 py-2.5 text-sm">
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-semibold" role="group" aria-label="แสดงแบบ">
+                        <button type="button" @click="pick.view = 'cabinet'" :aria-pressed="pick.view === 'cabinet'" class="rounded-md px-2.5 py-1" :class="pick.view === 'cabinet' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'">ตามตู้</button>
+                        <button type="button" @click="pick.view = 'work'" :aria-pressed="pick.view === 'work'" class="rounded-md px-2.5 py-1" :class="pick.view === 'work' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'">ตามงาน</button>
+                    </div>
+                    <label class="relative min-w-[10rem] flex-1">
+                        <span class="sr-only">ค้นหา</span>
+                        <svg class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="m20 20-3.5-3.5"/></svg>
+                        <input type="search" x-model="pick.q" placeholder="ค้นหา MO / ชื่องาน" class="h-8 w-full rounded-lg border-slate-300 pl-8 text-sm">
+                    </label>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <label class="inline-flex cursor-pointer items-center gap-2 font-semibold text-slate-700">
+                        <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-blue-600" :checked="pickAllOn(pickRows())" @change="pickSet(pickRows(), $event.target.checked)">
+                        <span x-text="pick.q ? 'เลือกทั้งหมดที่ค้นเจอ' : 'เลือกทั้งหมด'"></span>
+                    </label>
+                    <span class="text-slate-300" aria-hidden="true">·</span>
+                    <button type="button" @click="pickSet(pickRows(), false); pickSet(pickRows().filter((r) => r.soon), true)" class="text-[#1479D7] hover:underline">เฉพาะที่ใกล้ส่ง</button>
+                    <span class="ml-auto text-slate-500">เลือก <b class="text-slate-900" x-text="pickIds().length"></b> จาก <span x-text="pickTotal()"></span></span>
+                </div>
+            </div>
+
+            <div class="min-h-0 flex-1 overflow-y-auto">
+                {{-- ตามงาน: the same work of every cabinet is one row (many cabinets: tick once for all of them) --}}
+                <div x-show="pick.view === 'work'" class="divide-y divide-slate-100">
+                    <template x-for="g in pickWorks()" :key="'pw' + g.key">
+                        <div>
+                            <div class="flex items-center gap-3 px-6 py-2.5 hover:bg-slate-50" :class="pickAllOn(g.rows) ? 'bg-[#F5FAFF]' : ''">
+                                <input type="checkbox" class="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600" :aria-label="g.name"
+                                       :checked="pickAllOn(g.rows)" x-effect="$el.indeterminate = !pickAllOn(g.rows) && g.rows.some((r) => pick.on[r.id])" @change="pickSet(g.rows, $event.target.checked)">
+                                <button type="button" class="min-w-0 flex-1 text-left" @click="pick.open = { ...pick.open, [g.key]: !pick.open[g.key] }" :aria-expanded="!!pick.open[g.key]">
+                                    <span class="block truncate text-sm text-slate-900"><span class="text-slate-400" x-text="g.task + ' › '"></span><span class="font-semibold" x-text="g.name"></span></span>
+                                    <span class="block text-xs text-slate-500">
+                                        <span x-text="g.rows.filter((r) => pick.on[r.id]).length + '/' + g.rows.length + ' ตู้ · Checklist ' + g.items + ' รายการ'"></span>
+                                        <span class="text-[#1479D7]" x-text="pick.open[g.key] ? ' · ซ่อนรายตู้' : ' · ดูรายตู้'"></span>
+                                    </span>
+                                </button>
+                                <span class="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold" :class="g.soon ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'"
+                                      x-text="g.due ? 'ส่ง ' + fmtBE(g.due) + (g.rows.length > 1 ? ' ขึ้นไป' : '') : 'ยังไม่มีวันส่ง'"></span>
+                            </div>
+                            <div x-show="pick.open[g.key]" class="flex flex-wrap gap-1.5 bg-slate-50/70 px-6 pb-3 pl-[3.25rem] pt-1">
+                                <template x-for="r in g.rows" :key="'pwr' + r.id">
+                                    <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs"
+                                           :class="pick.on[r.id] ? 'border-[#1479D7] bg-[#EAF4FF] text-[#0F4C81]' : 'border-slate-200 bg-white text-slate-500'">
+                                        <input type="checkbox" class="sr-only" :checked="!!pick.on[r.id]" @change="pickSet([r], $event.target.checked)">
+                                        <span x-text="r.mo"></span><span x-show="r.soon" class="text-amber-700" aria-label="ใกล้ส่ง">•</span>
+                                    </label>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                {{-- ตามตู้: one block per cabinet; many cabinets start folded --}}
+                <div x-show="pick.view === 'cabinet'" class="divide-y divide-slate-100">
+                    <template x-for="c in pickCabinets(pick.t, pick.deptId, pick.q)" :key="'pick' + c.id">
+                        <div>
+                            <div class="flex items-center gap-2.5 px-6 py-2.5">
+                                <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-blue-600" :aria-label="c.mo"
+                                       :checked="pickAllOn(c.rows)" x-effect="$el.indeterminate = !pickAllOn(c.rows) && c.rows.some((r) => pick.on[r.id])" @change="pickSet(c.rows, $event.target.checked)">
+                                <button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" @click="pick.open = { ...pick.open, ['c' + c.id]: !pickCabOpen(c) }" :aria-expanded="pickCabOpen(c)">
+                                    <svg class="h-4 w-4 shrink-0 text-slate-400 transition-transform" :class="pickCabOpen(c) ? 'rotate-90' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7"/></svg>
+                                    <span class="text-sm font-bold text-slate-900" x-text="c.mo"></span>
+                                    <span class="min-w-0 truncate text-sm text-slate-500" x-text="c.name"></span>
+                                </button>
+                                <span x-show="c.rows.some((r) => r.soon)" class="shrink-0 rounded-md bg-amber-100 px-1.5 text-[12px] font-semibold text-amber-800">ใกล้ส่ง</span>
+                                <span class="shrink-0 text-xs text-slate-500" x-text="c.rows.filter((r) => pick.on[r.id]).length + '/' + c.rows.length + ' งาน'"></span>
+                            </div>
+                            <div x-show="pickCabOpen(c)" class="pb-1.5">
+                                <template x-for="r in c.rows" :key="r.id">
+                                    <label class="flex cursor-pointer items-center gap-3 py-2 pl-12 pr-6 hover:bg-slate-50" :class="pick.on[r.id] ? 'bg-[#F5FAFF]' : ''">
+                                        <input type="checkbox" class="h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600" :checked="!!pick.on[r.id]" @change="pickSet([r], $event.target.checked)">
+                                        <span class="min-w-0 flex-1">
+                                            <span class="block truncate text-sm text-slate-900"><span class="text-slate-400" x-text="r.task + ' › '"></span><span class="font-semibold" x-text="r.name"></span></span>
+                                            <span class="block text-xs text-slate-500" x-text="'Checklist ' + r.items + ' รายการ' + (r.waited ? ' · รอรับ ' + r.waited + ' วัน' : ' · จ่ายวันนี้')"></span>
+                                        </span>
+                                        <span class="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold" :class="r.soon ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'"
+                                              x-text="r.due ? 'ส่ง ' + fmtBE(r.due) : 'ยังไม่มีวันส่ง'"></span>
+                                    </label>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <p x-show="!pickRows().length" class="px-6 py-8 text-center text-sm text-slate-400" x-text="pick.q ? 'ไม่พบงานที่ตรงกับ “' + pick.q + '”' : 'ไม่มีงานที่รอรับแล้ว'"></p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 border-t border-slate-100 bg-slate-50/60 px-6 py-4">
+                <p class="mr-auto max-w-xs text-xs text-slate-500">งานที่ไม่ได้เลือกจะยังรอรับอยู่ กลับมารับภายหลังได้</p>
+                <button type="button" @click="pickSend('reject')" :disabled="!pickIds().length" class="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40">ไม่รับที่เลือก…</button>
+                <button type="button" @click="pickSend('accept')" :disabled="!pickIds().length" class="rounded-lg bg-[#0F4C81] px-4 py-2 text-sm font-semibold text-white hover:bg-ae-navy disabled:cursor-not-allowed disabled:opacity-40" x-text="'รับงาน ' + pickIds().length + ' งาน'"></button>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -201,11 +319,12 @@
                 <div class="space-y-1.5 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                         <p class="font-semibold">ช่วงวันของแต่ละแผนก <span class="font-normal text-slate-400">— งานทั้งหมดของแผนกในโครงการนี้ใช้เริ่ม–ส่งเดียวกัน แผนกจัดลำดับงานเอง</span></p>
                         <template x-for="dp in chosenDepts(dispatch)" :key="'dispatch' + dp">
-                            <div class="flex flex-wrap items-center gap-2">
+                            <div class="flex flex-wrap items-center gap-2" data-span>
                                 <span class="inline-flex w-44 items-center gap-1.5 truncate font-semibold text-slate-700"><span class="h-2 w-2 shrink-0 rounded-full" :style="'background-color:' + deptOf(dp).color"></span><span class="truncate" x-text="deptOf(dp).name"></span></span>
-                                <span>เริ่ม</span><input type="date" x-model="deptRange(dispatch, dp).start" class="h-8 rounded-lg border-slate-300 py-0 text-xs">
-                                <span>ส่ง</span><input type="date" x-model="deptRange(dispatch, dp).due" class="h-8 rounded-lg border-slate-300 py-0 text-xs">
-                                <span x-show="stageOf(cur, dp) && stageOf(cur, dp).end" class="text-[11px] text-slate-400">(ช่วงเดิมของแผนกนี้)</span>
+                                <span>เริ่ม</span><input type="date" x-model="deptRange(dispatch, dp).start" data-span-start class="h-8 rounded-lg border-slate-300 py-0 text-xs">
+                                <span>ส่ง</span><input type="date" x-model="deptRange(dispatch, dp).due" data-span-due class="h-8 rounded-lg border-slate-300 py-0 text-xs">
+                                <input type="number" min="1" max="999" inputmode="numeric" data-span-days :value="workDaysBetween(deptRange(dispatch, dp).start, deptRange(dispatch, dp).due)" aria-label="จำนวนวันทำงาน" title="จำนวนวันทำงาน (ไม่นับเสาร์-อาทิตย์) — ไม่ใส่วันเริ่ม = เริ่มวันนี้" class="h-8 w-14 rounded-lg border-slate-300 py-0 text-xs"><span>วัน</span>
+                                <span x-show="stageOf(cur, dp) && stageOf(cur, dp).end" class="text-[12px] text-slate-400">(ช่วงเดิมของแผนกนี้)</span>
                             </div>
                         </template>
                         <p x-show="!chosenDepts(dispatch).length" class="text-slate-400">เลือกแผนกให้งานด้านล่างก่อน</p>
@@ -222,8 +341,9 @@
                             <template x-for="g in dispatchGroups()" :key="g.key">
                                 <label class="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm hover:bg-slate-50" :class="dispatch.picked[g.key] ? 'bg-blue-50/60' : ''">
                                     <input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-blue-600" :checked="!!dispatch.picked[g.key]" @change="dispatch.picked = { ...dispatch.picked, [g.key]: $event.target.checked }">
-                                    <span class="min-w-0 flex-1 truncate"><span class="text-xs text-slate-400" x-text="g.task + ' › '"></span><span class="font-medium text-slate-800" x-text="g.name"></span></span>
-                                    <span x-show="g.usual" class="shrink-0 rounded-full px-2 text-[11px]" :class="g.usual === dispatch.preset ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'" x-text="'ปกติ: ' + (g.usual ? deptOf(g.usual).name : '')" title="แผนกที่งานนี้มักได้รับในตู้อื่น"></span>
+                                    <span class="min-w-0 flex-1"><span class="block truncate"><span class="text-xs text-slate-400" x-text="g.task + ' › '"></span><span class="font-medium text-slate-800" x-text="g.name"></span></span>
+                                        <span x-show="g.rejected" class="block truncate text-[12px] font-medium text-red-600" x-text="'⛔ ' + g.rejected" :title="g.rejected"></span></span>
+                                    <span x-show="g.usual" class="shrink-0 rounded-full px-2 text-[12px]" :class="g.usual === dispatch.preset ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'" x-text="'ปกติ: ' + (g.usual ? deptOf(g.usual).name : '')" title="แผนกที่งานนี้มักได้รับในตู้อื่น"></span>
                                     <span class="shrink-0 text-xs text-slate-500" x-text="g.ids.length + ' ตู้ · ☑ ' + g.checklists"></span>
                                 </label>
                             </template>
@@ -243,8 +363,9 @@
                         </div>
                         <template x-for="s in c.free" :key="s.id">
                             <div class="flex items-center gap-2 px-3 py-1.5 text-xs">
-                                <span class="min-w-0 flex-1 truncate"><span class="text-slate-400" x-text="s.task + ' › '"></span><span class="font-medium text-slate-800" x-text="s.name"></span></span>
-                                <span class="shrink-0 text-[11px] text-slate-400" x-text="'☑ ' + s.checklists"></span>
+                                <span class="min-w-0 flex-1"><span class="block truncate"><span class="text-slate-400" x-text="s.task + ' › '"></span><span class="font-medium text-slate-800" x-text="s.name"></span></span>
+                                    <span x-show="s.rejected" class="block truncate text-[12px] font-medium text-red-600" x-text="'⛔ ' + s.rejected" :title="s.rejected"></span></span>
+                                <span class="shrink-0 text-[12px] text-slate-400" x-text="'☑ ' + s.checklists"></span>
                                 <select x-model="dispatch.assign[s.id]" class="h-7 w-40 shrink-0 rounded-lg border-slate-300 py-0 text-xs">
                                     <option value="">— ยังไม่จ่าย —</option>
                                     <template x-for="d in departments" :key="s.id + d.id"><option :value="d.id" x-text="d.name" :selected="dispatch.assign[s.id] === d.id"></option></template>

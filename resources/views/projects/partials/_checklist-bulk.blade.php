@@ -44,7 +44,7 @@
 
             <label x-show="action === 'add'" class="block"><span class="text-xs font-semibold text-slate-600">รายการที่จะเพิ่ม (บรรทัดละ 1 รายการ · วางจาก Excel ได้)</span>
                 <textarea x-model="names" rows="4" class="mt-1 block w-full rounded-lg border-slate-300 text-sm" placeholder="ตรวจแรงบิดน็อต&#10;Hi-pot test"></textarea>
-                <span class="text-[11px] text-slate-400">ตู้ที่มีรายการนี้แล้วจะข้าม · Sub Task ที่เสร็จแล้วจะข้าม (ไม่เปิดงานกลับ)</span></label>
+                <span class="text-[12px] text-slate-400">ตู้ที่มีรายการนี้แล้วจะข้าม · Sub Task ที่เสร็จแล้วจะข้าม (ไม่เปิดงานกลับ)</span></label>
 
             <div x-show="action === 'rename'" class="grid gap-2 sm:grid-cols-2">
                 <label><span class="text-xs font-semibold text-slate-600" x-text="contains ? 'ข้อความที่จะหา (ในชื่อ)' : 'ชื่อเดิม'"></span>

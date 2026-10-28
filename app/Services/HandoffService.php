@@ -232,6 +232,9 @@ class HandoffService
         $items = (new \Illuminate\Database\Eloquent\Collection($items->all()))->loadMissing('subtask.cabinetTask.cabinet.project', 'subtask.department');
         foreach ($items->groupBy(fn ($i) => $i->subtask->department_id.'|'.$i->subtask->cabinetTask->cabinet->project_id) as $group) {
             $sub = $group->first()->subtask;
+            if (app(ChecklistNoticeRules::class)->fire('date', $sub, $group->values(), $actor)) {
+                continue;   // Settings > แจ้งเตือน Checklist said it
+            }
             $label = $this->dateLabel($sub->department_id);
             $receivers = $group->pluck('subtask')->unique('id')->flatMap(fn ($s) => $this->load($this->receiverIds($s)));
             if (! $label || $receivers->isEmpty()) {
@@ -247,6 +250,19 @@ class HandoffService
         }
 
         return $sent;
+    }
+
+    /** A receiver ticked its copy and the source's item was ticked with it (SharedChecklist::copyTicked): the source's department hears it. */
+    public function receivedBack(CabinetChecklist $copy, CabinetChecklist $source, ?User $actor): int
+    {
+        $copy->loadMissing('subtask.department');
+        $cabinet = $source->subtask->cabinetTask->cabinet;
+        $dept = $copy->subtask->department?->name ?? $copy->subtask->name;
+
+        return app(NotificationService::class)->handoff($this->people(collect([$source->subtask]), $actor), $cabinet->project,
+            "{$dept} รับ \"{$source->name}\" แล้ว · {$cabinet->project->project_no}",
+            "{$cabinet->mo_no} · ติ๊กใน \"{$source->subtask->name}\" ให้แล้ว",
+            ["handoff_recv|{$dept}" => 1]);
     }
 
     /** A source ticked an item: the departments comparing hear it, and once more when the source has finished its list. */
@@ -287,6 +303,8 @@ class HandoffService
         $this->preload($items->map(fn ($i) => $i->subtask->cabinetTask->cabinet_id)->unique()->values());
 
         $sent = 0;
+        $rules = app(ChecklistNoticeRules::class);
+        $items = $items->reject(fn ($i) => $rules->covers('before', $i->subtask) || $rules->covers('late', $i->subtask));   // its own rules say it instead
         foreach ($items->groupBy(fn ($i) => $i->subtask->department_id.'|'.$i->subtask->cabinetTask->cabinet->project_id) as $group) {
             $sub = $group->first()->subtask;
             $project = $sub->cabinetTask->cabinet->project;

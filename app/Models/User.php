@@ -125,6 +125,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'notifications_seen_at' => 'datetime',   // last opened the bell (NotificationService::seen)
             // Several permission checks compare this against CabinetSubtask::department_id
             // with strict `===` (e.g. isChecklistEditableBy(), isInAssignedDepartment()) -
             // both sides must be the same PHP type. See the cast comment on

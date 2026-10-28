@@ -17,6 +17,7 @@
         $allSubtasks = $cabinet->tasks->flatMap->subtasks;
         // "แก้คู่เทียบ" of this cabinet (Admin / PM): any other Sub Task of the cabinet
         $canPair = auth()->user()->canDispatchWork() && ! \App\Services\ProjectLock::isLocked($cabinet->project_id);
+        $canBuild = $canPair;   // "+ เพิ่ม Task / Sub Task" (Admin / PM, open project): this cabinet only
         $pairOptions = $canPair ? $cabinet->tasks->flatMap(fn ($t) => $t->subtasks->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'task' => $t->name, 'dept' => (string) $s->department?->name]))->values() : collect();
         $expectedLate = $cabinet->expected_completion_date && $cabinet->due_date && $cabinet->expected_completion_date->gt($cabinet->due_date);
     @endphp
@@ -126,6 +127,9 @@
 
             {{-- ===== the work list: one card per task (open / close), its sub tasks inside, each opening its checklist ===== --}}
             <div class="min-w-0 flex-1 basis-[32rem] space-y-4">
+                @if ($cabinet->tasks->isEmpty() && ! auth()->user()->canSeeAllWork())
+                    <x-card><p class="text-sm text-slate-500">ตู้นี้ยังไม่มีงานของแผนกคุณ</p></x-card>
+                @endif
                 @foreach ($cabinet->tasks as $task)
                     <x-card class="!p-0">
                         <details open class="group">
@@ -210,6 +214,7 @@
                                         <x-checklist-editor kind="subtask" :owner="$subtask" class="mt-3 ml-7"
                                                             :items="$checklistEditor->items('subtask', $subtask)"
                                                             :editable="$subtask->isChecklistEditableBy(auth()->user())"
+                                                            :tickable="$subtask->tickWouldAccept(auth()->user())"
                                                             :date-label="$handoff->dateLabelFor($subtask)"
                                                             :linked="$handoff->linkedForSubtask($subtask)"
                                                             :receivers="$handoff->receiversOf($subtask)" />
@@ -217,10 +222,48 @@
                                 @empty
                                     <p class="px-5 py-4 text-sm text-slate-400">ยังไม่มี Sub Task</p>
                                 @endforelse
+                                @if ($canBuild)
+                                    <div class="ml-5 py-3 pl-12 pr-5" x-data="{ open: false }">
+                                        <button type="button" x-show="!open" @click="open = true; $nextTick(() => $refs.name.focus())" class="rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">+ เพิ่ม Sub Task</button>
+                                        <form x-show="open" x-cloak method="POST" action="{{ route('cabinet-subtasks.store', $task) }}" class="flex flex-wrap items-end gap-2">
+                                            @csrf
+                                            <div class="min-w-[14rem] flex-1">
+                                                <x-input-label value="ชื่อ Sub Task" class="text-xs" />
+                                                <x-text-input name="name" x-ref="name" class="mt-1 block w-full text-sm" maxlength="255" required @keydown.escape="open = false" />
+                                            </div>
+                                            <div>
+                                                <x-input-label value="ส่งให้แผนก (ไม่บังคับ)" class="text-xs" />
+                                                <select name="department_id" class="mt-1 block rounded-lg border-slate-300 text-sm">
+                                                    <option value="">— ยังไม่ส่ง —</option>
+                                                    @foreach ($departments->where('is_active', true) as $d)
+                                                        <option value="{{ $d->id }}">{{ $d->name }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <button class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">เพิ่ม</button>
+                                            <button type="button" @click="open = false" class="px-2 py-2 text-sm font-medium text-slate-500">ยกเลิก</button>
+                                        </form>
+                                    </div>
+                                @endif
                             </div>
                         </details>
                     </x-card>
                 @endforeach
+                @if ($canBuild)
+                    <div x-data="{ open: false }">
+                        <button type="button" x-show="!open" @click="open = true; $nextTick(() => $refs.name.focus())" class="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50">+ เพิ่ม Task</button>
+                        <form x-show="open" x-cloak method="POST" action="{{ route('cabinet-tasks.store', $cabinet) }}" class="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                            @csrf
+                            <div class="min-w-[14rem] flex-1">
+                                <x-input-label value="ชื่อ Task" class="text-xs" />
+                                <x-text-input name="name" x-ref="name" class="mt-1 block w-full text-sm" maxlength="255" placeholder="เช่น QC / แพ็กสินค้า" required @keydown.escape="open = false" />
+                            </div>
+                            <button class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">เพิ่ม</button>
+                            <button type="button" @click="open = false" class="px-2 py-2 text-sm font-medium text-slate-500">ยกเลิก</button>
+                            <p class="w-full text-xs text-slate-400">เพิ่มเฉพาะตู้นี้ · เทมเพลตไม่เปลี่ยน · แล้วเพิ่ม Sub Task ใน Task ใหม่ได้เลย</p>
+                        </form>
+                    </div>
+                @endif
             </div>
         </div>
     </div>
@@ -319,20 +362,27 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_6rem] gap-3" data-span>
                             <div>
                                 <x-input-label value="วันเริ่ม" />
-                                <input type="date" name="start_date"
+                                <input type="date" name="start_date" data-span-start
                                        value="{{ old('subtask_id') == $subtask->id ? old('start_date') : optional($subtask->start_date)->format('Y-m-d') }}"
                                        class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
-                                <p class="text-xs text-slate-400 mt-1">วันที่เริ่มทำงานย่อยนี้</p>
+                                <p class="text-xs text-slate-400 mt-1">ว่าง + ใส่จำนวนวัน = เริ่มวันนี้</p>
                             </div>
                             <div>
                                 <x-input-label value="วันครบกำหนด" />
-                                <input type="date" name="due_date"
+                                <input type="date" name="due_date" data-span-due
                                        value="{{ old('subtask_id') == $subtask->id ? old('due_date') : optional($subtask->due_date)->format('Y-m-d') }}"
                                        class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
                                 <p class="text-xs text-slate-400 mt-1">วันที่ต้องทำงานย่อยนี้ให้เสร็จ</p>
+                            </div>
+                            <div>
+                                <x-input-label value="จำนวนวัน" />
+                                <input type="number" min="1" max="999" inputmode="numeric" data-span-days aria-label="จำนวนวันทำงาน"
+                                       value="{{ $subtask->start_date && $subtask->due_date ? (app(\App\Services\WorkingDaysCalculator::class)->countWorkingDays($subtask->start_date, $subtask->due_date) ?: '') : '' }}"
+                                       class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
+                                <p class="text-xs text-slate-400 mt-1">วันทำงาน</p>
                             </div>
                         </div>
                         <div>

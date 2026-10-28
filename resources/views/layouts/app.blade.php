@@ -81,37 +81,74 @@
                             <button type="button" @click="$dispatch('open-status-report')" class="text-slate-500 hover:text-slate-700" title="รายงานสถานะงาน" aria-label="รายงานสถานะงาน">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
                             </button>
-                            {{-- the bell: drawn from the server's data, then asks again every 30 s (and when the tab comes back), so new
-                                 notices show without a reload; a new urgent one (tag / alert / new work / overdue) opens the alert window --}}
-                            <div x-data="pmoBell(@js(['feed' => \App\Http\Controllers\NotificationController::feedFor(auth()->user()), 'url' => route('notifications.feed'), 'read' => route('notifications.read', ['id' => '__ID__'])]))" x-init="init()">
-                            <x-dropdown align="right" width="w-80 max-w-[calc(100vw-2rem)]">
-                                <x-slot name="trigger">
-                                    <button type="button" class="relative text-slate-500 hover:text-slate-700" aria-label="การแจ้งเตือน">
-                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0" /></svg>
-                                        <span x-show="feed.unread > 0" x-cloak class="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-4 text-center" x-text="feed.unread > 99 ? '99+' : feed.unread"></span>
-                                    </button>
-                                </x-slot>
-                                <x-slot name="content">
-                                    <div class="max-h-96 overflow-y-auto divide-y divide-slate-100">
-                                        <template x-for="n in feed.items" :key="n.id">
-                                            <form method="POST" :action="cfg.read.replace('__ID__', n.id)">
-                                                @csrf
-                                                <button class="w-full text-left px-4 py-2.5 hover:bg-slate-50 flex items-start gap-2">
-                                                    <span class="mt-1.5 w-2 h-2 rounded-full shrink-0" :class="n.read ? 'bg-transparent' : 'bg-blue-500'"></span>
-                                                    <span class="min-w-0">
-                                                        <span class="block text-sm" :class="n.read ? 'text-slate-600' : 'font-semibold text-slate-900'" x-text="n.title"></span>
-                                                        <span class="block text-xs text-slate-600 line-clamp-2" x-text="n.body"></span>
-                                                        <span x-show="n.latest" class="block text-[11px] text-slate-400 truncate" x-text="'ล่าสุด: ' + n.latest"></span>
-                                                        <span class="block text-[11px] text-slate-400" x-text="n.at"></span>
-                                                    </span>
-                                                </button>
-                                            </form>
-                                        </template>
-                                        <p x-show="!feed.items.length" class="px-4 py-6 text-center text-sm text-slate-400">ยังไม่มีการแจ้งเตือน</p>
+                            {{-- the bell: drawn from the server's data, then asks again every 15 s (and when the tab comes back), so new
+                                 notices show without a reload; a new urgent one (tag / alert / new work / overdue) opens the alert window.
+                                 Opening it = "เห็นแล้ว" (the red number resets); "ต้องทำ" waits for "รับทราบ" (NotificationController) --}}
+                            <div class="relative" x-data="pmoBell(@js(['feed' => \App\Http\Controllers\NotificationController::feedFor(auth()->user()), 'url' => route('notifications.feed'), 'read' => route('notifications.read', ['id' => '__ID__']), 'ack' => route('notifications.ack', ['id' => '__ID__']), 'seen' => route('notifications.seen'), 'ackAll' => route('notifications.read-all')]))"
+                                 x-init="init()" @click.outside="close()" @keydown.escape.window="close()" @pmo-bell-refresh.window="refresh()">
+                                <button type="button" @click="toggle()" class="relative flex text-slate-500 hover:text-slate-700" aria-label="การแจ้งเตือน" :aria-expanded="open">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0" /></svg>
+                                    <span x-show="feed.unread > 0" x-cloak class="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[11.5px] font-semibold leading-4 text-center" x-text="feed.unread > 99 ? '99+' : feed.unread"></span>
+                                </button>
+                                <div x-show="open" x-cloak x-transition.origin.top.right class="absolute right-0 z-50 mt-2 flex w-[26rem] max-w-[calc(100vw-2rem)] flex-col rounded-xl border border-slate-200 bg-white shadow-xl">
+                                    <div class="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
+                                        <span class="text-sm font-bold text-slate-900">การแจ้งเตือน</span>
+                                        <div class="flex gap-0.5 rounded-lg bg-slate-100 p-0.5 text-[13px] font-semibold">
+                                            <button type="button" @click="tab = 'todo'" class="rounded-md px-2.5 py-1" :class="tab === 'todo' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'" x-text="'ต้องทำ' + (feed.todoOpen ? ' (' + feed.todoOpen + ')' : '')"></button>
+                                            <button type="button" @click="tab = 'all'" class="rounded-md px-2.5 py-1" :class="tab === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'">ทั้งหมด</button>
+                                        </div>
                                     </div>
-                                    <a href="{{ route('notifications.index') }}" class="block px-4 py-2 text-center text-xs font-medium text-blue-600 hover:bg-slate-50 border-t border-slate-100">ดูทั้งหมด</a>
-                                </x-slot>
-                            </x-dropdown>
+                                    <div class="max-h-[70vh] overflow-y-auto">
+                                        <p class="flex items-center gap-2 px-4 pb-1 pt-2.5 text-[12px] font-bold text-red-800"><span class="h-2 w-2 rounded-full bg-red-600"></span>ต้องทำ</p>
+                                        <template x-for="n in feed.todo" :key="n.id">
+                                            <div class="flex gap-2.5 border-t border-slate-50 px-4 py-2.5" :class="[isNew(n) ? 'bg-orange-50' : '', n.acked ? 'opacity-60' : '']">
+                                                <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full" :class="isNew(n) ? 'bg-orange-500' : (n.acked ? '' : 'ring-2 ring-inset ring-slate-400')"></span>
+                                                <div class="min-w-0 flex-1">
+                                                    <form method="POST" :action="cfg.read.replace('__ID__', n.id)">
+                                                        @csrf
+                                                        <button class="block w-full text-left hover:underline">
+                                                            <span class="block text-sm font-semibold text-slate-900" x-text="n.title"></span>
+                                                            <span class="block text-xs text-slate-600 line-clamp-2" x-text="n.body"></span>
+                                                        </button>
+                                                    </form>
+                                                    <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px]">
+                                                        <span class="text-slate-400" x-text="n.at"></span>
+                                                        <span class="font-semibold" :class="n.acked ? 'text-emerald-700' : (isNew(n) ? 'text-orange-700' : 'text-slate-500')" x-text="n.acked ? 'รับทราบแล้ว ' + (n.ackedAt || '') : (isNew(n) ? 'ใหม่' : 'เห็นแล้ว')"></span>
+                                                        <span class="ml-auto flex gap-1.5" x-show="!n.acked">
+                                                            <a x-show="n.acceptUrl" :href="n.acceptUrl" class="rounded-md border border-[#0F4C81] px-2.5 py-1 font-semibold text-[#0F4C81] hover:bg-blue-50">รับงาน</a>
+                                                            <button type="button" @click="ack(n)" class="rounded-md bg-[#0F4C81] px-2.5 py-1 font-semibold text-white hover:bg-[#0A3760]">รับทราบ</button>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                        <p x-show="!feed.todo.length" class="px-4 py-3 text-sm text-slate-400">ไม่มีเรื่องที่ต้องทำ ✓</p>
+                                        <template x-if="tab === 'all'">
+                                            <div>
+                                                <p class="flex items-center gap-2 border-t border-slate-100 px-4 pb-1 pt-3 text-[12px] font-bold text-blue-800"><span class="h-2 w-2 rounded-full bg-blue-600"></span>ความเคลื่อนไหว</p>
+                                                <template x-for="n in feed.feed" :key="n.id">
+                                                    <form method="POST" :action="cfg.read.replace('__ID__', n.id)" class="border-t border-slate-50" :class="isNew(n) ? 'bg-orange-50' : ''">
+                                                        @csrf
+                                                        <button class="flex w-full items-start gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50">
+                                                            <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full" :class="isNew(n) ? 'bg-orange-500' : ''"></span>
+                                                            <span class="min-w-0">
+                                                                <span class="flex items-center gap-1.5"><span class="text-sm font-semibold text-slate-900" x-text="n.title"></span><span x-show="isNew(n)" class="rounded bg-orange-100 px-1.5 text-[11px] font-bold text-orange-800">ใหม่</span></span>
+                                                                <span class="block text-xs text-slate-600 line-clamp-2" x-text="n.body"></span>
+                                                                <span x-show="n.latest" class="block text-[12px] text-slate-400 truncate" x-text="'ล่าสุด: ' + n.latest"></span>
+                                                                <span class="block text-[12px] text-slate-400" x-text="n.at"></span>
+                                                            </span>
+                                                        </button>
+                                                    </form>
+                                                </template>
+                                                <p x-show="!feed.feed.length" class="px-4 py-3 text-sm text-slate-400">ยังไม่มีความเคลื่อนไหว</p>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-2">
+                                        <button type="button" x-show="feed.todoOpen" @click="ackAll()" class="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-[#0F4C81] hover:bg-slate-50">รับทราบทั้งหมด</button>
+                                        <a href="{{ route('notifications.index') }}" class="ml-auto text-xs font-medium text-blue-600 hover:underline">ดูทั้งหมด →</a>
+                                    </div>
+                                </div>
                             </div>
 
                             <x-dropdown align="right" width="48">
@@ -158,26 +195,59 @@
             </div>
         </div>
         <x-status-report />
+        <x-reject-dialog />
+        <x-notice-toasts />
         <script>
             // the top bar's bell (layouts/app): polls notifications.feed; a new urgent notice opens the status-report alert window
             function pmoBell(cfg) {
+                // a notice is "new" when it was not on the list yet, or the project's notice gained an event (its time / latest line moved)
+                const stamp = (n) => n.at + '|' + (n.latest || n.body || '');
+                const items = (f) => f.todo.concat(f.feed);
+                const csrf = () => document.querySelector('meta[name="csrf-token"]').content;
                 return {
-                    cfg, feed: cfg.feed, seen: new Set(cfg.feed.urgent),
+                    cfg, feed: cfg.feed, open: false, tab: 'all', fresh: new Set(),
+                    seen: new Set(cfg.feed.urgent), known: new Map(items(cfg.feed).map((n) => [n.id, stamp(n)])), started: false,
                     init() {
+                        if (this.started) return;   // Alpine calls init() itself, and x-init too
+                        this.started = true;
                         const poll = () => { if (!document.hidden) this.refresh(); };
-                        setInterval(poll, 30000);
+                        setInterval(poll, 15000);   // same pace as Planning's refresh
                         document.addEventListener('visibilitychange', poll);
+                    },
+                    // "ใหม่" while the bell is open shows what was new when it opened (the server already counts it seen)
+                    isNew(n) { return n.new || this.fresh.has(n.id); },
+                    toggle() {
+                        if (this.open) { this.close(); return; }
+                        this.open = true;
+                        this.fresh = new Set(items(this.feed).filter((n) => n.new).map((n) => n.id));
+                        if (this.feed.unread > 0 || this.fresh.size) { this.feed.unread = 0; this.post(cfg.seen); }
+                    },
+                    close() { this.open = false; this.fresh = new Set(); },
+                    ack(n) { n.acked = true; this.post(cfg.ack.replace('__ID__', n.id)); },
+                    ackAll() { this.feed.todo.forEach((n) => { n.acked = true; }); this.post(cfg.ackAll); },
+                    async post(url) {
+                        try {
+                            const res = await fetch(url, { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf() } });
+                            if (res.ok) this.take(await res.json(), false);
+                        } catch (e) { /* offline: the next refresh catches up */ }
                     },
                     async refresh() {
                         try {
                             const res = await fetch(cfg.url, { headers: { 'Accept': 'application/json' } });
-                            if (!res.ok) return;
-                            const feed = await res.json();
-                            const fresh = feed.urgent.filter((id) => !this.seen.has(id));
-                            feed.urgent.forEach((id) => this.seen.add(id));
-                            this.feed = feed;
-                            if (fresh.length) window.dispatchEvent(new CustomEvent('pmo-urgent'));
+                            if (res.ok) this.take(await res.json(), true);
                         } catch (e) { /* offline: keep what we have */ }
+                    },
+                    take(feed, announce) {
+                        const fresh = feed.urgent.filter((id) => !this.seen.has(id));
+                        feed.urgent.forEach((id) => this.seen.add(id));
+                        const news = items(feed).filter((n) => n.new && this.known.get(n.id) !== stamp(n));
+                        items(feed).forEach((n) => this.known.set(n.id, stamp(n)));
+                        this.feed = feed;
+                        if (!announce) return;
+                        if (fresh.length) window.dispatchEvent(new CustomEvent('pmo-urgent'));   // urgent: the alert window
+                        // everything new also shows as a small card at the top right (does not block the work)
+                        news.slice(0, 3).reverse().forEach((n) => window.dispatchEvent(new CustomEvent('pmo-notice', { detail: { ...n,
+                            readUrl: cfg.read.replace('__ID__', n.id), ackUrl: n.todo ? cfg.ack.replace('__ID__', n.id) : null } })));
                     },
                 };
             }

@@ -121,10 +121,16 @@
         e.preventDefault();
 
         if (button.dataset.confirm && !confirm(button.dataset.confirm)) return;
+        let body;
+        if (button.dataset.reason) {   // "ไม่รับงาน": a reason is required (components/reject-dialog)
+            const reason = await window.askRejectReason({ title: 'ไม่รับงาน', detail: button.dataset.reason });
+            if (!reason) return;
+            body = { reason };
+        }
 
         button.disabled = true;
         try {
-            const data = await assignmentRequest(button.dataset.url, 'POST');
+            const data = await assignmentRequest(button.dataset.url, 'POST', body);
             applyAssignment(data);
             window.showToast(data.message);
         } catch (err) {

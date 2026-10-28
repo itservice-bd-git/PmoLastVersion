@@ -260,4 +260,19 @@ class DailyWorkTest extends TestCase
         auth()->logout();
         $this->getJson(route('reports.today.data'))->assertUnauthorized();   // the page then says "หมดเวลาเข้าสู่ระบบ"
     }
+
+    public function test_work_sent_back_is_counted_and_listed_with_its_reason(): void
+    {
+        $sub = $this->subtask($this->production, CabinetSubtask::ASSIGNMENT_ASSIGNED, ['assigned_at' => '2026-10-21 09:00', 'name' => 'ตัดเหล็ก']);
+        $member = User::forceCreate(['name' => 'ช่าง', 'email' => 'reject@x', 'password' => 'secret-pass', 'role' => 'member', 'department_id' => $this->production->id, 'is_active' => true]);
+        app(\App\Services\SubtaskAssignmentService::class)->reject($sub, $member, 'แบบยังไม่ครบ');
+
+        $data = app(DailyWork::class)->build(null, today());
+        $row = collect($data['departments'])->firstWhere('id', $this->production->id);
+        $this->assertSame([0, 1], [$row['received'], $row['rejected']], 'no longer theirs: not received, but sent back');
+        $this->assertSame(1, $data['totals']['rejected']);
+        $event = collect($data['feed'])->firstWhere('type', DailyWork::EVENT_REJECTED);
+        $this->assertSame(['ไม่รับ', 'ตัดเหล็ก', 'แบบยังไม่ครบ', $this->production->id], [$event['typeLabel'], $event['title'], $event['reason'], $event['departmentId']]);
+        $this->assertSame('ตู้ใหม่', DailyWork::EVENT_LABELS[DailyWork::EVENT_NEW_CABINET]);
+    }
 }

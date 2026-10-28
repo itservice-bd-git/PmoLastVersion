@@ -119,7 +119,7 @@
                             <span class="text-xs font-semibold tabular-nums {{ $b['overdue'] && $b['count'] > 0 ? 'text-red-700' : 'text-slate-700' }}">{{ $b['count'] }}</span>
                             <div class="w-full max-w-[56px] rounded-t {{ $b['overdue'] ? 'bg-red-600' : 'bg-blue-600' }} {{ $b['count'] === 0 ? 'opacity-30' : '' }}"
                                  style="height: {{ $b['count'] === 0 ? 3 : max(6, round($b['count'] / $maxBucket * 100)) }}%"></div>
-                            <span class="mt-1.5 text-[11px] text-center {{ $b['overdue'] ? 'text-red-700 font-medium' : 'text-slate-500' }}">{{ $b['label'] }}</span>
+                            <span class="mt-1.5 text-[12px] text-center {{ $b['overdue'] ? 'text-red-700 font-medium' : 'text-slate-500' }}">{{ $b['label'] }}</span>
                         </div>
                     @endforeach
                 </div>

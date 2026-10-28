@@ -101,6 +101,8 @@ class CabinetSubtask extends Model
             'accepted_at' => 'datetime',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
+            'rejected_department_id' => 'integer',
+            'rejected_at' => 'datetime',
         ];
     }
 
@@ -132,6 +134,17 @@ class CabinetSubtask extends Model
     public function startedBy()
     {
         return $this->belongsTo(User::class, 'started_by');
+    }
+
+    /** "ไม่รับงาน": the department that last sent this work back (cleared when it is handed out again). */
+    public function rejectedDepartment()
+    {
+        return $this->belongsTo(Department::class, 'rejected_department_id');
+    }
+
+    public function rejectedBy()
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
     }
 
     public function completedBy()
@@ -166,6 +179,21 @@ class CabinetSubtask extends Model
      * `checklist_editable` flag to the frontend (My Department) and to
      * enforce it server-side (CabinetChecklistController).
      */
+    /**
+     * May tick its items: whoever may edit the list, and (Settings > กฎการทำงาน "ติ๊กแล้วรับงานให้") the department's own
+     * members while the work still waits for them - the tick accepts it (SubtaskAssignmentService::acceptByTick).
+     */
+    public function canTickBy(?User $user): bool
+    {
+        return $this->isChecklistEditableBy($user) || $this->tickWouldAccept($user);
+    }
+
+    public function tickWouldAccept(?User $user): bool
+    {
+        return $user !== null && $this->department_id !== null && $user->department_id === $this->department_id
+            && $this->assignment_status === self::ASSIGNMENT_ASSIGNED && (bool) AppSetting::get('tick_accepts');
+    }
+
     public function isChecklistEditableBy(?User $user): bool
     {
         if ($user === null) {

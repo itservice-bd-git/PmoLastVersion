@@ -30,7 +30,23 @@ class PmoNotice extends Notification
         public array $parts = [],
         public ?string $projectLabel = null,
         public ?string $latest = null,   // a project's notice: the newest event in words ("แผนก ขาย รับงาน: งาน X (SO / MO)")
+        public ?int $noteId = null,      // an alert / a tag from a comment: its "รับทราบ" is recorded on that comment (activity_logs)
     ) {}
+
+    /** Kinds that ask the person to do something: they stay under "ต้องทำ" with a "รับทราบ" button until acknowledged. */
+    public const TODO_KINDS = ['assigned', 'rejected', 'alert', 'mention', 'overdue'];
+
+    /** "ต้องทำ" or "ความเคลื่อนไหว": a project's notice by what it holds, any other by its kind. */
+    public static function isTodo(string $kind, array $parts = []): bool
+    {
+        return $parts ? self::urgentParts($parts) : in_array($kind, self::TODO_KINDS, true);
+    }
+
+    /** The same for a stored notice (older ones were saved before the flag existed). */
+    public static function todoOf(array $data): bool
+    {
+        return (bool) ($data['todo'] ?? self::isTodo((string) ($data['kind'] ?? ''), (array) ($data['parts'] ?? [])));
+    }
 
     public function via(object $notifiable): array
     {
@@ -52,13 +68,16 @@ class PmoNotice extends Notification
             'parts' => $this->parts ?: null,
             'urgent' => $this->parts ? self::urgentParts($this->parts) : null,
             'latest' => $this->latest,
+            'todo' => self::isTodo($this->kind, $this->parts),
+            'note_id' => $this->noteId,
         ];
     }
 
     /** Parts that make the project's notice urgent (pops the alert window): new work for you, overdue work, you were made in charge. */
     public static function urgentParts(array $parts): bool
     {
-        return (bool) array_intersect(array_keys($parts), ['assigned', 'overdue', 'owner']);
+        return (bool) array_intersect(array_keys($parts), ['assigned', 'overdue', 'owner'])
+            || collect(array_keys($parts))->contains(fn ($k) => str_starts_with($k, 'rejected|'));   // work sent back: to hand out again
     }
 
     /**
@@ -83,6 +102,11 @@ class PmoNotice extends Notification
                 $out[] = ['owner' => 'คุณเป็นผู้รับผิดชอบ', 'assigned' => "งานใหม่ {$parts[$k]} งาน", 'due_changed' => "เลื่อนวันส่ง {$parts[$k]} ครั้ง"][$k];
             }
         }
+        foreach ($parts as $k => $n) {   // "ไม่รับงาน" first: it needs someone to act
+            if (str_starts_with($k, 'rejected|')) {
+                $out[] = '⛔ '.substr($k, 9).' ไม่รับงาน '.$n.' งาน';
+            }
+        }
         foreach ($parts as $k => $n) {   // "accepted|Busbar" => 18
             if (preg_match('/^(accepted|started|completed)\|(.+)$/u', $k, $m)) {
                 $out[] = $m[2].' '.['accepted' => 'รับงาน', 'started' => 'เริ่มงาน', 'completed' => 'เสร็จ'][$m[1]].' '.$n;
@@ -91,8 +115,10 @@ class PmoNotice extends Notification
         foreach ($parts as $k => $n) {   // Settings > การส่งต่องาน: "handoff_date|จัดซื้อ|วันของเข้า" => 5, "handoff_done|คลัง" => 3, "handoff_cab|คลัง" => 1
             if (preg_match('/^handoff_date\|(.+)\|(.+)$/u', $k, $m)) {
                 $out[] = "{$m[1]} ลง{$m[2]} {$n} รายการ";
-            } elseif (preg_match('/^handoff_(done|cab)\|(.+)$/u', $k, $m)) {
-                $out[] = $m[1] === 'cab' ? "{$m[2]} ครบ {$n} ตู้" : "{$m[2]} เสร็จ {$n} รายการ";
+            } elseif (preg_match('/^handoff_(done|cab|recv)\|(.+)$/u', $k, $m)) {
+                $out[] = ['cab' => "{$m[2]} ครบ {$n} ตู้", 'done' => "{$m[2]} เสร็จ {$n} รายการ", 'recv' => "{$m[2]} รับแล้ว {$n} รายการ"][$m[1]];
+            } elseif (str_starts_with($k, 'rule|')) {   // Settings > แจ้งเตือน Checklist: the rule's own words
+                $out[] = substr($k, 5).($n > 1 ? " ({$n})" : '');
             }
         }
         if (! empty($parts['handoff_late'])) {

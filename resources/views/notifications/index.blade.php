@@ -14,7 +14,7 @@
                 @if (auth()->user()->unreadNotifications()->exists())
                     <form method="POST" action="{{ route('notifications.read-all') }}">
                         @csrf
-                        <button class="text-sm font-medium text-blue-600 hover:underline">อ่านทั้งหมดแล้ว</button>
+                        <button class="text-sm font-medium text-blue-600 hover:underline">รับทราบทั้งหมด</button>
                     </form>
                 @endif
             </x-slot>
@@ -26,12 +26,20 @@
                         <button class="w-full text-left px-5 py-3 flex items-start gap-3 hover:bg-slate-50">
                             <span class="mt-1.5 w-2 h-2 rounded-full shrink-0 {{ $n->read_at ? 'bg-transparent' : 'bg-blue-500' }}"></span>
                             <span class="min-w-0 flex-1">
-                                <span class="block text-sm {{ $n->read_at ? 'text-slate-600' : 'font-semibold text-slate-900' }}">{{ $n->data['title'] }}</span>
+                                <span class="flex flex-wrap items-center gap-1.5">
+                                    @if (\App\Notifications\PmoNotice::todoOf($n->data))
+                                        <span class="rounded bg-red-50 px-1.5 text-[11px] font-bold text-red-700">ต้องทำ</span>
+                                    @endif
+                                    <span class="text-sm {{ $n->read_at ? 'text-slate-600' : 'font-semibold text-slate-900' }}">{{ $n->data['title'] }}</span>
+                                    @if ($n->read_at && \App\Notifications\PmoNotice::todoOf($n->data))
+                                        <span class="text-[12px] font-semibold text-emerald-700">รับทราบแล้ว {{ $n->read_at->format('H:i') }}</span>
+                                    @endif
+                                </span>
                                 <span class="block text-xs text-slate-600">{{ $n->data['body'] }}</span>
                                 @if (! empty($n->data['latest']))
-                                    <span class="block text-[11px] text-slate-400 truncate">ล่าสุด: {{ $n->data['latest'] }}</span>
+                                    <span class="block text-[12px] text-slate-400 truncate">ล่าสุด: {{ $n->data['latest'] }}</span>
                                 @endif
-                                <span class="block text-[11px] text-slate-400 mt-0.5">{{ $n->created_at->thaiDateTime() }}</span>
+                                <span class="block text-[12px] text-slate-400 mt-0.5">{{ $n->created_at->thaiDateTime() }}</span>
                             </span>
                         </button>
                     </form>

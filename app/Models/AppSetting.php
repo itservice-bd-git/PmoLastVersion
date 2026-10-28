@@ -30,6 +30,7 @@ class AppSetting extends Model
         'automation_locked_statuses' => [],
         'status_rules_locked' => [],            // Planning statuses (board_statuses ids) that status rules never overwrite
         'pmo_acts_for_departments' => false,    // Admin / PM may accept / start / finish work on a department's behalf (logged as such)
+        'tick_accepts' => true,                 // a department ticking an item of work still "รอรับ" accepts that work first
         'waiting_reminder_days' => 2,          // work still "รอรับ" after this many days: the department + PM are reminded (0 = off)
         'department_permissions' => [],       // Settings > สิทธิ์การใช้งาน: department id | 'none' => permission => bool (missing = App\Support\Access defaults)
     ];

@@ -171,7 +171,7 @@ class PlanningBoard
         $this->free = ! $builder ? collect() : CabinetSubtask::query()
             ->where(fn ($q) => $q->whereNull('department_id')->orWhere('assignment_status', CabinetSubtask::ASSIGNMENT_UNASSIGNED))
             ->whereHas('cabinetTask.cabinet', fn ($q) => $q->whereIn('project_id', $ids))
-            ->with('cabinetTask:id,cabinet_id,name')->withCount('checklists')->orderBy('id')->get()
+            ->with('cabinetTask:id,cabinet_id,name', 'rejectedDepartment:id,name')->withCount('checklists')->orderBy('id')->get()
             ->groupBy(fn ($s) => $s->cabinetTask->cabinet_id);
         $this->usual = $this->usualDepartments($this->free->flatten());
         // template pairs: the lists this user's department's Sub Tasks compare with, per cabinet (read only)
@@ -412,11 +412,12 @@ class PlanningBoard
             'warnings' => array_filter([
                 'undated' => $rows->filter(fn ($s) => ! self::ymd($s, 'due_date') && ! $s->isDone())->count(),
                 'free' => $allCabinets ? ($allCabinets->get($project->id) ?? collect())->sum(fn ($c) => ($this->free->get($c->id) ?? collect())->count()) : 0,
+                'rejected' => $allCabinets ? ($allCabinets->get($project->id) ?? collect())->sum(fn ($c) => ($this->free->get($c->id) ?? collect())->whereNotNull('rejected_at')->count()) : 0,
                 'cabNoDue' => $allCabinets ? ($allCabinets->get($project->id) ?? collect())->whereNull('due_date')->count() : 0,
                 'noManager' => $project->project_manager_id ? 0 : 1,
                 'noDue' => $project->due_date ? 0 : 1,
             ]),   // people in charge (Planning: ผู้รับผิดชอบรายคน)
-            'alertPending' => $comments->get($project->id, collect())->contains(fn ($c) => ($c['alert']['forMe'] ?? false) && ! $c['alert']['acked']),
+            'alertPending' => $comments->get($project->id, collect())->contains(fn ($c) => (($c['alert']['forMe'] ?? false) && ! $c['alert']['acked']) || ($c['receipt']['askMe'] ?? false)),
             'subtasks' => $cabinets->values()->all(),
             'deptStages' => $stages->map(fn (Collection $d, $deptId) => [
                 'deptId' => self::deptKey((int) $deptId),
@@ -469,11 +470,16 @@ class PlanningBoard
             'ownDue' => $cabinet->due_date?->format('Y-m-d'),
             'linked' => $this->linked->get($cabinet->id, []),   // from the departments passing work to mine (read only)   // the cabinet's own due date (its record), not its work's
             'free' => ($this->free->get($cabinet->id) ?? collect())->map(fn ($s) => ['id' => 's'.$s->id, 'name' => $s->name, 'task' => $s->cabinetTask->name, 'checklists' => $s->checklists_count,
-                'usual' => ($u = $this->usual['t'.$s->cabinet_subtask_template_id] ?? $this->usual['n'.$s->name] ?? null) ? self::deptKey($u) : ''])->values()->all(),
+                'usual' => ($u = $this->usual['t'.$s->cabinet_subtask_template_id] ?? $this->usual['n'.$s->name] ?? null) ? self::deptKey($u) : '',
+                // sent back ("ไม่รับงาน"): by whom and why, until it is handed out again
+                'rejected' => $s->rejected_at ? ($s->rejectedDepartment?->name ?? 'แผนก').' ไม่รับงาน: '.$s->rejected_reason : ''])->values()->all(),
             // the cabinet's dispatched work: Task › Sub Task (department, where it is in the workflow) - even one with no item yet
             'works' => $rows->map(fn ($s) => [
                 'id' => 's'.$s->id, 'task' => (string) $s->cabinetTask->name, 'name' => $s->name,
                 'deptId' => self::deptKey((int) $s->department_id), 'state' => $s->assignment_status,
+                // for "เลือกรับ…" (picking which waiting work to accept): its due date, since when it waits, how many items
+                'due' => self::ymd($s, 'due_date'), 'since' => ($a = $s->getAttributes()['assigned_at'] ?? null) ? substr((string) $a, 0, 10) : null,
+                'items' => $s->checklists->count(),
             ])->all(),
             // every item of the cabinet (the biggest part of the page): read from the rows as they are, no cast per field
             'checklist' => $rows->flatMap(function ($s) {
@@ -540,8 +546,23 @@ class PlanningBoard
             return collect();
         }
 
-        return ActivityLog::query()->whereIn('project_id', $projectIds)->where('action', 'note')->with('user:id,name,avatar_path', 'attachments')->orderBy('id')->get()
-            ->groupBy('project_id')->map(
+        $notes = ActivityLog::query()->whereIn('project_id', $projectIds)->where('action', 'note')->with('user:id,name,avatar_path', 'attachments')->orderBy('id')->get();
+        // an alert / a tag: who it reached and who has acknowledged ("รับทราบ 3/5 · ยังไม่รับทราบ: …"), names read once
+        $asked = $notes->flatMap(fn ($l) => $l->changes['ack_targets'] ?? [])->unique();
+        $names = $asked->isEmpty() ? collect() : User::whereKey($asked)->pluck('name', 'id');
+        $receipt = function (ActivityLog $l) use ($names, $user) {
+            $targets = collect($l->changes['ack_targets'] ?? [])->map(fn ($id) => (int) $id)->unique();
+            if ($targets->isEmpty()) {
+                return null;
+            }
+            $acked = collect($l->changes['acks'] ?? [])->pluck('user_id')->map(fn ($id) => (int) $id);
+
+            return ['acked' => $targets->intersect($acked)->count(), 'total' => $targets->count(),
+                'pending' => $targets->diff($acked)->map(fn ($id) => $names[$id] ?? '')->filter()->sort()->values()->all(),
+                'askMe' => $targets->contains($user->id) && ! $acked->contains($user->id)];
+        };
+
+        return $notes->groupBy('project_id')->map(
                 fn (Collection $logs) => $logs->take(-30)->values()->map(fn (ActivityLog $l) => [
                     'id' => 'a'.$l->id,
                     'author' => $l->user?->name ?? 'ระบบ',
@@ -558,6 +579,7 @@ class PlanningBoard
                         'forMe' => (int) $l->changes['alert_department_id'] === (int) $user->department_id,
                         'acked' => collect($l->changes['acks'] ?? [])->contains('user_id', $user->id),
                     ],
+                    'receipt' => $receipt($l),
                     'files' => $l->attachments->map(fn ($a) => ['name' => $a->original_name, 'url' => $a->url, 'size' => $a->size_for_humans, 'image' => str_starts_with((string) $a->mime_type, 'image/')])->values()->all(),
                 ])
             );

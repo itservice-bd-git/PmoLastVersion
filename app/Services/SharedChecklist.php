@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\PlanningRejected;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +13,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * One list for a pair (SubtaskPairs): a Sub Task comparing with another (e.g. ผลิต "ตรวจรับอุปกรณ์เข้า" ← จัดซื้อ
  * "สั่งซื้ออุปกรณ์") holds a copy of each of that one's items (cabinet_checklists.source_checklist_id), so both work through
- * the same list and each sees how far the other is. Each side ticks its own copy: one department never finishes another's work.
+ * the same list and each sees how far the other is. Each side ticks its own copy, but a receiver ticking its copy ticks the
+ * source's item too (copyTicked): goods received means goods ordered.
  *
  *  - the source owns the list: adding, renaming, ordering and deleting there reach every copy; a copy's name, place and
  *    removal can't be changed on the receiving side (its tick, remark and date are its own);
@@ -117,6 +119,32 @@ class SharedChecklist
     public function reordered(CabinetSubtask $source): void
     {
         $this->receiversOf($source)->each(fn ($r) => $this->arrange($r));
+    }
+
+    // ---- the receiver ticked its copy ----
+
+    /**
+     * A receiver dealing with an item means the source's part of it is done (คลังรับของ → จัดซื้อสั่งซื้อแล้ว): ticking a copy
+     * ticks the source's item too. Unticking takes back only a tick made that way (by someone of the receiver's department),
+     * and only while no other copy of it is still ticked. Returns the source item when it changed (for the caller to log).
+     */
+    public function copyTicked(CabinetChecklist $copy, bool $done, ?User $user): ?CabinetChecklist
+    {
+        $source = $copy->source_checklist_id ? CabinetChecklist::with('subtask.cabinetTask.cabinet', 'subtask.department')->find($copy->source_checklist_id) : null;
+        if (! $source || (bool) $source->is_completed === $done) {
+            return null;
+        }
+        if (! $done) {
+            $receiverDept = $copy->subtask->department_id;
+            $byReceiver = $receiverDept && $source->completed_by && (int) User::whereKey($source->completed_by)->value('department_id') === (int) $receiverDept;
+            if (! $byReceiver || CabinetChecklist::where('source_checklist_id', $source->id)->where('is_completed', true)->exists()) {
+                return null;
+            }
+        }
+        // same project as the copy, whose save already passed ProjectLock
+        CabinetChecklist::whereKey($source->id)->update(['is_completed' => $done, 'completed_by' => $done ? $user?->id : null, 'completed_at' => $done ? now() : null]);
+
+        return $source->refresh();
     }
 
     // ---- bringing a receiver in line (pairs set, changed, or sent to the cabinets made earlier) ----

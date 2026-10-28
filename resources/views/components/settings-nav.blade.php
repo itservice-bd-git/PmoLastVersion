@@ -10,6 +10,7 @@
         $u?->allows('page.templates') ? ['เทมเพลตตู้/เช็คลิสต์', route('cabinet-templates.index'), 'cabinet-templates.*'] : null,   // Settings > สิทธิ์การใช้งาน
         $u?->isAdmin() ? ['กฎสถานะ', route('settings.status-rules.index'), 'settings.status-rules.*'] : null,
         $u?->isAdmin() ? ['Automation', route('settings.automation.index'), 'settings.automation.*'] : null,
+        $u?->isAdmin() ? ['แจ้งเตือน Checklist', route('settings.notice-rules.index'), 'settings.notice-rules.*'] : null,
         $u?->isAdmin() ? ['สถานะงาน', route('settings.statuses.edit'), 'settings.statuses.*'] : null,
         $u?->isAdmin() ? ['แท็ก', route('settings.labels.index'), 'settings.labels.*'] : null,
         $u?->isAdmin() ? ['บอร์ด', route('settings.boards.index'), 'settings.boards.*'] : null,

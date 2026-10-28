@@ -47,7 +47,7 @@
                          class="rounded-xl border-t border-r border-b border-slate-200 border-l-4 p-3.5 hover:bg-slate-50/70 cursor-pointer transition">
                         <div class="flex items-start justify-between gap-2">
                             <p class="text-xs font-semibold text-slate-500" x-text="i.department_name"></p>
-                            <span x-show="isHigh(i)" class="shrink-0 text-[10px] font-semibold text-red-700 bg-red-50 rounded px-1.5 py-0.5" x-text="i.priority_label"></span>
+                            <span x-show="isHigh(i)" class="shrink-0 text-[11.5px] font-semibold text-red-700 bg-red-50 rounded px-1.5 py-0.5" x-text="i.priority_label"></span>
                         </div>
                         <p class="text-sm font-semibold leading-snug mt-0.5" :class="subtaskNameClass(i)" x-text="i.name"></p>
                         <p class="text-xs text-slate-400 mt-0.5" x-text="i.project_no + ' · ' + i.cabinet_mo + ' · ' + i.cabinet_name"></p>

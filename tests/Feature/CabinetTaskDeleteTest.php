@@ -144,4 +144,32 @@ class CabinetTaskDeleteTest extends TestCase
         $this->actingAs($this->user($this->busbar))->get(route('cabinets.show', $this->cabinet))->assertOk()
             ->assertDontSee('ลบ Task นี้')->assertDontSee('ลบ Sub Task นี้')->assertDontSee('id="delete-task-', false)->assertDontSee('id="delete-subtask-', false);   // (update and delete share one URL, so look for the form)
     }
+
+    public function test_admin_or_pm_adds_a_task_and_a_sub_task_to_this_cabinet_only(): void
+    {
+        $before = $this->templateCounts();
+        $pm = $this->user(null, 'project_manager');
+
+        $this->actingAs($this->user($this->busbar))->post(route('cabinet-tasks.store', $this->cabinet), ['name' => 'QC'])->assertForbidden();
+        $this->actingAs($pm)->post(route('cabinet-tasks.store', $this->cabinet), ['name' => ' QC '])
+            ->assertRedirect(route('cabinets.show', $this->cabinet))->assertSessionHas('success');
+        $task = $this->cabinet->tasks()->get()->last();
+        $this->assertSame(['QC', 3], [$task->name, $task->sequence]);
+
+        $this->actingAs($this->user($this->busbar))->post(route('cabinet-subtasks.store', $task), ['name' => 'ตรวจ'])->assertForbidden();
+        $this->actingAs($pm)->post(route('cabinet-subtasks.store', $task), ['name' => 'ตรวจตู้', 'department_id' => $this->busbar->id])->assertSessionHas('success');
+        $this->actingAs($pm)->post(route('cabinet-subtasks.store', $task), ['name' => 'ถ่ายรูป'])->assertSessionHas('success');
+        $subs = $task->subtasks()->get();
+        $this->assertSame(['ตรวจตู้', 'ถ่ายรูป'], $subs->pluck('name')->all());
+        $this->assertSame([$this->busbar->id, CabinetSubtask::ASSIGNMENT_ASSIGNED], [$subs[0]->department_id, $subs[0]->assignment_status], 'handed to the department');
+        $this->assertSame([null, CabinetSubtask::ASSIGNMENT_UNASSIGNED], [$subs[1]->department_id, $subs[1]->assignment_status]);
+
+        $this->assertSame($before, $this->templateCounts(), 'the template is untouched');
+        $this->actingAs($pm)->get(route('cabinets.show', $this->cabinet))->assertOk()->assertSee('+ เพิ่ม Task')->assertSee('+ เพิ่ม Sub Task');
+
+        // a closed project refuses
+        $this->project->update(['status' => 'completed']);
+        $this->actingAs($pm)->post(route('cabinet-tasks.store', $this->cabinet), ['name' => 'อีก']);
+        $this->assertSame(3, $this->cabinet->tasks()->count());
+    }
 }

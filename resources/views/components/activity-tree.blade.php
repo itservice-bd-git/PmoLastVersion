@@ -59,7 +59,7 @@
         </div>
 
         {{-- Column header (desktop) --}}
-        <div class="hidden md:grid grid-cols-[minmax(0,1fr)_110px_170px_minmax(0,34%)] gap-3 px-5 py-1.5 border-y border-slate-100 bg-slate-50 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+        <div class="hidden md:grid grid-cols-[minmax(0,1fr)_110px_170px_minmax(0,34%)] gap-3 px-5 py-1.5 border-y border-slate-100 bg-slate-50 text-[12px] font-medium uppercase tracking-wide text-slate-400">
             <span>โครงสร้าง / กิจกรรม <span x-show="total" class="normal-case font-normal" x-text="'· ' + total + ' กิจกรรม'"></span></span>
             <span>เวลา</span><span>ผู้ดำเนินการ</span><span>รายละเอียด</span>
         </div>
@@ -85,10 +85,10 @@
                                 :style="'padding-left: calc(var(--ind) * ' + r.depth + ' + 20px)'">
                             <svg class="w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform" :class="open[r.node.key] ? 'rotate-90' : ''" viewBox="0 0 20 20" fill="currentColor"><path d="M7 4l6 6-6 6V4z"/></svg>
                             <span class="shrink-0 text-slate-400" x-html="icon(r.node.type)"></span>
-                            <span class="text-[11px] text-slate-400 shrink-0 hidden sm:inline" x-text="typeWord(r.node)"></span>
+                            <span class="text-[12px] text-slate-400 shrink-0 hidden sm:inline" x-text="typeWord(r.node)"></span>
                             <span class="truncate" :class="r.node.type === 'cabinet' ? 'font-semibold text-ae-navy text-sm' : (r.node.type === 'task' ? 'font-medium text-slate-800 text-sm' : 'text-slate-700 text-[13px]')" x-text="r.node.label"></span>
                             <span class="ml-auto shrink-0 flex items-center gap-3">
-                                <span class="hidden lg:inline text-[11px] text-slate-400" x-show="!open[r.node.key] && r.node.latest" x-text="'ล่าสุด ' + r.node.latest"></span>
+                                <span class="hidden lg:inline text-[12px] text-slate-400" x-show="!open[r.node.key] && r.node.latest" x-text="'ล่าสุด ' + r.node.latest"></span>
                                 <span class="rounded-full bg-slate-100 text-slate-600 text-xs font-medium px-2 py-0.5 tabular-nums" x-text="r.node.count"></span>
                             </span>
                         </button>
@@ -104,7 +104,7 @@
                             </div>
                             <div class="text-xs text-slate-500 tabular-nums mt-0.5 md:mt-0.5 pl-6 md:pl-0" x-text="r.act.at"></div>
                             <div class="flex items-center gap-1.5 text-xs text-slate-600 min-w-0 pl-6 md:pl-0">
-                                <span class="w-5 h-5 rounded-full bg-slate-100 text-[10px] font-semibold text-slate-500 flex items-center justify-center shrink-0" x-text="r.act.initial"></span>
+                                <span class="w-5 h-5 rounded-full bg-slate-100 text-[11.5px] font-semibold text-slate-500 flex items-center justify-center shrink-0" x-text="r.act.initial"></span>
                                 <span class="truncate" x-text="r.act.actor"></span>
                             </div>
                             <div class="text-xs text-slate-500 min-w-0 pl-6 md:pl-0 mt-1 md:mt-0">

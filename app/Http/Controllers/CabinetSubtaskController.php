@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CabinetSubtask;
+use App\Models\CabinetTask;
 use App\Models\DateLimitRule;
 use App\Models\Department;
 use App\Models\Project;
@@ -15,6 +16,32 @@ use Illuminate\Validation\ValidationException;
 class CabinetSubtaskController extends Controller
 {
     public function __construct(private SubtaskAssignmentService $assignments) {}
+
+    /**
+     * Admin / PM (route: pmo): a new Sub Task at the end of this Task, handed to a department straight away when one is
+     * picked (through the assignment service: its log and notice). Only this cabinet - the template never changes.
+     */
+    public function store(Request $request, CabinetTask $cabinetTask, ProgressService $progress)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'department_id' => ['nullable', 'exists:departments,id'],
+        ]);
+
+        $subtask = $cabinetTask->subtasks()->create([   // a closed project refuses (GuardsClosedProject -> flash error)
+            'name' => trim($data['name']),
+            'sequence' => (int) $cabinetTask->subtasks()->max('sequence') + 1,
+            'status' => 'not_started',
+            'progress' => 0,
+        ] + CabinetSubtask::initialAssignment(null));
+        if (! empty($data['department_id'])) {
+            $this->assignments->changeDepartment($subtask, (int) $data['department_id'], $request->user());
+        }
+        $progress->recalculateTask($cabinetTask->fresh());
+
+        return redirect()->to(route('cabinets.show', $cabinetTask->cabinet_id).'#subtask-'.$subtask->id)
+            ->with('success', "เพิ่ม Sub Task \"{$subtask->name}\" แล้ว (เฉพาะตู้นี้ · เทมเพลตไม่เปลี่ยน)");
+    }
 
     public function update(Request $request, CabinetSubtask $cabinetSubtask)
     {
@@ -182,6 +209,15 @@ class CabinetSubtaskController extends Controller
         $this->assignments->accept($cabinetSubtask, $request->user());
 
         return $this->respond($request, $cabinetSubtask, 'รับงานเรียบร้อย');
+    }
+
+    /** "ไม่รับงาน": back to PMO with a reason, to hand out again. */
+    public function reject(Request $request, CabinetSubtask $cabinetSubtask)
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'max:500']], ['reason.required' => 'ใส่เหตุผลที่ไม่รับงาน']);
+        $this->assignments->reject($cabinetSubtask, $request->user(), $data['reason']);
+
+        return $this->respond($request, $cabinetSubtask, 'ส่งงานคืนแล้ว — PM จะจ่ายงานใหม่');
     }
 
     public function start(Request $request, CabinetSubtask $cabinetSubtask)

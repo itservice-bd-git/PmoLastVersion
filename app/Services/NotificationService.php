@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ActivityLog;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
 use App\Models\NotificationPreference;
@@ -97,36 +98,149 @@ class NotificationService
      *
      * @return int how many people were notified
      */
-    public function projectAlert(Project $project, Department $department, User $actor, string $note): int
+    public function projectAlert(Project $project, Department $department, User $actor, string $note, ?ActivityLog $log = null): int
     {
         $users = User::where('department_id', $department->id)->where('is_active', true)->where('id', '!=', $actor->id)->get();
 
-        return $this->send($users, new PmoNotice(
+        $sent = $this->send($users, new PmoNotice(
             'alert',
             "{$actor->name}: {$project->project_no} {$project->project_name}",
             mb_strimwidth($note, 0, 160, '…'),
             route('planning.board', ['project' => $project->id]),
             projectId: $project->id,
+            noteId: $log?->id,
         ));
+        $this->addAckTargets($log);
+
+        return $sent;
     }
 
     /**
      * "@name" in a project comment: that person gets an urgent notice (bell + popup) that opens the project on the Planning
      * page. The sender is never notified about tagging themselves.
      */
-    public function mentioned(Project $project, User $actor, User $target, string $note): int
+    public function mentioned(Project $project, User $actor, User $target, string $note, ?ActivityLog $log = null): int
     {
         if ($target->id === $actor->id || ! $target->is_active) {
             return 0;
         }
 
-        return $this->send(collect([$target]), new PmoNotice(
+        $sent = $this->send(collect([$target]), new PmoNotice(
             'mention',
             "{$actor->name} แท็กคุณในโครงการ {$project->project_no}",
             mb_strimwidth($note, 0, 160, '…'),
             route('planning.board', ['project' => $project->id]),
             projectId: $project->id,
+            noteId: $log?->id,
         ));
+        $this->addAckTargets($log);
+
+        return $sent;
+    }
+
+    // ======================================================================= seen / รับทราบ
+
+    /**
+     * The person opened the bell: everything until now is "เห็นแล้ว" (the red number resets, the next event starts a new
+     * notice), and news that only informs ("ความเคลื่อนไหว") is done with once seen. "ต้องทำ" waits for its "รับทราบ".
+     */
+    public function seen(User $user): void
+    {
+        $user->forceFill(['notifications_seen_at' => now()])->saveQuietly();
+        $done = $user->unreadNotifications()->get()->reject(fn ($n) => PmoNotice::todoOf($n->data));
+        if ($done->isNotEmpty()) {
+            DatabaseNotification::whereKey($done->pluck('id'))->update(['read_at' => now()]);
+        }
+    }
+
+    /**
+     * "รับทราบ" on these notices (the bell, the small card, the alert window, the notices page): marked read, and an alert /
+     * a tag records it on its comment so the sender sees who has. Only ever the person's own notices.
+     *
+     * @param  Collection<int, DatabaseNotification>  $notices
+     */
+    public function acknowledge(User $user, Collection $notices): int
+    {
+        $notices = $notices->filter(fn ($n) => (int) $n->notifiable_id === $user->id && $n->read_at === null)->values();
+        if ($notices->isEmpty()) {
+            return 0;
+        }
+        DatabaseNotification::whereKey($notices->pluck('id'))->update(['read_at' => now()]);
+        foreach ($notices->map(fn ($n) => $n->data['note_id'] ?? null)->filter()->unique() as $noteId) {
+            if ($note = ActivityLog::where('action', 'note')->find($noteId)) {
+                $this->ackNote($user, $note);
+            }
+        }
+
+        return $notices->count();
+    }
+
+    /** "รับทราบ" of an alert / a tag, on its comment (who, when - once per person); its author hears "รับทราบ n/N". */
+    public function ackNote(User $user, ActivityLog $note): void
+    {
+        $changes = $note->changes ?? [];
+        if (collect($changes['acks'] ?? [])->contains('user_id', $user->id)) {
+            return;
+        }
+        $changes['acks'] = array_values(array_merge($changes['acks'] ?? [], [['user_id' => $user->id, 'name' => $user->name, 'at' => now()->getTimestampMs()]]));
+        $note->forceFill(['changes' => $changes])->save();
+        $this->receipt($note);
+    }
+
+    /**
+     * Who an alert / a tag reached and who has acknowledged it ("รับทราบ 3/5 · ยังไม่รับทราบ: เอก, นิด"). total 0 = a comment
+     * that asked nobody (or one sent before this was recorded).
+     *
+     * @return array{acked: int, total: int, done: bool, pending: list<string>}
+     */
+    public static function receiptOf(ActivityLog $note): array
+    {
+        $targets = collect($note->changes['ack_targets'] ?? [])->map(fn ($id) => (int) $id)->unique();
+        $acked = collect($note->changes['acks'] ?? [])->pluck('user_id')->map(fn ($id) => (int) $id);
+        $pending = $targets->diff($acked);
+
+        return [
+            'acked' => $targets->intersect($acked)->count(),
+            'total' => $targets->count(),
+            'done' => $targets->isNotEmpty() && $pending->isEmpty(),
+            'pending' => $pending->isEmpty() ? [] : User::whereKey($pending)->orderBy('name')->pluck('name')->all(),
+        ];
+    }
+
+    /** The comment an alert / a tag came from remembers whom it reached, for "รับทราบ n/N". */
+    private function addAckTargets(?ActivityLog $note): void
+    {
+        if (! $note || ! $this->lastDelivered) {
+            return;
+        }
+        $changes = $note->changes ?? [];
+        $changes['ack_targets'] = array_values(array_unique(array_merge($changes['ack_targets'] ?? [], $this->lastDelivered)));
+        $note->forceFill(['changes' => $changes])->save();
+    }
+
+    /**
+     * The author's one notice about it, updated in place as people acknowledge ("รับทราบ 3/5" ... "รับทราบครบ 5/5"): it
+     * comes back to the top as new each time, but never piles up one per person.
+     */
+    private function receipt(ActivityLog $note): void
+    {
+        $author = $note->user_id ? User::where('id', $note->user_id)->where('is_active', true)->first() : null;
+        $project = Project::find($note->project_id);
+        $r = self::receiptOf($note);
+        if (! $author || ! $project || ! $r['total'] || NotificationPreference::where('user_id', $author->id)->where('enabled', false)->exists()) {
+            return;
+        }
+        $title = ($r['done'] ? 'รับทราบครบ ' : 'รับทราบแล้ว ')."{$r['acked']}/{$r['total']} คน · {$project->project_no}";
+        $body = '“'.mb_strimwidth($note->description, 0, 60, '…').'”'.($r['done'] ? '' : ' · ยังไม่รับทราบ: '.implode(', ', $r['pending']));
+        $group = "receipt:{$note->id}";
+        $existing = DatabaseNotification::where('notifiable_type', User::class)->where('notifiable_id', $author->id)
+            ->where('type', PmoNotice::class)->where('data', 'like', '%"group":'.json_encode($group).'%')->latest()->first();
+        if ($existing) {
+            $existing->forceFill(['data' => array_merge($existing->data, ['title' => $title, 'body' => $body]), 'created_at' => now(), 'read_at' => null])->save();
+
+            return;
+        }
+        $author->notify(new PmoNotice('receipt', $title, $body, route('planning.board', ['project' => $project->id]), projectId: $project->id, group: $group));
     }
 
     /** Made one of the people in charge of a project on the Planning page. */
@@ -181,6 +295,24 @@ class NotificationService
                 group: "project:{$project->id}", parts: ['project_done' => 1], projectLabel: "{$project->project_no} · {$project->project_name}",
             ), dedupe: true);
         }
+    }
+
+    /** "ไม่รับงาน": whoever handed the work out (and the project's people in charge) hear it, with the reason, to hand it out again. */
+    public function rejected(CabinetSubtask $subtask, string $department, User $actor, string $reason): void
+    {
+        $subtask->loadMissing('cabinetTask.cabinet.project');
+        $project = $subtask->cabinetTask->cabinet->project;
+
+        $this->send($this->followers($subtask, $actor), new PmoNotice(
+            'rejected',
+            "แผนก {$department} ไม่รับงาน",
+            $this->describe($subtask)." — เหตุผล: {$reason}",
+            route('planning.board', ['project' => $project->id]),
+            projectId: $project->id,
+            group: "project:{$project->id}",
+            parts: ["rejected|{$department}" => 1],
+            projectLabel: "{$project->project_no} · {$project->project_name}",
+        ));
     }
 
     /**
@@ -415,6 +547,7 @@ class NotificationService
 
         // Settings > การส่งต่องาน: what the department passing work on said would arrive today / is late
         $sent += app(HandoffService::class)->reminders($this, $today);
+        $sent += app(ChecklistNoticeRules::class)->daily($today);   // Settings > แจ้งเตือน Checklist: "ก่อนถึงวัน" / "เลยวัน"
 
         return $sent;
     }
@@ -499,10 +632,18 @@ class NotificationService
             && isset(self::PREFERENCE_FOR_KIND[$notice->kind]));
     }
 
+    /** @var list<int> who the last send() reached (an alert / a tag records them on its comment, for "รับทราบ n/N") */
+    private array $lastDelivered = [];
+
     private function send(Collection $users, PmoNotice $notice, bool $dedupe = false, ?int $departmentId = null): int
     {
         $count = 0;
         $delivered = collect();
+        // "ต้องทำ" and "ความเคลื่อนไหว" of one project are two notices: new work never hides inside "Busbar รับงาน 3"
+        if ($notice->group && PmoNotice::isTodo($notice->kind, $notice->parts)) {
+            $notice = clone $notice;
+            $notice->group .= ':todo';
+        }
         $prefs = NotificationPreference::whereIn('user_id', $users->pluck('id'))->get()->keyBy('user_id');
 
         foreach ($users as $user) {
@@ -528,6 +669,7 @@ class NotificationService
         // the same notice to their devices when the app is closed (Settings > การแจ้งเตือน › เครื่องนี้)
         app(WebPushService::class)->send($delivered, $notice->title, $notice->body, $notice->url, $notice->group,   // same group = replaces the one already on the device
             in_array($notice->kind, ['assigned', 'waiting'], true) ? ['accept' => true] : []);   // new / waiting work: a "รับงาน" button on the notice
+        $this->lastDelivered = $delivered->pluck('id')->all();
 
         return $count;
     }
@@ -547,13 +689,16 @@ class NotificationService
     }
 
     /**
-     * Folds $notice into the person's latest UNREAD notice of the same group (from the last few hours): one notice that
-     * counts up ("แผนกขาย รับงาน 18 งาน", "3 คอมเมนต์ใหม่ใน SO…") and moves back to the top, instead of a new one each time.
+     * Folds $notice into the person's latest notice of the same group that they have NOT SEEN yet (unread, and newer than
+     * the last time they opened the bell): one notice that counts up ("แผนกขาย รับงาน 18 งาน") and moves back to the top.
+     * Once they have looked, the next event starts a new notice counting from 1, so a number never mixes old news with new.
      */
     private function collapse(User $user, PmoNotice $notice): bool
     {
+        $seen = $user->notifications_seen_at;
         $existing = DatabaseNotification::where('notifiable_type', User::class)->where('notifiable_id', $user->id)
             ->where('type', PmoNotice::class)->whereNull('read_at')->where('created_at', '>=', now()->subHours(self::COLLAPSE_HOURS))
+            ->when($seen, fn ($q) => $q->where('created_at', '>', $seen))
             ->where('data', 'like', '%"group":'.json_encode($notice->group, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES).'%')
             ->latest()->first();
         if (! $existing) {

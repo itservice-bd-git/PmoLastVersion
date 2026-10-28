@@ -59,10 +59,10 @@
                         <div class="flex flex-wrap items-center gap-2">
                             <h3 class="font-semibold text-slate-900">{{ $template->name }}</h3>
                             @if ($template->is_default)
-                                <span class="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700" title="ตู้ใหม่ใช้เทมเพลตนี้ถ้าไม่ได้เลือก">ค่าเริ่มต้น</span>
+                                <span class="rounded bg-blue-100 px-1.5 py-0.5 text-[11.5px] font-semibold uppercase tracking-wide text-blue-700" title="ตู้ใหม่ใช้เทมเพลตนี้ถ้าไม่ได้เลือก">ค่าเริ่มต้น</span>
                             @endif
                             @unless ($template->is_active)
-                                <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500" title="ไม่แสดงให้เลือกตอนสร้างตู้">ปิดใช้งาน</span>
+                                <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[11.5px] font-semibold uppercase tracking-wide text-slate-500" title="ไม่แสดงให้เลือกตอนสร้างตู้">ปิดใช้งาน</span>
                             @endunless
                         </div>
                         <p class="mt-0.5 text-xs text-slate-400">{{ $template->code }}</p>
@@ -75,7 +75,7 @@
                             @foreach ([['Task', $template->taskTemplates->count()], ['Sub Task', $subs->count()], ['Checklist', $subs->sum('checklist_templates_count')], ['ใช้กับตู้', $template->cabinets_count]] as [$label, $n])
                                 <div class="rounded-lg bg-slate-50 py-1.5">
                                     <dd class="text-base font-semibold tabular-nums text-slate-900">{{ number_format($n) }}</dd>
-                                    <dt class="text-[11px] text-slate-500">{{ $label }}</dt>
+                                    <dt class="text-[12px] text-slate-500">{{ $label }}</dt>
                                 </div>
                             @endforeach
                         </dl>

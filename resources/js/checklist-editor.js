@@ -8,6 +8,7 @@ export default (cfg) => ({
     url: cfg.url,
     items: cfg.items || [],
     editable: !!cfg.editable,
+    tickable: !!(cfg.editable || cfg.tickable),   // may tick (a department's work still waiting: the tick accepts it)
     dateLabel: cfg.dateLabel || null,
     linked: cfg.linked || [],     // the Sub Tasks this one compares with (template pairs), read only
     receivers: cfg.receivers || [],   // the Sub Tasks comparing with this one

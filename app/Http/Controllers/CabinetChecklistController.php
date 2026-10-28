@@ -198,17 +198,23 @@ class CabinetChecklistController extends Controller
 
     public function toggle(Request $request, CabinetChecklist $checklist, ProgressService $progressService, AutomationService $automation, SubtaskAssignmentService $assignments)
     {
-        abort_unless($checklist->subtask->isChecklistEditableBy($request->user()), 403, 'คุณไม่มีสิทธิ์แก้ไข Checklist นี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)');
+        abort_unless($checklist->subtask->canTickBy($request->user()), 403, 'คุณไม่มีสิทธิ์แก้ไข Checklist นี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)');
 
         $data = $request->validate([
             'is_completed' => ['required', 'boolean'],
         ]);
+        // work still waiting for this department: ticking accepts it (Settings > กฎการทำงาน)
+        $accepted = $data['is_completed'] && $assignments->acceptByTick($checklist->subtask, $request->user());
+        if (! $accepted && ! $checklist->subtask->isChecklistEditableBy($request->user())) {
+            abort(403, 'ติ๊ก Checklist ได้เฉพาะแผนกที่รับงานแล้ว — ต้อง "รับงาน" ก่อน');
+        }
+        $checklist->setRelation('subtask', $checklist->subtask->fresh());
 
         $progressService->toggleChecklist($checklist, $data['is_completed'], $request->user());
 
         // Admin-defined rules (Settings > Automation) may start/close the Sub Task now. Ticking only -
         // un-ticking never reverts a workflow step.
-        $statusChanged = $data['is_completed'] ? $automation->afterChecklistTicked($checklist->subtask, $request->user()) : false;
+        $statusChanged = ($data['is_completed'] ? $automation->afterChecklistTicked($checklist->subtask, $request->user()) : false) || $accepted;
 
         $subtask = $checklist->subtask->fresh();
         $task = $subtask->cabinetTask;
@@ -227,6 +233,7 @@ class CabinetChecklistController extends Controller
             return response()->json([
                 // present only when a rule moved the Sub Task's workflow status, so the UI can re-render its buttons/badge
                 'assignment' => $statusChanged ? $assignments->payload($subtask, $request->user()) : null,
+                'html' => $statusChanged ? view('cabinets.partials._assignment', ['subtask' => $subtask, 'departments' => \App\Models\Department::orderBy('name')->get()])->render() : null,
                 'checklist' => [
                     'id' => $checklist->id,
                     'is_completed' => $checklist->is_completed,

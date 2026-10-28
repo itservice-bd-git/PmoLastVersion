@@ -26,6 +26,14 @@
 @endif
 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap {{ $badge }}" data-assignment-status
       @if ($trail) title="{{ $trail }}" @endif>{{ $subtask->assignment_status_label }}</span>
+@if ($subtask->assignment_status === 'UNASSIGNED' && $subtask->rejected_at)
+    {{-- sent back ("ไม่รับงาน"): who and why, until it is handed out again --}}
+    <span class="inline-flex max-w-xs items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700"
+          title="{{ ($subtask->rejectedBy?->name ?? '-').' · '.$subtask->rejected_at->thaiDateTime().' — '.$subtask->rejected_reason }}">
+        <span class="whitespace-nowrap">⛔ {{ $subtask->rejectedDepartment?->name ?? 'แผนก' }} ไม่รับงาน:</span>
+        <span class="truncate">{{ $subtask->rejected_reason }}</span>
+    </span>
+@endif
 
 @php
     // the department's colour, as on Planning
@@ -58,6 +66,10 @@
 @if ($actions['can_accept'])
     <button type="button" class="assignment-action px-2 py-1 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700"
             data-url="{{ route('cabinet-subtasks.accept', $subtask) }}" data-confirm="ยืนยันรับงาน? หลังรับงานแล้วจะไม่สามารถเปลี่ยนแผนกได้">รับงาน</button>
+@endif
+@if ($actions['can_reject'])
+    <button type="button" class="assignment-action px-2 py-1 rounded-lg border border-red-200 bg-white text-red-600 text-xs font-semibold hover:bg-red-50"
+            data-url="{{ route('cabinet-subtasks.reject', $subtask) }}" data-reason="{{ $subtask->name }} · {{ $subtask->cabinetTask?->cabinet?->mo_no }}">ไม่รับงาน</button>
 @endif
 @if ($actions['can_start'])
     <button type="button" class="assignment-action px-2 py-1 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"

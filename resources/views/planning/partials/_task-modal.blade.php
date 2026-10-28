@@ -47,10 +47,10 @@
                     {{-- same box as the original page: status (wider) | priority, then the dates; light grey, hairline dividers --}}
                     <div class="grid grid-cols-1 overflow-hidden rounded-[10px] border border-slate-200 bg-slate-50 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
                         <div class="flex min-w-0 flex-col gap-1 px-3 py-2">
-                            <span class="text-[10.5px] font-bold tracking-wide text-slate-400">สถานะโครงการ</span>
+                            <span class="text-[12px] font-bold tracking-wide text-slate-400">สถานะโครงการ</span>
                             <span class="flex flex-wrap items-center gap-2">
                                 <span class="inline-flex w-fit items-center rounded-[7px] px-3.5 py-[7px] text-[13px] font-semibold text-white" :style="'background-color:' + statusColor(cur)" x-text="statusOf(cur).name"></span>
-                                <span x-show="!cur.manualStatus" class="text-[11px] text-slate-400">(สถานะ PMO)</span>
+                                <span x-show="!cur.manualStatus" class="text-[12px] text-slate-400">(สถานะ PMO)</span>
                                 <select x-show="canEdit" class="h-8 w-44 rounded-[7px] border-slate-300 bg-white px-2 py-0 text-xs" :value="cur.manualStatus ? cur.statusId : ''" @change="setStatus(cur, $event.target.value)" title="สถานะของโครงการ (Admin / PM) — ไม่ได้คิดจากงานของแผนก; งานของแต่ละแผนกมีสถานะของตัวเองใน ส่งต่อแผนก">
                                     <option value="" :selected="!cur.manualStatus">ตามสถานะ PMO</option>
                                     <template x-for="s in statuses" :key="s.id"><option :value="s.id" x-text="s.name" :selected="cur.manualStatus && cur.statusId === s.id"></option></template>
@@ -58,14 +58,14 @@
                             </span>
                         </div>
                         <div class="flex min-w-0 flex-col gap-1 border-t border-slate-200 px-3 py-2 sm:border-l sm:border-t-0">
-                            <span class="text-[10.5px] font-bold tracking-wide text-slate-400">ความสำคัญ</span>
+                            <span class="text-[12px] font-bold tracking-wide text-slate-400">ความสำคัญ</span>
                             <select x-model="cur.priority" @change="editProject(cur, { priority: cur.priority })" :disabled="!canEdit" :style="'color:' + priorities[cur.priority].color"
                                     class="h-8 w-full rounded-[7px] border-slate-300 bg-white px-2 py-1 text-[13px] font-semibold disabled:bg-slate-50">
                                 <template x-for="(p, key) in priorities" :key="key"><option :value="key" :style="'color:' + p.color" x-text="'⚑ ' + p.label" :selected="key === cur.priority"></option></template>
                             </select>
                         </div>
                         <div class="flex min-w-0 flex-col gap-1 border-t border-slate-200 px-3 py-2">
-                            <span class="text-[10.5px] font-bold tracking-wide text-slate-400">กำหนดเวลา</span>
+                            <span class="text-[12px] font-bold tracking-wide text-slate-400">กำหนดเวลา</span>
                             <div class="flex flex-wrap items-center gap-2 text-xs">
                                 <span class="font-bold text-slate-600">เริ่ม</span>
                                 <span class="relative"><input type="text" placeholder="dd/mm/yyyy" x-init="dateField($el, () => cur && cur.startDate, (v) => editProject(cur, { startDate: v }), canEdit, 'w-[8.75rem]')"><svg class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path stroke-linecap="round" d="M3 10h18M8 3v4m8-4v4"/></svg></span>
@@ -103,7 +103,7 @@
                             <span class="w-24 shrink-0 text-xs font-semibold text-slate-600">ผู้รับผิดชอบรายคน</span>
                             <template x-for="id in cur.owners" :key="id">
                                 <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pl-0.5 pr-2 text-xs font-semibold text-slate-700">
-                                    <span class="flex h-5 w-5 items-center justify-center rounded-full text-[10px] text-white" :style="'background-color:' + avatarColor(personOf(id).name)" x-text="initial(personOf(id).name)"></span>
+                                    <span class="flex h-5 w-5 items-center justify-center rounded-full text-[11.5px] text-white" :style="'background-color:' + avatarColor(personOf(id).name)" x-text="initial(personOf(id).name)"></span>
                                     <span x-text="personOf(id).name"></span>
                                     <button type="button" x-show="canEdit" @click="toggleOwner(cur, id)" class="text-slate-400 hover:text-red-600" aria-label="เอาออก">×</button>
                                 </span>
@@ -146,7 +146,7 @@
                                 <label class="text-slate-500"><span x-text="f[1]"></span>
                                     <input type="text" inputmode="decimal" :value="fmtMoney(cur.info[f[0]])" :disabled="!isPmo" maxlength="20" placeholder="เช่น 1,250,000"
                                            @change="editMoney(cur, f[0], $event.target)" class="mt-0.5 w-full rounded-lg border-slate-300 px-2 py-1 text-xs disabled:bg-slate-50">
-                                    <span x-show="f[0] === 'margin' && marginPct(cur.info)" class="text-[11px] text-slate-400" x-text="'คิดเป็น ' + marginPct(cur.info) + ' ของมูลค่างาน'"></span></label>
+                                    <span x-show="f[0] === 'margin' && marginPct(cur.info)" class="text-[12px] text-slate-400" x-text="'คิดเป็น ' + marginPct(cur.info) + ' ของมูลค่างาน'"></span></label>
                             </template>
                             <label class="text-slate-500">ผู้จัดการโครงการ (PM)
                                 <select :disabled="!isPmo" @change="editInfo(cur, 'managerId', $event.target.value)" class="mt-0.5 w-full rounded-lg border-slate-300 py-1 text-xs disabled:bg-slate-50">
@@ -175,7 +175,7 @@
                                         <span class="h-2 w-2 shrink-0 rounded-full" :style="'background-color:' + deptOf(s.deptId).color"></span><span class="truncate" x-text="deptOf(s.deptId).name"></span></span>
                                     <div class="h-2 flex-1 overflow-hidden rounded bg-slate-100"><div class="h-full rounded" :class="progress(cur, s.deptId).pct === 100 ? 'bg-emerald-500' : 'bg-blue-600'" :style="'width:' + progress(cur, s.deptId).pct + '%'"></div></div>
                                     <span class="w-24 shrink-0 text-right tabular-nums text-slate-500" x-text="progress(cur, s.deptId).done + '/' + progress(cur, s.deptId).total + ' · ' + stageInfo(s).label"></span>
-                                    <span class="w-20 shrink-0 truncate rounded-full px-2 py-px text-center text-[11px] font-semibold" :style="'background-color:' + stageStatus(s).color + '26;color:' + stageStatus(s).color" x-text="stageStatus(s).name"></span>
+                                    <span class="w-20 shrink-0 truncate rounded-full px-2 py-px text-center text-[12px] font-semibold" :style="'background-color:' + stageStatus(s).color + '26;color:' + stageStatus(s).color" x-text="stageStatus(s).name"></span>
                                 </div>
                             </template>
                         </div>
@@ -189,15 +189,15 @@
                                 <span class="inline-flex items-center gap-1">
                                     <span x-show="i > 0" class="px-px text-[15px] leading-none text-slate-400">&rsaquo;</span>
                                     <button type="button" @click.stop="openStage(s.deptId, $event)" :data-stage-chip="s.deptId" :aria-expanded="stageDept === s.deptId"
-                                            class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-[5px] text-[12.5px] hover:border-blue-500 hover:bg-blue-50/40"
+                                            class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-[5px] text-[13px] hover:border-blue-500 hover:bg-blue-50/40"
                                             :class="[s.done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-300 bg-white', stageDept === s.deptId ? 'border-blue-500 ring-1 ring-blue-500' : '']">
                                         <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="'background-color:' + deptOf(s.deptId).color"></span>
                                         <span x-show="deptOf(s.deptId).icon" x-text="deptOf(s.deptId).icon"></span>
                                         <span class="font-semibold" :class="s.done ? 'text-emerald-700' : 'text-slate-800'" x-text="deptOf(s.deptId).name"></span>
                                         <span :class="stageInfo(s).cls" x-text="stageInfo(s).label"></span>
-                                        <span class="rounded-full px-1.5 text-[11px] font-semibold" :style="'background-color:' + stageStatus(s).color + '26;color:' + stageStatus(s).color" :title="'สถานะงานของแผนก' + (s.manualStatus ? ' (ตั้งโดย Admin / PM)' : ' (อัตโนมัติ)')" x-text="stageStatus(s).name + (s.manualStatus ? ' •' : '')"></span>
+                                        <span class="rounded-full px-1.5 text-[12px] font-semibold" :style="'background-color:' + stageStatus(s).color + '26;color:' + stageStatus(s).color" :title="'สถานะงานของแผนก' + (s.manualStatus ? ' (ตั้งโดย Admin / PM)' : ' (อัตโนมัติ)')" x-text="stageStatus(s).name + (s.manualStatus ? ' •' : '')"></span>
                                         <span x-show="s.done" class="font-bold text-emerald-500">✓</span>
-                                        <span x-show="!s.done && progress(cur, s.deptId).total > 0" class="rounded-full bg-slate-100 px-1.5 text-[11px] text-slate-500 tabular-nums" x-text="progress(cur, s.deptId).pct + '%'"></span>
+                                        <span x-show="!s.done && progress(cur, s.deptId).total > 0" class="rounded-full bg-slate-100 px-1.5 text-[12px] text-slate-500 tabular-nums" x-text="progress(cur, s.deptId).pct + '%'"></span>
                                     </button>
                                 </span>
                             </template>
@@ -205,7 +205,7 @@
                                 <option value="">+ เพิ่มแผนก</option>
                                 <template x-for="d in freeDepts(cur)" :key="d.id"><option :value="d.id" x-text="d.name"></option></template>
                             </select>
-                            <a x-show="isPmo" :href="urls.assign" target="_blank" class="inline-flex items-center rounded-lg border border-dashed border-slate-300 px-[11px] py-[5px] text-[12.5px] font-bold text-blue-600 hover:border-blue-500 hover:bg-blue-50/40" title="จ่ายงานให้แผนก (เปิดหน้าจ่ายงานของ PMO)">+</a>
+                            <a x-show="isPmo" :href="urls.assign" target="_blank" class="inline-flex items-center rounded-lg border border-dashed border-slate-300 px-[11px] py-[5px] text-[13px] font-bold text-blue-600 hover:border-blue-500 hover:bg-blue-50/40" title="จ่ายงานให้แผนก (เปิดหน้าจ่ายงานของ PMO)">+</a>
                             <p x-show="cur.deptStages.length === 0" class="text-sm text-slate-400">ยังไม่ได้จ่ายงานให้แผนก</p>
                         </div>
                     </div>
@@ -228,16 +228,16 @@
                                             <span class="min-w-[44px] flex-1 truncate" :class="cabDone(c) ? '' : 'text-slate-500'" x-text="c.mo"></span>
                                             <span class="flex-[4] truncate" :class="cabDone(c) ? '' : 'text-slate-800'" x-text="c.text"></span>
                                         </div>
-                                        <button type="button" @click.stop="openChecklist(cur.id, c.id, $event)" class="inline-flex shrink-0 items-center gap-1 rounded-xl border bg-white px-2.5 py-[3px] text-[11px] font-semibold hover:bg-slate-100"
+                                        <button type="button" @click.stop="openChecklist(cur.id, c.id, $event)" class="inline-flex shrink-0 items-center gap-1 rounded-xl border bg-white px-2.5 py-[3px] text-[12px] font-semibold hover:bg-slate-100"
                                                 :class="cabProgress(c, dept || null).total > 0 && cabProgress(c, dept || null).done === cabProgress(c, dept || null).total ? 'border-emerald-500 text-emerald-600' : 'border-slate-300 text-slate-500 hover:border-blue-500 hover:text-blue-600'" title="Checklist ของตู้นี้ (คลิกเพื่อเปิด)">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M8 12l3 3 5-6"/></svg><span class="tabular-nums" x-text="cabProgress(c, dept || null).done + '/' + cabProgress(c, dept || null).total"></span>
                                         </button>
                                         <template x-for="l in (c.linked || [])" :key="'lk' + l.deptId">
-                                            <button type="button" @click.stop="openChecklist(cur.id, c.id, $event)" class="shrink-0 rounded-xl border border-dashed px-2 py-[3px] text-[11px] font-semibold tabular-nums"
+                                            <button type="button" @click.stop="openChecklist(cur.id, c.id, $event)" class="shrink-0 rounded-xl border border-dashed px-2 py-[3px] text-[12px] font-semibold tabular-nums"
                                                     :class="l.total && l.done === l.total ? 'border-emerald-400 text-emerald-600' : 'border-slate-300 text-slate-500 hover:border-blue-500 hover:text-blue-600'"
                                                     :title="'Checklist ของ ' + deptOf(l.deptId).name + ' (ดูอย่างเดียว)'" x-text="'จาก' + deptOf(l.deptId).name + ' ' + l.done + '/' + l.total"></button>
                                         </template>
-                                        <button type="button" x-show="isPmo && (c.free || []).length" @click.stop="openDispatch(cur, c.id, '')" class="shrink-0 rounded bg-amber-100 px-1.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-200" :title="(c.free || []).length + ' งานย่อยยังไม่ได้จ่ายให้แผนก'" x-text="'จ่ายงาน ' + (c.free || []).length"></button>
+                                        <button type="button" x-show="isPmo && (c.free || []).length" @click.stop="openDispatch(cur, c.id, '')" class="shrink-0 rounded bg-amber-100 px-1.5 text-[12px] font-semibold text-amber-800 hover:bg-amber-200" :title="(c.free || []).length + ' งานย่อยยังไม่ได้จ่ายให้แผนก'" x-text="'จ่ายงาน ' + (c.free || []).length"></button>
                                         <span x-show="isPmo" class="flex shrink-0 items-center">
                                             <button type="button" @click.stop="renameCabinet(cur, c)" class="px-1 text-slate-400 hover:text-blue-600" title="แก้ชื่อ / เลข MO" aria-label="แก้ชื่อตู้">✎</button>
                                             <button type="button" @click.stop="deleteCabinet(cur, c)" class="px-1 text-slate-400 hover:text-red-600" title="ลบตู้" aria-label="ลบตู้">🗑</button>
@@ -271,14 +271,15 @@
                                             </template>
                                             <div x-show="cabOpen[c.id].subtasks.length" class="overflow-x-auto">
                                                 <table class="w-full min-w-[640px] text-left">
-                                                    <thead class="text-[10.5px] text-slate-400"><tr><th class="py-1 font-medium">งาน</th><th class="font-medium">แผนก / สถานะ</th><th class="font-medium">เริ่ม</th><th class="font-medium">ส่ง</th><th class="font-medium">ผู้ทำ</th><th class="font-medium">หมายเหตุ</th></tr></thead>
+                                                    <thead class="text-[12px] text-slate-400"><tr><th class="py-1 font-medium">งาน</th><th class="font-medium">แผนก / สถานะ</th><th class="font-medium">เริ่ม</th><th class="font-medium">ส่ง</th><th class="font-medium" title="วันทำงาน ไม่นับเสาร์-อาทิตย์ — ไม่ใส่วันเริ่ม = เริ่มวันนี้">วัน</th><th class="font-medium">ผู้ทำ</th><th class="font-medium">หมายเหตุ</th></tr></thead>
                                                     <tbody class="divide-y divide-slate-50">
                                                         <template x-for="s in cabOpen[c.id].subtasks" :key="s.id">
                                                             <tr :class="s.state === 'COMPLETED' ? 'text-slate-400' : ''">
-                                                                <td class="py-1 pr-2"><span class="text-slate-400" x-text="s.task + ' › '"></span><span class="font-medium" x-text="s.name"></span> <span class="text-[10.5px] text-slate-400" x-text="s.checklists ? '☑ ' + s.checklistsDone + '/' + s.checklists : ''"></span></td>
+                                                                <td class="py-1 pr-2"><span class="text-slate-400" x-text="s.task + ' › '"></span><span class="font-medium" x-text="s.name"></span> <span class="text-[12px] text-slate-400" x-text="s.checklists ? '☑ ' + s.checklistsDone + '/' + s.checklists : ''"></span></td>
                                                                 <td class="whitespace-nowrap pr-2"><span x-text="s.deptId ? deptOf(s.deptId).name : '—'"></span> · <span x-text="stateLabel(s.state)"></span></td>
                                                                 <td class="pr-1"><input type="date" :value="s.startDate || ''" :disabled="!s.editable || s.state === 'COMPLETED'" @change="editSubInfo(cur, s, 'startDate', $event.target.value || null)" class="w-[8.2rem] rounded border-slate-300 py-0.5 text-xs disabled:bg-slate-50"></td>
                                                                 <td class="pr-1"><input type="date" :value="s.dueDate || ''" :disabled="!s.editable || s.state === 'COMPLETED'" @change="editSubInfo(cur, s, 'dueDate', $event.target.value || null)" class="w-[8.2rem] rounded border-slate-300 py-0.5 text-xs disabled:bg-slate-50" :class="!s.dueDate && s.deptId && s.state !== 'COMPLETED' ? 'border-amber-400' : ''"></td>
+                                                                <td class="pr-1"><input type="number" min="1" max="999" inputmode="numeric" :value="workDaysBetween(s.startDate, s.dueDate)" @change="editSubDays(cur, s, $event.target.value)" :disabled="!s.editable || s.state === 'COMPLETED'" aria-label="จำนวนวันทำงาน" class="w-14 rounded border-slate-300 py-0.5 text-xs disabled:bg-slate-50"></td>
                                                                 <td class="pr-1"><select :disabled="!s.editable" @change="editSubInfo(cur, s, 'ownerId', $event.target.value)" class="w-32 rounded border-slate-300 py-0.5 text-xs disabled:bg-slate-50">
                                                                     <option value="">—</option>
                                                                     <template x-for="p in staffFor(s.deptId)" :key="s.id + 'o' + p.id"><option :value="p.id" x-text="p.name" :selected="String(p.id) === String(s.ownerId)"></option></template>
@@ -289,7 +290,7 @@
                                                     </tbody>
                                                 </table>
                                             </div>
-                                            <a x-show="cabOpen[c.id].cabinet" :href="cabOpen[c.id].cabinet ? cabOpen[c.id].cabinet.url : '#'" class="inline-block text-[11px] text-blue-600 hover:underline">เปิดหน้าตู้ใน PMO →</a>
+                                            <a x-show="cabOpen[c.id].cabinet" :href="cabOpen[c.id].cabinet ? cabOpen[c.id].cabinet.url : '#'" class="inline-block text-[12px] text-blue-600 hover:underline">เปิดหน้าตู้ใน PMO →</a>
                                         </div>
                                     </template>
                                 </div>
@@ -299,9 +300,9 @@
                     </div>
 
                     <details class="border-t border-slate-200 pt-2.5" x-data="{ o: !!cur.description }" :open="o" @toggle="o = $el.open">
-                        <summary class="flex cursor-pointer list-none items-center gap-1.5 py-0.5 text-[12.5px] font-semibold text-slate-500 [&::-webkit-details-marker]:hidden">
+                        <summary class="flex cursor-pointer list-none items-center gap-1.5 py-0.5 text-[13px] font-semibold text-slate-500 [&::-webkit-details-marker]:hidden">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8zM14 3v5h5M9 13h6M9 17h6"/></svg>
-                            <span>รายละเอียด</span><span class="text-[11px]" x-text="o ? '▾' : '▸'"></span>
+                            <span>รายละเอียด</span><span class="text-[12px]" x-text="o ? '▾' : '▸'"></span>
                         </summary>
                         <div class="mt-2.5">
                             <label class="mb-1 block text-xs font-semibold text-slate-600">รายละเอียด</label>
@@ -327,23 +328,26 @@
                                     <img x-show="c.avatar" :src="c.avatar" alt="" class="h-[26px] w-[26px] shrink-0 rounded-full object-cover">
                                     <span x-show="!c.avatar" class="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-xs font-bold text-white" :style="'background-color:' + avatarColor(c.author)" x-text="initial(c.author)"></span>
                                     <div class="min-w-0 flex-1">
-                                        <div class="mb-0.5 flex items-baseline gap-1.5"><span class="text-[12.5px] font-semibold text-slate-900" x-text="c.author"></span><span class="text-[11px] text-slate-400" x-text="fmtDateTime(c.at)"></span></div>
-                                        <p x-show="c.replyTo && commentById(c.replyTo)" class="mb-1 truncate border-l-2 border-slate-300 pl-2 text-[11px] text-slate-500" x-text="'↩ ' + (commentById(c.replyTo) || {}).author + ': ' + (commentById(c.replyTo) || {}).text"></p>
+                                        <div class="mb-0.5 flex items-baseline gap-1.5"><span class="text-[13px] font-semibold text-slate-900" x-text="c.author"></span><span class="text-[12px] text-slate-400" x-text="fmtDateTime(c.at)"></span></div>
+                                        <p x-show="c.replyTo && commentById(c.replyTo)" class="mb-1 truncate border-l-2 border-slate-300 pl-2 text-[12px] text-slate-500" x-text="'↩ ' + (commentById(c.replyTo) || {}).author + ': ' + (commentById(c.replyTo) || {}).text"></p>
                                         <div class="flex flex-wrap gap-1.5 empty:hidden" x-show="(c.files || []).length">
                                             <template x-for="f in (c.files || [])" :key="f.name + f.url">
-                                                <a :href="f.url || '#'" target="_blank" rel="noopener" @click="openFile(f, $event)" class="inline-flex max-w-full items-center gap-1 overflow-hidden rounded-lg border border-slate-200 bg-white text-[11px] text-slate-600 hover:border-blue-400">
+                                                <a :href="f.url || '#'" target="_blank" rel="noopener" @click="openFile(f, $event)" class="inline-flex max-w-full items-center gap-1 overflow-hidden rounded-lg border border-slate-200 bg-white text-[12px] text-slate-600 hover:border-blue-400">
                                                     <img x-show="f.image && f.url" :src="f.url" class="h-14 w-14 object-cover" alt="">
                                                     <span class="truncate px-2 py-1" x-text="'📎 ' + f.name + (f.size ? ' · ' + f.size : '')"></span>
                                                 </a>
                                             </template>
                                         </div>
                                         <p class="whitespace-pre-wrap break-words text-[13px] leading-normal text-slate-900"><template x-for="(part, i) in commentParts(c.text)" :key="i"><span :class="part.m ? 'rounded bg-indigo-50 px-[3px] font-semibold text-blue-700' : ''" x-text="part.t"></span></template></p>
-                                        <div x-show="c.alert" class="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11.5px] text-amber-800">
-                                            <span class="font-semibold" x-text="'🔔 แจ้งเตือนถึง ' + (c.alert ? deptOf(c.alert.deptId).name : '')"></span>
-                                            <span x-text="c.alert && c.alert.acks.length ? ' · รับทราบแล้ว: ' + c.alert.acks.map((a) => a.name).join(', ') : ' · ยังไม่มีใครรับทราบ'"></span>
-                                            <button type="button" x-show="c.alert && c.alert.forMe && !c.alert.acked" @click="ackAlert(c)" class="ml-1 rounded bg-amber-500 px-2 py-0.5 font-semibold text-white hover:bg-amber-600">รับทราบ</button>
+                                        {{-- an alert to a department / a tag: who it reached and who has acknowledged (NotificationService::ackNote) --}}
+                                        <div x-show="c.alert || c.receipt" class="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[12.5px] text-amber-800">
+                                            <span class="font-semibold" x-text="c.alert ? '🔔 แจ้งเตือนถึง ' + deptOf(c.alert.deptId).name : '🏷 แท็ก'"></span>
+                                            <span x-show="c.receipt" :class="c.receipt && !c.receipt.pending.length ? 'font-semibold text-emerald-700' : ''"
+                                                  x-text="c.receipt ? ' · รับทราบแล้ว ' + c.receipt.acked + '/' + c.receipt.total + ' คน' + (c.receipt.pending.length ? ' · ยังไม่รับทราบ: ' + c.receipt.pending.join(', ') : ' ✓ ครบ') : ''"></span>
+                                            <span x-show="!c.receipt" x-text="c.alert && c.alert.acks.length ? ' · รับทราบแล้ว: ' + c.alert.acks.map((a) => a.name).join(', ') : ' · ยังไม่มีใครรับทราบ'"></span>
+                                            <button type="button" x-show="(c.alert && c.alert.forMe && !c.alert.acked) || (c.receipt && c.receipt.askMe)" @click="ackAlert(c)" class="ml-1 rounded bg-amber-500 px-2 py-0.5 font-semibold text-white hover:bg-amber-600">รับทราบ</button>
                                         </div>
-                                        <div class="mt-0.5 flex gap-3 text-[11px] text-slate-400">
+                                        <div class="mt-0.5 flex gap-3 text-[12px] text-slate-400">
                                             <button type="button" @click="startReply(c)" class="hover:text-blue-600">ตอบกลับ</button>
                                             <button type="button" x-show="c.mine" @click="editComment(c)" class="hover:text-blue-600">แก้ไข</button>
                                             <button type="button" x-show="c.mine || isPmo" @click="deleteComment(c)" class="hover:text-red-600">ลบ</button>
@@ -356,7 +360,7 @@
                     </div>
                     {{-- Change log = the project page's Activity Log tree (Cabinet > Task > Sub Task > Checklist > activity), read-only, PMO roles only --}}
                     <div x-show="feedTab === 'log'" x-cloak class="flex min-h-0 flex-1 flex-col overflow-hidden">
-                        <div class="flex items-center gap-2 border-b border-slate-200 px-3.5 py-1.5 text-[11px] text-slate-400">
+                        <div class="flex items-center gap-2 border-b border-slate-200 px-3.5 py-1.5 text-[12px] text-slate-400">
                             <span class="flex-1" x-text="logTree.total ? logTree.total + ' กิจกรรม · ล่าสุดก่อน' : ''"></span>
                             <button type="button" @click="logSetAll(true)" class="text-blue-600 hover:underline">ขยายทั้งหมด</button><span>|</span>
                             <button type="button" @click="logSetAll(false)" class="text-blue-600 hover:underline">ยุบทั้งหมด</button>
@@ -371,9 +375,9 @@
                                     <template x-if="r.node">
                                         <button type="button" @click="logToggle(r.node.key)" class="relative flex min-h-[34px] w-full items-center gap-1.5 pr-3 text-left hover:bg-slate-50" :class="r.node.type === 'cabinet' ? 'bg-slate-50/60' : ''" :style="'padding-left: calc(var(--ind) * ' + r.depth + ' + 14px)'">
                                             <svg class="h-3 w-3 shrink-0 text-slate-400 transition-transform" :class="logTree.open[r.node.key] ? 'rotate-90' : ''" viewBox="0 0 20 20" fill="currentColor"><path d="M7 4l6 6-6 6V4z"/></svg>
-                                            <span class="shrink-0 text-[10.5px] text-slate-400" x-text="r.node.word || logWords[r.node.type] || ''"></span>
-                                            <span class="min-w-0 flex-1 truncate text-[12.5px]" :class="r.node.type === 'cabinet' ? 'font-semibold text-slate-800' : 'text-slate-700'" x-text="r.node.label"></span>
-                                            <span class="shrink-0 rounded-full bg-slate-100 px-1.5 text-[11px] font-medium tabular-nums text-slate-600" x-text="r.node.count"></span>
+                                            <span class="shrink-0 text-[12px] text-slate-400" x-text="r.node.word || logWords[r.node.type] || ''"></span>
+                                            <span class="min-w-0 flex-1 truncate text-[13px]" :class="r.node.type === 'cabinet' ? 'font-semibold text-slate-800' : 'text-slate-700'" x-text="r.node.label"></span>
+                                            <span class="shrink-0 rounded-full bg-slate-100 px-1.5 text-[12px] font-medium tabular-nums text-slate-600" x-text="r.node.count"></span>
                                         </button>
                                     </template>
                                     <template x-if="r.act">
@@ -382,11 +386,11 @@
                                                 <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" :class="logDot(r.act.icon)"></span>
                                                 <span class="min-w-0 flex-1 text-slate-800" x-text="r.act.title"></span>
                                             </div>
-                                            <div class="ml-3 mt-0.5 text-[11px] text-slate-400"><span x-text="r.act.actor"></span> · <span x-text="r.act.at"></span></div>
+                                            <div class="ml-3 mt-0.5 text-[12px] text-slate-400"><span x-text="r.act.actor"></span> · <span x-text="r.act.at"></span></div>
                                             <template x-for="c in r.act.changes" :key="c.label">
-                                                <p class="ml-3 break-words text-[11px] text-slate-500"><span class="text-slate-400" x-text="c.label + ': '"></span><span x-text="c.old"></span> <span class="text-slate-400">→</span> <span class="font-medium text-slate-800" x-text="c.new"></span></p>
+                                                <p class="ml-3 break-words text-[12px] text-slate-500"><span class="text-slate-400" x-text="c.label + ': '"></span><span x-text="c.old"></span> <span class="text-slate-400">→</span> <span class="font-medium text-slate-800" x-text="c.new"></span></p>
                                             </template>
-                                            <p x-show="r.act.detail" class="ml-3 break-words text-[11px] text-slate-500" x-text="r.act.detail"></p>
+                                            <p x-show="r.act.detail" class="ml-3 break-words text-[12px] text-slate-500" x-text="r.act.detail"></p>
                                         </div>
                                     </template>
                                 </div>
@@ -400,8 +404,8 @@
                                 <template x-for="(p, i) in mentionList()" :key="p.id">
                                     <button type="button" @mousedown.prevent="pickMention(p)" @mouseenter="mentionIdx = i" role="option" :aria-selected="i === mentionIdx"
                                             class="flex w-full items-center gap-2 rounded-[7px] px-2 py-1.5 text-left text-[13px]" :class="i === mentionIdx ? 'bg-indigo-50' : ''">
-                                        <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" :style="'background-color:' + avatarColor(p.name)" x-text="initial(p.name)"></span>
-                                        <span class="min-w-0 flex-1 truncate font-semibold" x-text="p.name"></span><span class="shrink-0 text-[11px] text-slate-400" x-text="p.dept || ''"></span>
+                                        <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white" :style="'background-color:' + avatarColor(p.name)" x-text="initial(p.name)"></span>
+                                        <span class="min-w-0 flex-1 truncate font-semibold" x-text="p.name"></span><span class="shrink-0 text-[12px] text-slate-400" x-text="p.dept || ''"></span>
                                     </button>
                                 </template>
                             </div>
@@ -409,14 +413,14 @@
                                       @input="onCommentInput($event)" @click="onCommentInput($event)" @keydown="onCommentKey($event)" @blur="setTimeout(() => mentionOpen = false, 150)"
                                       class="min-h-[40px] w-full resize-none rounded-lg border-slate-300 px-2.5 py-2 text-[13px]"></textarea>
                         </div>
-                        <div x-show="replyTo" class="mt-2 flex items-center gap-2 rounded-lg bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
+                        <div x-show="replyTo" class="mt-2 flex items-center gap-2 rounded-lg bg-slate-100 px-2 py-1 text-[12px] text-slate-600">
                             <span class="min-w-0 flex-1 truncate" x-text="replyTo ? '↩ ตอบกลับ ' + replyTo.author + ': ' + replyTo.text : ''"></span>
                             <button type="button" @click="replyTo = null" class="text-slate-400 hover:text-red-600" aria-label="ยกเลิกการตอบกลับ">×</button>
                         </div>
                         {{-- photos / files picked for the next comment (up to 5; same types and size limit as the project page) --}}
                         <div x-show="files.length" class="mt-2 flex flex-wrap gap-1.5">
                             <template x-for="(f, i) in files" :key="i">
-                                <span class="inline-flex max-w-[12rem] items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                                <span class="inline-flex max-w-[12rem] items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-[12px] text-slate-600">
                                     <span class="truncate" x-text="'📎 ' + f.name"></span>
                                     <button type="button" @click="files.splice(i, 1)" class="text-slate-400 hover:text-red-600" aria-label="เอาไฟล์ออก">×</button>
                                 </span>
@@ -448,11 +452,11 @@
         <template x-if="stageDept && stageOf(cur, stageDept)">
             <div class="fixed z-50 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-xl space-y-2.5" :style="'top:' + stagePos.top + 'px;left:' + stagePos.left + 'px'" @click.stop>
                 <p class="flex items-center gap-2 text-sm font-semibold text-slate-900"><span class="w-2.5 h-2.5 rounded-full" :style="'background-color:' + deptOf(stageDept).color"></span><span x-text="deptOf(stageDept).name"></span>
-                    <span x-show="stageOf(cur, stageDept).done" class="rounded-full bg-emerald-100 px-2 text-[11px] font-semibold text-emerald-700">เสร็จแล้ว</span></p>
+                    <span x-show="stageOf(cur, stageDept).done" class="rounded-full bg-emerald-100 px-2 text-[12px] font-semibold text-emerald-700">เสร็จแล้ว</span></p>
                 <div class="flex items-center gap-2 text-xs">
                     <span class="w-16 shrink-0 font-semibold text-slate-600">สถานะงาน</span>
-                    <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold text-white" :style="'background-color:' + stageStatus(stageOf(cur, stageDept)).color" x-text="stageStatus(stageOf(cur, stageDept)).name"></span>
-                    <span x-show="!stageOf(cur, stageDept).manualStatus" class="text-[11px] text-slate-400">อัตโนมัติ</span>
+                    <span class="rounded-full px-2 py-0.5 text-[12px] font-semibold text-white" :style="'background-color:' + stageStatus(stageOf(cur, stageDept)).color" x-text="stageStatus(stageOf(cur, stageDept)).name"></span>
+                    <span x-show="!stageOf(cur, stageDept).manualStatus" class="text-[12px] text-slate-400">อัตโนมัติ</span>
                 </div>
                 <select x-show="canEdit" class="h-8 w-full rounded-lg border-slate-300 py-0 text-xs" @change="setStageStatus(cur, stageDept, $event.target.value)" title="ตั้งสถานะงานของแผนกนี้เอง (Admin / PM) หรือให้ระบบคิดจากงานของแผนก">
                     <option value="" :selected="!stageOf(cur, stageDept).manualStatus">อัตโนมัติ (จากงานของแผนก)</option>
@@ -491,11 +495,13 @@
                     <div class="space-y-2">
                         <p class="text-xs text-slate-600">งานของแผนก: รอรับ <b x-text="p.waiting"></b> · รับแล้ว <b x-text="p.accepted"></b> · กำลังทำ <b x-text="p.working"></b> · เสร็จ <b x-text="p.done"></b></p>
                         <div class="flex flex-wrap gap-2" x-show="p.canAccept || p.canStart || p.canComplete">
-                            <button type="button" x-show="p.canAccept" @click="step(cur, stageDept, 'accept')" class="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700">รับงาน</button>
+                            <button type="button" x-show="p.canAccept" @click="step(cur, stageDept, 'accept')" class="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700" x-text="p.waiting > 1 ? 'รับทั้งหมด ' + p.waiting + ' งาน' : 'รับงาน'">รับงาน</button>
+                            <button type="button" x-show="p.canAccept && p.waiting > 1" @click="openPick(cur, stageDept)" class="rounded-lg border border-blue-200 bg-[#EAF4FF] px-3 py-1 text-xs font-semibold text-[#0F4C81] hover:bg-blue-100">เลือกรับ…</button>
+                            <button type="button" x-show="p.canAccept" @click="step(cur, stageDept, 'reject')" class="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">ไม่รับงาน</button>
                             <button type="button" x-show="p.canStart" @click="step(cur, stageDept, 'start')" class="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700">เริ่มงาน</button>
                             <button type="button" x-show="p.canComplete" @click="step(cur, stageDept, 'complete')" class="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700">เสร็จงาน</button>
                         </div>
-                        <p x-show="!(p.canAccept || p.canStart || p.canComplete)" class="text-[11px] text-slate-400">รับ / เริ่ม / ปิดงาน ทำได้เฉพาะสมาชิกของแผนกนี้</p>
+                        <p x-show="!(p.canAccept || p.canStart || p.canComplete)" class="text-[12px] text-slate-400">รับ / เริ่ม / ปิดงาน ทำได้เฉพาะสมาชิกของแผนกนี้</p>
                     </div>
                 </template>
                 <button type="button" x-show="isPmo && stageOf(cur, stageDept).pmo.accepted + stageOf(cur, stageDept).pmo.working + stageOf(cur, stageDept).pmo.done === 0" @click="removeStage(cur, stageDept)" class="text-xs font-medium text-red-600 hover:underline">เอาแผนกนี้ออกจากโครงการ</button>

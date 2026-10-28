@@ -44,13 +44,13 @@
                         {{-- meta: status / priority / dates / who --}}
                         <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 rounded-xl border border-slate-200">
                             <div class="p-3">
-                                <p class="text-[11px] font-medium text-slate-500 mb-1.5">สถานะ</p>
+                                <p class="text-[12px] font-medium text-slate-500 mb-1.5">สถานะ</p>
                                 <select x-model="pm.project.status" @change="saveProject('status', pm.project.status)" :disabled="!pm.project.can_edit" class="w-full rounded-lg border-slate-300 text-sm font-semibold disabled:bg-slate-50">
                                     <template x-for="(label, key) in pm.project.statuses" :key="key"><option :value="key" x-text="label" :selected="key === pm.project.status"></option></template>
                                 </select>
                             </div>
                             <div class="p-3">
-                                <p class="text-[11px] font-medium text-slate-500 mb-1.5">ความสำคัญ</p>
+                                <p class="text-[12px] font-medium text-slate-500 mb-1.5">ความสำคัญ</p>
                                 <div class="flex items-center gap-2">
                                     <svg x-show="flagClass(pm.project)" :class="flagClass(pm.project)" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3v18h2v-7h11l-2-4 2-4H7V3H5z"/></svg>
                                     <select x-model="pm.project.priority" @change="saveProject('priority', pm.project.priority)" :disabled="!pm.project.can_edit" class="w-full rounded-lg border-slate-300 text-sm disabled:bg-slate-50">
@@ -59,7 +59,7 @@
                                 </div>
                             </div>
                             <div class="p-3 sm:border-t sm:border-slate-200 sm:!border-l-0">
-                                <p class="text-[11px] font-medium text-slate-500 mb-1.5">กำหนดเวลา</p>
+                                <p class="text-[12px] font-medium text-slate-500 mb-1.5">กำหนดเวลา</p>
                                 <template x-if="pm.project.can_edit">
                                     <div class="flex items-center gap-1.5 text-xs text-slate-500">
                                         <span>เริ่ม</span><input type="text" x-init="initDate($el, 'start_date')" placeholder="dd/mm/yyyy" class="w-[6.75rem] rounded-lg border-slate-300 px-2 py-1 text-sm">
@@ -69,7 +69,7 @@
                                 <p x-show="!pm.project.can_edit" class="text-sm text-slate-700" x-text="'เริ่ม ' + fmt(pm.project.start_date) + ' → จบ ' + fmt(pm.project.due_date)"></p>
                             </div>
                             <div class="p-3 sm:border-t sm:border-slate-200">
-                                <p class="text-[11px] font-medium text-slate-500 mb-1.5">ผู้รับผิดชอบ (PM)</p>
+                                <p class="text-[12px] font-medium text-slate-500 mb-1.5">ผู้รับผิดชอบ (PM)</p>
                                 <p class="text-sm text-slate-700" x-text="pm.project.manager_name || 'ยังไม่ระบุ'"></p>
                             </div>
                         </div>
@@ -82,7 +82,7 @@
                                     <span class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm" :title="d.done + '/' + d.total + ' งานเสร็จ'">
                                         <span class="font-medium text-slate-800" x-text="d.name"></span>
                                         <span x-show="d.due_date" class="text-xs font-semibold" :class="d.overdue > 0 ? 'text-red-600' : (d.due_date === today ? 'text-amber-600' : 'text-slate-500')" x-text="dueLabel(d.due_date)"></span>
-                                        <span class="rounded-full bg-slate-100 px-1.5 text-[11px] font-semibold text-slate-600 tabular-nums" x-text="d.pct + '%'"></span>
+                                        <span class="rounded-full bg-slate-100 px-1.5 text-[12px] font-semibold text-slate-600 tabular-nums" x-text="d.pct + '%'"></span>
                                     </span>
                                 </template>
                                 <p x-show="pm.departments.length === 0" class="text-sm text-slate-400">ยังไม่ได้จ่ายงานให้แผนก</p>
@@ -101,7 +101,7 @@
                                                 <span class="h-[18px] w-[18px] shrink-0 rounded-full border-2 border-white" :style="'background-color:' + statusColor(cabinetStatusKey(c)) + ';box-shadow:0 0 0 1.5px ' + statusColor(cabinetStatusKey(c))" :title="statusLabel(cabinetStatusKey(c))"></span>
                                                 <span class="min-w-[44px] flex-1 truncate text-[13px]" :class="cabinetStatusKey(c) === 'completed' ? 'line-through text-slate-400' : 'text-slate-500'" x-text="c.mo"></span>
                                                 <span class="flex-[4] truncate text-[13px]" :class="cabinetStatusKey(c) === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'" x-text="c.name"></span>
-                                                <span class="inline-flex shrink-0 items-center gap-1 rounded-xl border bg-white px-2.5 py-[3px] text-[11px] font-semibold"
+                                                <span class="inline-flex shrink-0 items-center gap-1 rounded-xl border bg-white px-2.5 py-[3px] text-[12px] font-semibold"
                                                       :class="c.checklists_total > 0 && c.checklists_completed === c.checklists_total ? 'border-emerald-500 text-emerald-600' : 'border-slate-300 text-slate-500'">
                                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M8 12l3 3 5-6"/></svg><span class="tabular-nums" x-text="c.checklists_completed + '/' + c.checklists_total"></span>
                                                 </span>
@@ -116,12 +116,12 @@
                                                     <span class="w-2.5 h-2.5 shrink-0 rounded-full" :style="'background-color:' + statusColor(itemStatusKey(i))"></span>
                                                     <button type="button" @click="openDetail(i)" class="min-w-0 flex-1 truncate text-left text-sm text-slate-700 hover:text-blue-600 hover:underline" x-text="i.name"></button>
                                                     <span class="text-xs text-slate-500" x-text="i.department_name"></span>
-                                                    <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" :style="'background-color:' + statusColor(itemStatusKey(i)) + '26;color:' + statusColor(itemStatusKey(i))" x-text="i.is_overdue ? 'เกินกำหนด' : i.assignment_status_label"></span>
-                                                    <span x-show="i.checklists_total > 0" class="rounded bg-slate-200/70 px-1 text-[10px] font-semibold text-slate-600 tabular-nums" x-text="i.checklists_completed + '/' + i.checklists_total"></span>
-                                                    <span class="w-10 text-right text-[11px] text-slate-400 tabular-nums" x-text="dueLabel(i.due_date)"></span>
-                                                    <button type="button" x-show="i.can_accept" @click="act(i, 'accept')" :disabled="!!i.busy" class="rounded-md bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">รับงาน</button>
-                                                    <button type="button" x-show="i.can_start" @click="act(i, 'start')" :disabled="!!i.busy" class="rounded-md bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">เริ่มงาน</button>
-                                                    <button type="button" x-show="i.can_complete" @click="act(i, 'complete')" :disabled="!!i.busy" class="rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">เสร็จงาน</button>
+                                                    <span class="rounded-full px-2 py-0.5 text-[12px] font-semibold" :style="'background-color:' + statusColor(itemStatusKey(i)) + '26;color:' + statusColor(itemStatusKey(i))" x-text="i.is_overdue ? 'เกินกำหนด' : i.assignment_status_label"></span>
+                                                    <span x-show="i.checklists_total > 0" class="rounded bg-slate-200/70 px-1 text-[11.5px] font-semibold text-slate-600 tabular-nums" x-text="i.checklists_completed + '/' + i.checklists_total"></span>
+                                                    <span class="w-10 text-right text-[12px] text-slate-400 tabular-nums" x-text="dueLabel(i.due_date)"></span>
+                                                    <button type="button" x-show="i.can_accept" @click="act(i, 'accept')" :disabled="!!i.busy" class="rounded-md bg-blue-600 px-2 py-0.5 text-[12px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">รับงาน</button>
+                                                    <button type="button" x-show="i.can_start" @click="act(i, 'start')" :disabled="!!i.busy" class="rounded-md bg-blue-600 px-2 py-0.5 text-[12px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">เริ่มงาน</button>
+                                                    <button type="button" x-show="i.can_complete" @click="act(i, 'complete')" :disabled="!!i.busy" class="rounded-md bg-emerald-600 px-2 py-0.5 text-[12px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">เสร็จงาน</button>
                                                 </li>
                                             </template>
                                         </ul>
@@ -145,7 +145,7 @@
                     <aside class="flex min-h-[18rem] md:min-h-0 md:w-80 shrink-0 flex-col border-t md:border-t-0 md:border-l border-slate-200 bg-slate-50/50">
                         <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
                             <span class="text-sm font-semibold text-slate-700">Activity</span>
-                            <span class="text-[11px] text-slate-400" x-text="pm.activity.length + ' รายการ'"></span>
+                            <span class="text-[12px] text-slate-400" x-text="pm.activity.length + ' รายการ'"></span>
                         </div>
                         <div class="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3">
                             <p x-show="pm.activity.length === 0" class="py-8 text-center text-xs text-slate-400">ยังไม่มีความเคลื่อนไหว<br>เขียนอัพเดตหรือความคิดเห็นได้ด้านล่าง</p>
@@ -153,12 +153,12 @@
                                 <div class="text-sm" :class="a.is_note ? '' : 'text-slate-500'">
                                     <div class="flex items-baseline justify-between gap-2">
                                         <span class="truncate text-xs font-semibold" :class="a.is_note ? 'text-slate-800' : 'text-slate-500'" x-text="a.user_name"></span>
-                                        <span class="shrink-0 text-[10px] text-slate-400" x-text="a.created_at"></span>
+                                        <span class="shrink-0 text-[11.5px] text-slate-400" x-text="a.created_at"></span>
                                     </div>
                                     <p class="mt-0.5 whitespace-pre-line break-words" :class="a.is_note ? 'rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-800' : 'text-xs'" x-text="a.description"></p>
                                     <div x-show="a.attachments.length" class="mt-1 flex flex-wrap gap-1">
                                         <template x-for="f in a.attachments" :key="f.url">
-                                            <a :href="f.url" target="_blank" rel="noopener" class="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-blue-600 hover:underline" :title="f.size">
+                                            <a :href="f.url" target="_blank" rel="noopener" class="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[12px] text-blue-600 hover:underline" :title="f.size">
                                                 <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12.8l-8.5 8.5a5 5 0 01-7-7l9-9a3.3 3.3 0 014.7 4.7l-9 9a1.7 1.7 0 01-2.4-2.4l8.3-8.3"/></svg><span class="truncate" x-text="f.name"></span>
                                             </a>
                                         </template>
@@ -170,7 +170,7 @@
                             <textarea x-model="pmComment" rows="2" maxlength="2000" placeholder="เขียนอัพเดต / ความคิดเห็น...  (Enter ส่ง, Shift+Enter ขึ้นบรรทัด)"
                                       @keydown.enter="if (!$event.shiftKey && !$event.isComposing) { $event.preventDefault(); postComment(); }"
                                       class="w-full rounded-lg border-slate-300 text-sm"></textarea>
-                            <p x-show="pmFiles.length" class="truncate text-[11px] text-slate-500" x-text="'แนบ ' + pmFiles.length + ' ไฟล์: ' + pmFiles.map((f) => f.name).join(', ')"></p>
+                            <p x-show="pmFiles.length" class="truncate text-[12px] text-slate-500" x-text="'แนบ ' + pmFiles.length + ' ไฟล์: ' + pmFiles.map((f) => f.name).join(', ')"></p>
                             <div class="flex items-center gap-2">
                                 <label class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-500 hover:bg-slate-50" title="แนบไฟล์ (PDF, Word, Excel, รูป, DWG)">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12.8l-8.5 8.5a5 5 0 01-7-7l9-9a3.3 3.3 0 014.7 4.7l-9 9a1.7 1.7 0 01-2.4-2.4l8.3-8.3"/></svg>

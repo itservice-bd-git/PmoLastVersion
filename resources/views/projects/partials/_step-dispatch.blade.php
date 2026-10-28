@@ -28,10 +28,13 @@
                     <option value="{{ $d->id }}">{{ $d->name }}</option>
                 @endforeach
             </select>
-            <div class="flex w-full flex-wrap items-center gap-2">
+            <div class="flex w-full flex-wrap items-center gap-2" data-span>
                 <label for="step-dispatch-due" class="w-[5.5rem] shrink-0 whitespace-nowrap text-sm text-slate-600">กำหนดส่ง</label>
-                <input id="step-dispatch-due" type="date" x-model="due" class="rounded-lg border-slate-300 text-sm">
-                <span class="text-xs text-slate-400">ไม่ใส่ = ใช้วันเดิมของแต่ละงาน</span>
+                <input id="step-dispatch-due" type="date" x-model="due" data-span-due class="rounded-lg border-slate-300 text-sm">
+                <span class="text-sm text-slate-500">หรือ</span>
+                <input type="number" min="1" max="999" inputmode="numeric" data-span-days aria-label="จำนวนวันทำงานนับจากวันนี้" class="w-20 rounded-lg border-slate-300 text-sm">
+                <span class="text-sm text-slate-500">วันทำงานนับจากวันนี้</span>
+                <span class="w-full text-xs text-slate-400 sm:ml-[6rem]">ไม่ใส่ = ใช้วันเดิมของแต่ละงาน</span>
             </div>
             <div class="flex w-full justify-end gap-2 pt-1">
                 <button type="button" @click="step = null" class="px-3 py-2 text-sm font-medium text-slate-600">ยกเลิก</button>

@@ -58,7 +58,7 @@
                              "รีเซ็ต" clears the override and goes back to automatic. --}}
                         <div x-show="colorPickerOpen" x-cloak @click.outside="colorPickerOpen = false"
                              class="absolute left-0 top-5 z-10 bg-white border border-slate-200 rounded-lg shadow-lg p-3 w-56">
-                            <p class="text-[11px] font-medium text-slate-500 mb-2">สี Project</p>
+                            <p class="text-[12px] font-medium text-slate-500 mb-2">สี Project</p>
                             <div class="grid grid-cols-5 gap-2 mb-2.5">
                                 <template x-for="hex in presetColors()" :key="hex">
                                     <button type="button" @click="setProjectColor(hex)"
@@ -130,8 +130,8 @@
                                  one Cabinet, so a Project where every Cabinet already has a
                                  distinct name looks exactly as it did before grouping. --}}
                             <div x-show="g.cabinets.length > 1" class="flex items-center justify-between gap-2 px-4 py-1.5 bg-slate-50/60 border-b border-slate-100">
-                                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500 truncate" x-text="g.spec"></span>
-                                <span class="shrink-0 flex items-center gap-2 text-[11px]">
+                                <span class="text-[12px] font-semibold uppercase tracking-wide text-slate-500 truncate" x-text="g.spec"></span>
+                                <span class="shrink-0 flex items-center gap-2 text-[12px]">
                                     <span x-show="g.sameDueInfo" :class="g.sameDueInfo && g.sameDueInfo.class" x-text="g.sameDueInfo && g.sameDueInfo.text"></span>
                                     <span class="text-slate-400" x-text="g.cabinets.length + ' ตู้'"></span>
                                 </span>
@@ -176,8 +176,8 @@
                                                         {{-- Task - a group header, not a card; indented from the
                                                              Cabinet row above so the hierarchy reads at a glance. --}}
                                                         <div class="flex items-center justify-between pl-7 pr-4 py-1.5 bg-slate-50/60 border-b border-slate-100">
-                                                            <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-500 truncate" x-text="t.task_name"></p>
-                                                            <p class="shrink-0 text-[11px] text-slate-400 ml-2" x-text="t.items.length"></p>
+                                                            <p class="text-[12px] font-semibold uppercase tracking-wide text-slate-500 truncate" x-text="t.task_name"></p>
+                                                            <p class="shrink-0 text-[12px] text-slate-400 ml-2" x-text="t.items.length"></p>
                                                         </div>
                                                         <div class="divide-y divide-slate-100">
                                                             <template x-for="i in t.items" :key="'p' + i.id">

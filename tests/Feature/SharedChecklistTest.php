@@ -156,6 +156,46 @@ class SharedChecklistTest extends TestCase
         $this->assertNull($items->firstWhere('name', 'ถ่ายรูป')['from']);
     }
 
+    public function test_the_receiver_ticking_its_copy_ticks_the_source_and_tells_its_department(): void
+    {
+        $this->pairUp();
+        $maker = $this->user($this->production);
+        $buyer = $this->user($this->purchasing);
+        $copy = $this->item($this->receive, 'Breaker 100A');
+
+        $this->actingAs($maker)->patchJson(route('checklists.toggle', $copy), ['is_completed' => true])->assertOk();
+        $source = $this->item($this->buy, 'Breaker 100A');
+        $this->assertTrue($source->is_completed, 'received means ordered');
+        $this->assertSame($maker->id, $source->completed_by);
+        $this->assertSame(50, $this->buy->fresh()->progress);
+        $this->assertStringContainsString('ผลิต รับแล้ว 1 รายการ', $buyer->notifications()->first()->data['body']);
+
+        // unticking takes back the tick it made, not one the source made itself
+        $this->actingAs($maker)->patchJson(route('checklists.toggle', $copy), ['is_completed' => false])->assertOk();
+        $this->assertFalse($source->fresh()->is_completed);
+        $this->assertSame(0, $this->buy->fresh()->progress);
+
+        $this->actingAs($buyer)->patchJson(route('checklists.toggle', $source), ['is_completed' => true])->assertOk();
+        $this->actingAs($maker)->patchJson(route('checklists.toggle', $copy), ['is_completed' => true])->assertOk();
+        $this->actingAs($maker)->patchJson(route('checklists.toggle', $copy), ['is_completed' => false])->assertOk();
+        $this->assertTrue($source->fresh()->is_completed);
+        $this->assertSame($buyer->id, $source->fresh()->completed_by);
+    }
+
+    public function test_turning_a_pair_round_hands_the_list_to_the_other_side(): void
+    {
+        // set the wrong way first: the buyer's items became copies of the receiver's
+        app(SubtaskPairs::class)->setCabinetPairs($this->buy, [$this->receive->id]);
+        $this->pairUp();
+        $this->assertSame(['🔗สายไฟ  25', '🔗ตรวจสภาพกล่อง', 'Breaker 100A'], $this->list($this->buy));
+        $this->assertSame(['🔗Breaker 100A', 'สายไฟ  25 ✓', 'ตรวจสภาพกล่อง'], $this->list($this->receive), 'its items are copied from, so they stay its own');
+
+        // dropping it on the buyer's side: its items are its own again and the receiver takes copies of them
+        app(SubtaskPairs::class)->setCabinetPairs($this->buy, []);
+        $this->assertSame(['สายไฟ  25', 'ตรวจสภาพกล่อง', 'Breaker 100A'], $this->list($this->buy));
+        $this->assertSame(['🔗สายไฟ  25 ✓', '🔗ตรวจสภาพกล่อง', '🔗Breaker 100A'], $this->list($this->receive));
+    }
+
     public function test_deleting_takes_the_copies_along_and_undo_brings_them_back_but_not_once_the_receiver_ticked(): void
     {
         $this->pairUp();
@@ -260,20 +300,22 @@ class SharedChecklistTest extends TestCase
     {
         $this->pairUp();
         $buyer = $this->user($this->purchasing);
+        $reader = $this->user($this->production);   // the receiving department: its page shows its own Sub Task only
         $url = route('cabinets.checklists-live', $this->task->cabinet_id);
 
-        $v = $this->actingAs($buyer)->getJson($url)->assertOk()->json('version');
-        $this->actingAs($buyer)->getJson($url.'?v='.$v)->assertOk()->assertExactJson(['version' => $v]);   // nothing moved: only the stamp
+        $v = $this->actingAs($reader)->getJson($url)->assertOk()->json('version');
+        $this->actingAs($reader)->getJson($url.'?v='.$v)->assertOk()->assertExactJson(['version' => $v]);   // nothing moved: only the stamp
 
         $this->edit($buyer, $this->buy, ['type' => 'add', 'items' => ['ตู้เหล็ก']])->assertOk();
-        $r = $this->actingAs($buyer)->getJson($url.'?v='.$v)->assertOk();
+        $r = $this->actingAs($reader)->getJson($url.'?v='.$v)->assertOk();
         $this->assertNotSame($v, $r->json('version'));
-        $this->assertContains('ตู้เหล็ก', array_column($r->json('lists.'.$this->receive->id.'.items'), 'name'), 'the shared list, for the other Sub Task on the page');
+        $this->assertContains('ตู้เหล็ก', array_column($r->json('lists.'.$this->receive->id.'.items'), 'name'), 'the shared list, on the receiving Sub Task');
+        $this->assertArrayNotHasKey($this->receive->id, $this->actingAs($buyer)->getJson($url)->json('lists'), 'another department\'s Sub Task is not sent to the buyer');
         $this->assertSame(4, collect($r->json('progress'))->firstWhere('subtask.id', $this->receive->id)['subtask']['total_checklists']);
 
         // a tick moves it too
         $v = $r->json('version');
         $this->actingAs($this->user($this->production))->patchJson(route('checklists.toggle', $this->item($this->receive, 'ตู้เหล็ก')), ['is_completed' => true])->assertOk();
-        $this->assertNotSame($v, $this->actingAs($buyer)->getJson($url.'?v='.$v)->json('version'));
+        $this->assertNotSame($v, $this->actingAs($reader)->getJson($url.'?v='.$v)->json('version'));
     }
 }

@@ -46,7 +46,7 @@ class ChecklistEditorController extends Controller
         $version = $this->editor->cabinetVersion($cabinet);
 
         return response()->json(['version' => $version]
-            + ($request->query('v') === $version ? [] : $this->editor->cabinetLists($cabinet)));
+            + ($request->query('v') === $version ? [] : $this->editor->cabinetLists($cabinet, $request->user())));
     }
 
     private function owner(string $kind, int $id)

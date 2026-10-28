@@ -120,6 +120,30 @@ class CabinetChecklistTest extends TestCase
         $this->assertSame(1, $this->subtask->checklists()->count());
     }
 
+    // ---- The cabinet page: only their own department's work, unless they may see all (then read-only) ----
+
+    public function test_cabinet_page_shows_other_departments_work_only_to_who_may_see_all(): void
+    {
+        $this->subtask->checklists()->create(['name' => 'Busbar item', 'is_completed' => false, 'sequence' => 1]);
+        $wiringTask = CabinetTask::forceCreate(['cabinet_id' => $this->subtask->cabinetTask->cabinet_id, 'name' => 'Wiring step', 'status' => 'not_started', 'progress' => 0]);
+        CabinetSubtask::forceCreate(['cabinet_task_id' => $wiringTask->id, 'name' => 'Pull wires', 'department_id' => $this->wiring->id,
+            'assignment_status' => CabinetSubtask::ASSIGNMENT_ACCEPTED, 'status' => 'not_started', 'progress' => 0]);
+        $cabinet = $this->subtask->cabinetTask->cabinet;
+
+        $this->actingAs($this->user($this->wiring))->get(route('cabinets.show', $cabinet))
+            ->assertOk()->assertSee('Pull wires')->assertDontSee('Prepare Busbar')->assertDontSee('Busbar item');
+        $live = $this->getJson(route('cabinets.checklists-live', $cabinet))->assertOk()->json('lists');
+        $this->assertArrayNotHasKey($this->subtask->id, $live);
+
+        $this->wiring->forceFill(['sees_all' => true])->save();   // "เห็นงานทุกแผนก": sees it, cannot tick it
+        $this->actingAs($this->user($this->wiring->fresh()))->get(route('cabinets.show', $cabinet))
+            ->assertOk()->assertSee('Prepare Busbar')->assertSee('Busbar item');
+        $this->patchJson(route('checklists.toggle', $this->subtask->checklists()->first()), ['is_completed' => true])->assertForbidden();
+
+        $this->actingAs($this->user(null, User::ROLE_ADMIN))->get(route('cabinets.show', $cabinet))
+            ->assertOk()->assertSee('Prepare Busbar')->assertSee('Pull wires');
+    }
+
     // ---- Forbidden: same department, but the work has not been accepted yet ----
 
     public function test_own_department_cannot_touch_checklist_before_accepting_the_work(): void
@@ -129,6 +153,7 @@ class CabinetChecklistTest extends TestCase
         $this->actingAs($this->user($this->busbar));
 
         $this->post(route('checklists.store', $this->subtask), ['names' => 'Too early'])->assertForbidden();
+        \App\Models\AppSetting::put('tick_accepts', false);   // on (the default), the tick would accept the work instead
         $this->patchJson(route('checklists.toggle', $checklist), ['is_completed' => true])->assertForbidden();
 
         $this->assertFalse($checklist->fresh()->is_completed);

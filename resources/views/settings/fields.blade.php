@@ -35,7 +35,7 @@
                         <div class="space-y-1">
                             @forelse ($field->options->groupBy(fn ($o) => $o->group_name ?? '') as $group => $options)
                                 <div>
-                                    @if ($group !== '') <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mt-2">{{ $group }}</p> @endif
+                                    @if ($group !== '') <p class="text-[12px] font-semibold uppercase tracking-wide text-slate-400 mt-2">{{ $group }}</p> @endif
                                     @foreach ($options as $option)
                                         <div class="flex items-center justify-between rounded-lg px-2 py-1 text-sm hover:bg-slate-50">
                                             <span class="text-slate-800">{{ $option->label }}</span>

@@ -24,7 +24,8 @@ class StatusReportController extends Controller
             'ids.*' => ['string'],
         ]);
 
-        $count = $request->user()->unreadNotifications()->whereIn('id', $data['ids'])->update(['read_at' => now()]);
+        // the same "รับทราบ" as the bell's: an alert / a tag tells its sender (NotificationService::acknowledge)
+        $count = app(\App\Services\NotificationService::class)->acknowledge($request->user(), $request->user()->unreadNotifications()->whereIn('id', $data['ids'])->get());
 
         return response()->json(['acknowledged' => $count]);
     }

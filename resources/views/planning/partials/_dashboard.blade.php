@@ -46,7 +46,7 @@
                             </div>
                             <div>
                                 <div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-2 rounded-full" :class="r.prog.pct === 100 ? 'bg-emerald-500' : 'bg-blue-600'" :style="'width:' + r.prog.pct + '%'"></div></div>
-                                <p class="mt-1 text-[11px] text-slate-500" x-text="(r.s.start || r.s.end ? fmtBE(r.s.start || r.s.end) + ' – ' + fmtBE(r.s.end) : 'ยังไม่มีวันส่ง') + ' · รอรับ ' + r.s.pmo.waiting + ' · รับแล้ว ' + r.s.pmo.accepted + ' · กำลังทำ ' + r.s.pmo.working + ' · เสร็จ ' + r.s.pmo.done"></p>
+                                <p class="mt-1 text-[12px] text-slate-500" x-text="(r.s.start || r.s.end ? fmtBE(r.s.start || r.s.end) + ' – ' + fmtBE(r.s.end) : 'ยังไม่มีวันส่ง') + ' · รอรับ ' + r.s.pmo.waiting + ' · รับแล้ว ' + r.s.pmo.accepted + ' · กำลังทำ ' + r.s.pmo.working + ' · เสร็จ ' + r.s.pmo.done"></p>
                             </div>
                             <div class="flex items-center gap-2 whitespace-nowrap text-xs tabular-nums">
                                 <span class="text-slate-500" x-text="r.prog.done + '/' + r.prog.total + ' (' + r.prog.pct + '%)'"></span>
@@ -76,7 +76,7 @@
                                     <td class="whitespace-nowrap px-4 py-2.5"><div class="flex w-36 items-center gap-2"><div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100"><div class="h-1.5 rounded-full" :class="x.prog.pct === 100 ? 'bg-emerald-500' : 'bg-blue-600'" :style="'width:' + x.prog.pct + '%'"></div></div><span class="text-xs tabular-nums text-slate-500" x-text="x.prog.done + '/' + x.prog.total"></span></div></td>
                                     <td class="px-4 py-2.5"><div class="flex flex-wrap gap-1">
                                         <template x-for="dd in x.depts" :key="dd.id">
-                                            <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium text-slate-700" :style="deptTag(dd.id)" :title="deptOf(dd.id).name + ' ' + dd.prog.done + '/' + dd.prog.total">
+                                            <span class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-medium text-slate-700" :style="deptTag(dd.id)" :title="deptOf(dd.id).name + ' ' + dd.prog.done + '/' + dd.prog.total">
                                                 <span x-text="deptOf(dd.id).name"></span><span class="tabular-nums" :class="dd.done ? 'text-emerald-700' : 'text-slate-500'" x-text="dd.done ? '✓' : dd.prog.pct + '%'"></span></span>
                                         </template></div></td>
                                 </tr>
@@ -108,7 +108,7 @@
                             <div class="flex-1 flex flex-col items-center justify-end h-full" :title="b.label + ': ' + b.n + ' งาน'">
                                 <span class="text-xs font-semibold tabular-nums" :class="b.late && b.n > 0 ? 'text-red-700' : 'text-slate-700'" x-text="b.n"></span>
                                 <div class="w-full max-w-[56px] rounded-t" :class="[b.late ? 'bg-red-600' : 'bg-blue-600', b.n === 0 ? 'opacity-30' : '']" :style="'height:' + (b.n === 0 ? 3 : Math.max(6, Math.round(b.n / d.bucketMax * 100))) + '%'"></div>
-                                <span class="mt-1.5 text-[11px] text-center" :class="b.late ? 'text-red-700 font-medium' : 'text-slate-500'" x-text="b.label"></span>
+                                <span class="mt-1.5 text-[12px] text-center" :class="b.late ? 'text-red-700 font-medium' : 'text-slate-500'" x-text="b.label"></span>
                             </div>
                         </template>
                     </div>
@@ -142,9 +142,9 @@
                             <template x-for="t in d.rows" :key="t.id">
                                 <tr class="hover:bg-slate-50 cursor-pointer" @click="openModal(t.id)">
                                     <td class="px-4 py-2.5"><span class="font-semibold text-blue-600" x-text="t.so"></span>
-                                        <button type="button" @click.stop="dashProject = t.id; window.scrollTo({ top: 0, behavior: 'smooth' })" class="ml-1.5 rounded border border-slate-200 px-1.5 text-[11px] text-slate-500 hover:border-blue-400 hover:text-blue-600" title="แดชบอร์ดของโครงการนี้">📊</button>
+                                        <button type="button" @click.stop="dashProject = t.id; window.scrollTo({ top: 0, behavior: 'smooth' })" class="ml-1.5 rounded border border-slate-200 px-1.5 text-[12px] text-slate-500 hover:border-blue-400 hover:text-blue-600" title="แดชบอร์ดของโครงการนี้">📊</button>
                                         <p class="text-xs text-slate-500" x-text="t.title"></p></td>
-                                    <td class="px-4 py-2.5 whitespace-nowrap"><span x-text="fmtBE(dueFor(t))"></span><p x-show="overdueFor(t)" class="text-[11px] font-semibold text-red-600" x-text="'เลย ' + Math.abs(daysFromToday(dueFor(t))) + ' วัน'"></p></td>
+                                    <td class="px-4 py-2.5 whitespace-nowrap"><span x-text="fmtBE(dueFor(t))"></span><p x-show="overdueFor(t)" class="text-[12px] font-semibold text-red-600" x-text="'เลย ' + Math.abs(daysFromToday(dueFor(t))) + ' วัน'"></p></td>
                                     <td class="px-4 py-2.5"><span class="rounded-full px-2.5 py-0.5 text-xs font-semibold" :style="'background-color:' + statusColor(t) + '26;color:' + statusColor(t)" x-text="statusOf(t).name"></span></td>
                                     <td class="px-4 py-2.5 text-xs text-slate-600"><template x-for="s in t.deptStages" :key="s.deptId"><span class="inline-flex items-center gap-1 mr-2"><span class="w-2 h-2 rounded-full" :style="'background-color:' + deptOf(s.deptId).color"></span><span :class="s.done ? 'line-through text-slate-400' : ''" x-text="deptOf(s.deptId).name"></span></span></template></td>
                                     <td class="px-4 py-2.5 whitespace-nowrap"><div class="flex items-center gap-2 w-32"><div class="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden"><div class="h-1.5 rounded-full bg-emerald-500" :style="'width:' + progress(t, dept || null).pct + '%'"></div></div><span class="text-xs text-slate-500 tabular-nums" x-text="progress(t, dept || null).pct + '%'"></span></div></td>

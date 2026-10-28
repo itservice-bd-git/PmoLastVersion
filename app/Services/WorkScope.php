@@ -30,6 +30,22 @@ class WorkScope
     }
 
     /**
+     * The cabinet page (and its live refresh): someone without "เห็นงานทุกแผนก" keeps only their own department's Sub Tasks
+     * (and the Tasks that still have one). Who may see all keeps everything; ticking stays limited by CabinetSubtask::canTickBy.
+     * The tasks.subtasks relation must be loaded.
+     */
+    public static function trimCabinet(\App\Models\Cabinet $cabinet, User $user): void
+    {
+        if ($user->canSeeAllWork()) {
+            return;
+        }
+        $mine = fn (CabinetSubtask $s) => $s->department_id !== null && $s->department_id === $user->department_id;
+        $cabinet->setRelation('tasks', $cabinet->tasks
+            ->each(fn ($t) => $t->setRelation('subtasks', $t->subtasks->filter($mine)->values()))
+            ->filter(fn ($t) => $t->subtasks->isNotEmpty())->values());
+    }
+
+    /**
      * Whether a person sees a project at all (every page, its JSON, files, CSV): those who see all work (PM-level, a role
      * given "เห็นทุกโครงการ" in Settings > สิทธิ์การใช้งาน, a department marked "sees everything"), else a project their
      * department has work in, or one they are in charge of / its Project Manager.

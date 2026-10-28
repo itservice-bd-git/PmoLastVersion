@@ -111,7 +111,7 @@
                                     <div class="tabular-nums text-slate-700">{{ optional($project->due_date)->thaiDate() ?? '-' }}</div>
                                     @if ($project->due_date && ! $done)
                                         @php $days = $project->days_remaining; @endphp
-                                        <span data-countdown class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold {{ $days < 0 ? 'bg-red-100 text-red-700' : ($days <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500') }}">
+                                        <span data-countdown class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold {{ $days < 0 ? 'bg-red-100 text-red-700' : ($days <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500') }}">
                                             {{ $days < 0 ? 'เลยกำหนด '.abs($days).' วัน' : ($days === 0 ? 'ครบกำหนดวันนี้' : 'เหลือ '.$days.' วัน') }}
                                         </span>
                                     @endif
@@ -137,7 +137,7 @@
                                         <span class="w-9 text-right text-xs font-bold tabular-nums text-slate-700">{{ $project->production_progress }}%</span>
                                     </div>
                                     @if ($project->project_tasks_avg_progress !== null)
-                                        <div class="mt-0.5 text-[11px] text-slate-400">งานบริหาร {{ $project->task_progress }}%</div>
+                                        <div class="mt-0.5 text-[12px] text-slate-400">งานบริหาร {{ $project->task_progress }}%</div>
                                     @endif
                                 </td>
                                 <td class="px-4 py-3 text-right">

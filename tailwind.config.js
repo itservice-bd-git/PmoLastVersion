@@ -43,6 +43,10 @@ export default {
                 // Anuphan from public/fonts/anuphan (no internet needed); Thai fallbacks if it ever fails to load
                 sans: ['Anuphan', 'Sarabun', 'Noto Sans Thai', 'Leelawadee UI', ...defaultTheme.fontFamily.sans],
             },
+            // readable as on สรุปงาน (reports/today): the smallest step is 13px, not 12px (Thai at 12px is hard to read)
+            fontSize: {
+                xs: ['0.8125rem', { lineHeight: '1.25rem' }],
+            },
             colors: {
                 blue: electric,
                 indigo: electric,

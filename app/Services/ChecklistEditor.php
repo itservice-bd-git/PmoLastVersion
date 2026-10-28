@@ -438,9 +438,12 @@ class ChecklistEditor
      * Every Sub Task's list of the cabinet as the page shows it (its items and the lists it compares with), and the bars
      * (the same shape as an edit's answer, one per Sub Task).
      */
-    public function cabinetLists(\App\Models\Cabinet $cabinet): array
+    public function cabinetLists(\App\Models\Cabinet $cabinet, ?User $user = null): array
     {
         $cabinet->load('tasks.subtasks.checklists.completedBy:id,name');
+        if ($user) {
+            WorkScope::trimCabinet($cabinet, $user);   // the same Sub Tasks the page shows them
+        }
         $handoff = app(HandoffService::class);
         $lists = [];
         $progress = [];

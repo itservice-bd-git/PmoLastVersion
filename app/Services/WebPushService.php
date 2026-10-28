@@ -32,6 +32,15 @@ class WebPushService
             return;
         }
 
+        // the push services (Google / Apple / Mozilla) can take seconds, or hang until the timeout on a host that limits
+        // outgoing connections: on a web request they go after the answer has reached the browser, so a click never waits
+        $deliver = fn () => $this->deliver($subs, $title, $body, $url, $tag, $extra);
+        app()->runningInConsole() ? $deliver() : app()->terminating($deliver);
+    }
+
+    /** @param  Collection<int, PushSubscription>  $subs */
+    private function deliver(Collection $subs, string $title, string $body, string $url, ?string $tag, array $extra): void
+    {
         try {
             $push = new WebPush(['VAPID' => [
                 'subject' => config('services.webpush.subject'),

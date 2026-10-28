@@ -3,9 +3,9 @@
     (kind="subtask": tick, remark, date) or a template's (kind="template": name + remark only).
     $items: the list already loaded by the page (as ChecklistEditor::items() shapes it) - saves a query per Sub Task.
 --}}
-@props(['kind', 'owner', 'items', 'editable' => false, 'dateLabel' => null, 'linked' => [], 'receivers' => []])
+@props(['kind', 'owner', 'items', 'editable' => false, 'tickable' => false, 'dateLabel' => null, 'linked' => [], 'receivers' => []])
 
-<div x-data="checklistEditor(@js(['kind' => $kind, 'ownerId' => $owner->id, 'url' => route('checklist-editor.apply', [$kind, $owner->id]), 'items' => $items, 'editable' => (bool) $editable, 'dateLabel' => $dateLabel, 'linked' => $linked, 'receivers' => $receivers]))"
+<div x-data="checklistEditor(@js(['kind' => $kind, 'ownerId' => $owner->id, 'url' => route('checklist-editor.apply', [$kind, $owner->id]), 'items' => $items, 'editable' => (bool) $editable, 'tickable' => (bool) $tickable, 'dateLabel' => $dateLabel, 'linked' => $linked, 'receivers' => $receivers]))"
      {{ $attributes->merge(['class' => 'text-sm']) }} @keydown.escape.stop="paste = null; dialog = null; cancelEdit()">
 
     {{-- several selected: one bar of actions --}}
@@ -53,7 +53,7 @@
     </div>
 
     <ul class="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
-        <li x-show="items.length > 1 && editable" x-cloak class="flex items-center gap-2 bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
+        <li x-show="items.length > 1 && editable" x-cloak class="flex items-center gap-2 bg-slate-50 px-2 py-1 text-[12px] text-slate-500">
             <input type="checkbox" :checked="allSelected" @change="toggleAll()" class="h-3.5 w-3.5 rounded border-slate-300" aria-label="เลือกทั้งหมด">
             <span x-text="items.length + ' รายการ' + (kind === 'subtask' ? ' · เสร็จ ' + doneCount : '')"></span>
             <span x-show="!linked.length" class="ml-auto hidden sm:inline">คลิกข้อความเพื่อแก้ · Enter บันทึก · ลาก ⋮⋮ หรือ Alt+↑↓ จัดลำดับ</span>
@@ -69,7 +69,7 @@
                 <span x-show="editable" draggable="true" @dragstart="dragStart($event, item)" @dragend="dragId = null" class="mt-0.5 shrink-0 cursor-grab select-none text-slate-300 hover:text-slate-500" title="ลากเพื่อจัดลำดับ">⋮⋮</span>
                 <template x-if="kind === 'subtask'">
                     {{-- who ticked it and when: on hover, not a line of its own --}}
-                    <input type="checkbox" :checked="item.done" @change="tick(item, $event.target.checked)" :disabled="!editable" class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600"
+                    <input type="checkbox" :checked="item.done" @change="tick(item, $event.target.checked)" :disabled="!tickable" class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600"
                            :title="item.done && item.doneBy ? '✓ ' + item.doneBy + (item.doneAt ? ' · ' + item.doneAt : '') : ''" :aria-label="'ทำแล้ว: ' + item.name">
                 </template>
                 <div class="min-w-0 flex-1">

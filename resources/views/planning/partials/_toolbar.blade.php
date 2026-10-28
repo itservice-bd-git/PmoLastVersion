@@ -71,7 +71,7 @@
                                 <span class="truncate" x-text="s.name + (s.pmo ? ' (PMO)' : '')" :title="s.pmo ? 'ยังไม่ได้ตั้งสถานะโครงการ — แสดงสถานะ PMO' : 'ตั้งใน ตั้งค่า › สถานะงาน'"></span></li>
                         </template>
                     </ul>
-                    <p class="mt-1 text-[11px] text-slate-400">(PMO) = ยังไม่ได้ตั้งสถานะโครงการ จึงแสดงสถานะ PMO · แถบจาง + ขีดฆ่า = เสร็จแล้ว · "เลย n วัน" = เกินกำหนด</p>
+                    <p class="mt-1 text-[12px] text-slate-400">(PMO) = ยังไม่ได้ตั้งสถานะโครงการ จึงแสดงสถานะ PMO · แถบจาง + ขีดฆ่า = เสร็จแล้ว · "เลย n วัน" = เกินกำหนด</p>
 
                     <p class="mb-1.5 mt-3 font-bold text-slate-800">เส้นสีใต้แถบ = ช่วงงานของแต่ละแผนก</p>
                     <ul class="grid grid-cols-2 gap-x-3 gap-y-1">
@@ -83,19 +83,19 @@
 
                     <p class="mb-1.5 mt-3 font-bold text-slate-800">ป้ายสถานะงานของแผนก (ในหน้าต่างโครงการ)</p>
                     <ul class="flex flex-wrap gap-1">
-                        <template x-for="s in statuses" :key="'lgs' + s.id"><li class="rounded-full px-2 py-0.5 text-[11px] font-semibold" :style="'background-color:' + s.color + '26;color:' + s.color" x-text="s.name"></li></template>
+                        <template x-for="s in statuses" :key="'lgs' + s.id"><li class="rounded-full px-2 py-0.5 text-[12px] font-semibold" :style="'background-color:' + s.color + '26;color:' + s.color" x-text="s.name"></li></template>
                     </ul>
-                    <p class="mt-1 text-[11px] text-slate-400">คิดจากงานของแผนกเอง · มีจุด • ต่อท้าย = Admin / PM ตั้งเอง</p>
+                    <p class="mt-1 text-[12px] text-slate-400">คิดจากงานของแผนกเอง · มีจุด • ต่อท้าย = Admin / PM ตั้งเอง</p>
 
                     <p class="mb-1.5 mt-3 font-bold text-slate-800">ตัวเลขที่มุมวัน</p>
                     <ul class="space-y-1 text-slate-700">
-                        <li class="flex items-center gap-1.5"><span class="rounded-full bg-blue-50 px-1.5 text-[10px] font-bold text-blue-700">3</span> งานที่ยังไม่เสร็จในวันนั้น</li>
-                        <li class="flex items-center gap-1.5"><span class="rounded-full bg-red-100 px-1.5 text-[10px] font-bold text-red-700">3</span> มีงานที่เลยกำหนดอยู่ในวันนั้น</li>
+                        <li class="flex items-center gap-1.5"><span class="rounded-full bg-blue-50 px-1.5 text-[11.5px] font-bold text-blue-700">3</span> งานที่ยังไม่เสร็จในวันนั้น</li>
+                        <li class="flex items-center gap-1.5"><span class="rounded-full bg-red-100 px-1.5 text-[11.5px] font-bold text-red-700">3</span> มีงานที่เลยกำหนดอยู่ในวันนั้น</li>
                     </ul>
                 </div>
             </div>
             <button type="button" x-show="waitingCount()" x-cloak @click="document.getElementById('waiting-box').scrollIntoView({ behavior: 'smooth', block: 'start' })"
-                    class="h-8 inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-100" title="งานที่ยังรอแผนกกดรับ">📥 รอรับ <span class="rounded-full bg-amber-600 px-1.5 text-[10px] text-white" x-text="waitingCount()"></span></button>
+                    class="h-8 inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-100" title="งานที่ยังรอแผนกกดรับ">📥 รอรับ <span class="rounded-full bg-amber-600 px-1.5 text-[11.5px] text-white" x-text="waitingCount()"></span></button>
             <a x-show="perms.export" :href="exportUrl()" class="h-8 inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50" title="ดาวน์โหลดงานของเดือนที่แสดงเป็น CSV">Export CSV</a>
             <button type="button" @click="drawer = drawer === 'stars' ? null : 'stars'" class="h-8 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50" title="โครงการที่ติดดาว">★ <span x-text="starredTasks().length"></span></button>
             <button type="button" x-show="canTrash" @click="drawer = drawer === 'trash' ? null : 'trash'" class="h-8 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50" title="ถังขยะ — กู้คืนโครงการ">🗑 <span x-text="trash.length"></span></button>

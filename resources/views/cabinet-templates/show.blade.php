@@ -4,7 +4,7 @@
             <x-back-link :href="route('cabinet-templates.index')" label="เทมเพลตทั้งหมด" />
             <h2 class="text-lg font-semibold text-slate-900">{{ $template->name }}</h2>
             @if ($template->is_default)
-                <span class="text-[10px] uppercase tracking-wide bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">Default</span>
+                <span class="text-[11.5px] uppercase tracking-wide bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">Default</span>
             @endif
         </div>
     </x-slot>
@@ -23,7 +23,7 @@
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                         <span>รหัส <span class="font-medium text-slate-700">{{ $template->code }}</span></span>
-                        @unless ($template->is_active)<span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500" title="ไม่แสดงให้เลือกตอนสร้างตู้">ปิดใช้งาน</span>@endunless
+                        @unless ($template->is_active)<span class="rounded bg-slate-100 px-1.5 py-0.5 text-[11.5px] font-semibold text-slate-500" title="ไม่แสดงให้เลือกตอนสร้างตู้">ปิดใช้งาน</span>@endunless
                     </div>
                     @if ($template->description)
                         <p class="text-sm text-slate-600 mt-1">{{ $template->description }}</p>
@@ -120,7 +120,7 @@
                             <tr class="border-t border-slate-100 align-top">
                                 <td class="p-2"><input type="checkbox" :value="r.id" x-model.number="picked" class="rounded border-slate-300"></td>
                                 <td class="p-2"><span class="font-medium text-slate-800" x-text="r.mo"></span> <span class="text-slate-500" x-text="r.name"></span>
-                                    <div class="text-[11px] text-slate-400" x-text="r.sample.join(', ') + (r.missing > r.sample.length ? ' …' : '')"></div></td>
+                                    <div class="text-[12px] text-slate-400" x-text="r.sample.join(', ') + (r.missing > r.sample.length ? ' …' : '')"></div></td>
                                 <td class="p-2 text-slate-600" x-text="r.project"></td>
                                 <td class="p-2 text-right font-semibold tabular-nums" x-text="r.missing + ' รายการ'"></td>
                             </tr>

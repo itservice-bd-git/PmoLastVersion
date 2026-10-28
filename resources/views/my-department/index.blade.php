@@ -57,14 +57,14 @@
                 <div x-show="sec.count > 0" class="space-y-2">
                     <p class="flex items-center justify-between text-xs font-semibold" :class="sec.tone">
                         <span x-text="sec.label"></span>
-                        <span class="rounded-full bg-slate-100 px-1.5 text-[11px] text-slate-600 tabular-nums" x-text="sec.count"></span>
+                        <span class="rounded-full bg-slate-100 px-1.5 text-[12px] text-slate-600 tabular-nums" x-text="sec.count"></span>
                     </p>
                     <template x-for="g in sec.groups" :key="sec.key + '-' + g.project_id">
                         <div class="rounded-lg border border-slate-200 bg-slate-50/60">
                             <div class="flex items-center gap-1.5 px-2.5 py-2">
                                 <svg x-show="flagClass(g)" :class="flagClass(g)" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3v18h2v-7h11l-2-4 2-4H7V3H5z"/></svg>
                                 <button type="button" @click="openProjectModal(g.project_id)" class="min-w-0 flex-1 truncate text-left text-sm font-semibold text-slate-800 hover:text-blue-600 hover:underline" x-text="g.project_no + ' ' + g.project_name"></button>
-                                <span class="text-[11px] text-slate-500 tabular-nums" x-text="g.items.length + ' งาน'"></span>
+                                <span class="text-[12px] text-slate-500 tabular-nums" x-text="g.items.length + ' งาน'"></span>
                             </div>
                             <ul class="border-t border-slate-200/70 divide-y divide-slate-100">
                                 <template x-for="i in g.items" :key="'f' + i.id">
@@ -72,8 +72,8 @@
                                         <button type="button" @click="openDetail(i)" class="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-white">
                                             <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="'background-color:' + statusColor(itemStatusKey(i))"></span>
                                             <span class="min-w-0 flex-1 truncate text-xs text-slate-700" x-text="i.cabinet_mo + ' · ' + i.name"></span>
-                                            <span x-show="i.checklists_total > 0" class="rounded bg-slate-200/70 px-1 text-[10px] font-semibold text-slate-600 tabular-nums" x-text="i.checklists_completed + '/' + i.checklists_total"></span>
-                                            <span class="text-[10px] text-slate-400 tabular-nums" x-text="fmt(i.due_date).slice(0, 5)"></span>
+                                            <span x-show="i.checklists_total > 0" class="rounded bg-slate-200/70 px-1 text-[11.5px] font-semibold text-slate-600 tabular-nums" x-text="i.checklists_completed + '/' + i.checklists_total"></span>
+                                            <span class="text-[11.5px] text-slate-400 tabular-nums" x-text="fmt(i.due_date).slice(0, 5)"></span>
                                         </button>
                                     </li>
                                 </template>
@@ -191,7 +191,7 @@
 
             {{-- ===================== เดือน (Month / 7-day grid) ===================== --}}
             <div x-show="mainView === 'calendar' && view === 'calendar'">
-                <div class="grid grid-cols-7 border-b border-slate-200 bg-white px-0 text-[11px] font-bold text-slate-500">
+                <div class="grid grid-cols-7 border-b border-slate-200 bg-white px-0 text-[12px] font-bold text-slate-500">
                     <template x-for="w in weekdayHeaders()"><div class="px-3 py-2" x-text="w"></div></template>
                 </div>
 
@@ -224,16 +224,16 @@
                                         <span class="truncate text-xs font-medium leading-tight" :class="b.done ? 'line-through text-slate-500' : 'text-slate-800'"
                                               x-text="(b.continuesBefore ? '◄ ' : '') + b.title"></span>
                                         <span class="mt-0.5 flex items-center gap-1.5">
-                                            <span x-show="b.badge" class="inline-flex min-w-[18px] h-[18px] items-center justify-center rounded px-1 text-[10px] font-bold text-white tabular-nums" :style="'background-color:' + statusColor(b.status)" x-text="b.badge"></span>
+                                            <span x-show="b.badge" class="inline-flex min-w-[18px] h-[18px] items-center justify-center rounded px-1 text-[11.5px] font-bold text-white tabular-nums" :style="'background-color:' + statusColor(b.status)" x-text="b.badge"></span>
                                             <svg x-show="flagClass(b.ref)" :class="flagClass(b.ref)" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3v18h2v-7h11l-2-4 2-4H7V3H5z"/></svg>
-                                            <span x-show="b.continuesAfter" class="ml-auto text-[10px] text-slate-500">►</span>
+                                            <span x-show="b.continuesAfter" class="ml-auto text-[11.5px] text-slate-500">►</span>
                                         </span>
                                     </div>
                                 </template>
                                 <template x-for="(d, idx) in week" :key="d.date + '-more'">
                                     <p x-show="weekHiddenCount(week, d.date) > 0" @click.stop="selectDate(d.date)"
                                        :style="'grid-column:' + (idx + 1) + '; grid-row:' + 5 + ';'"
-                                       class="self-start px-2 text-[10px] font-medium text-blue-600 hover:underline cursor-pointer"
+                                       class="self-start px-2 text-[11.5px] font-medium text-blue-600 hover:underline cursor-pointer"
                                        x-text="'+' + weekHiddenCount(week, d.date) + ' รายการ'"></p>
                                 </template>
                             </div>
@@ -273,7 +273,7 @@
                     <template x-for="section in listSections()" :key="'sec-' + (section.department_id ?? 'x')">
                         <tbody class="divide-y divide-slate-100">
                             <tr x-show="section.department_id !== null" class="bg-slate-50/60">
-                                <td colspan="6" class="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                <td colspan="6" class="px-4 py-1.5 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
                                     <span x-text="section.department_name"></span>
                                     <span class="text-slate-400 font-normal normal-case ml-1" x-text="'· ' + section.rows.length + ' งาน'"></span>
                                 </td>
@@ -288,7 +288,7 @@
                                     <td class="px-4 py-2" :class="subtaskNameClass(i)" x-text="i.name"></td>
                                     <td class="px-4 py-2 whitespace-nowrap">
                                         <span x-text="fmt(i.due_date)"></span>
-                                        <span x-show="i.is_overdue" class="ml-1 text-[11px] font-semibold text-red-600">เกินกำหนด</span>
+                                        <span x-show="i.is_overdue" class="ml-1 text-[12px] font-semibold text-red-600">เกินกำหนด</span>
                                     </td>
                                     <td class="px-4 py-2 whitespace-nowrap">
                                         <span :class="badgeClass(i)" class="rounded-full px-2 py-0.5 text-xs font-medium" x-text="shortStatusLabel(i)"></span>
@@ -346,7 +346,7 @@
                                         <span class="absolute -top-1.5 right-2 w-2.5 h-2.5 rounded-full ring-2 ring-white" :style="'background-color:' + statusColor(groupStatusKey(row.group))"></span>
                                         <span x-show="row.continuesBefore" class="shrink-0">◄</span>
                                         <span class="truncate font-semibold" :class="row.group.progress === 100 ? 'line-through text-slate-500' : 'text-slate-800'" x-text="row.group.project_no + ' ' + row.group.project_name"></span>
-                                        <span class="truncate text-[10px] text-slate-500" x-text="'· ' + row.group.cabinet_count + ' ตู้ · เสร็จ ' + row.group.done + '/' + row.group.total_subtasks"></span>
+                                        <span class="truncate text-[11.5px] text-slate-500" x-text="'· ' + row.group.cabinet_count + ' ตู้ · เสร็จ ' + row.group.done + '/' + row.group.total_subtasks"></span>
                                         <span x-show="row.continuesAfter" class="shrink-0 ml-auto">►</span>
                                     </div>
                                 </div>
@@ -394,7 +394,7 @@
                                             <span class="text-xs font-semibold tabular-nums" :class="b.overdue && b.count > 0 ? 'text-red-700' : 'text-slate-700'" x-text="b.count"></span>
                                             <div class="w-full max-w-[56px] rounded-t" :class="[b.overdue ? 'bg-red-600' : 'bg-blue-600', b.count === 0 ? 'opacity-30' : '']"
                                                  :style="'height:' + (b.count === 0 ? 3 : Math.max(6, Math.round(b.count / Math.max(1, ...dash.buckets.map((x) => x.count)) * 100))) + '%'"></div>
-                                            <span class="mt-1.5 text-[11px] text-center" :class="b.overdue ? 'text-red-700 font-medium' : 'text-slate-500'" x-text="b.label"></span>
+                                            <span class="mt-1.5 text-[12px] text-center" :class="b.overdue ? 'text-red-700 font-medium' : 'text-slate-500'" x-text="b.label"></span>
                                         </div>
                                     </template>
                                 </div>
@@ -435,7 +435,7 @@
                                                 <td class="px-4 py-2.5"><a :href="'{{ url('projects') }}/' + p.project_id" class="font-semibold text-blue-600 hover:underline" x-text="p.project_no"></a><p class="text-xs text-slate-500" x-text="p.project_name"></p></td>
                                                 <td class="px-4 py-2.5 whitespace-nowrap">
                                                     <span x-text="fmtBE(p.due_date)"></span>
-                                                    <p x-show="p.status === 'overdue' && p.days_remaining !== null" class="text-[11px] font-semibold text-red-600" x-text="'เลย ' + Math.abs(p.days_remaining) + ' วัน'"></p>
+                                                    <p x-show="p.status === 'overdue' && p.days_remaining !== null" class="text-[12px] font-semibold text-red-600" x-text="'เลย ' + Math.abs(p.days_remaining) + ' วัน'"></p>
                                                 </td>
                                                 <td class="px-4 py-2.5"><span class="rounded-full px-2.5 py-0.5 text-xs font-semibold" :style="'background-color:' + statusColor(p.status) + '26;color:' + statusColor(p.status)" x-text="statusLabel(p.status)"></span></td>
                                                 <td class="px-4 py-2.5 text-xs text-slate-600" x-text="p.departments.join(', ')"></td>

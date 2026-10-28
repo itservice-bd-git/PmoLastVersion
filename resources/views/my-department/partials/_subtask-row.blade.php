@@ -33,7 +33,7 @@
          (shortStatusLabel) rather than the server's longer assignment_status_label,
          which wrapped to 2 lines in this narrow column. --}}
     <span class="shrink-0 w-14">
-        <span :class="badgeClass({{ $v }})" class="inline-flex items-center whitespace-nowrap rounded-full px-1.5 py-0.5 text-[11px] font-medium" x-text="shortStatusLabel({{ $v }})"></span>
+        <span :class="badgeClass({{ $v }})" class="inline-flex items-center whitespace-nowrap rounded-full px-1.5 py-0.5 text-[12px] font-medium" x-text="shortStatusLabel({{ $v }})"></span>
     </span>
 
     {{-- Checklist - x/y only, no progress bar (that stays in the detail view) --}}
@@ -48,10 +48,10 @@
     <span class="shrink-0 w-12 flex items-center justify-end" @click.stop>
         <button type="button" x-show="{{ $v }}.assignment_status === 'ASSIGNED' && {{ $v }}.can_accept" :disabled="!!{{ $v }}.busy"
                 @click="act({{ $v }}, 'accept')"
-                class="px-2 py-1 rounded-md bg-indigo-600 text-white text-[11px] font-semibold hover:bg-indigo-700 disabled:opacity-50 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 transition">รับ</button>
+                class="px-2 py-1 rounded-md bg-indigo-600 text-white text-[12px] font-semibold hover:bg-indigo-700 disabled:opacity-50 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 transition">รับ</button>
         <button type="button" x-show="{{ $v }}.assignment_status === 'ACCEPTED' && {{ $v }}.can_start" :disabled="!!{{ $v }}.busy"
                 @click="act({{ $v }}, 'start')"
-                class="px-2 py-1 rounded-md bg-blue-600 text-white text-[11px] font-semibold hover:bg-blue-700 disabled:opacity-50 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 transition">เริ่ม</button>
+                class="px-2 py-1 rounded-md bg-blue-600 text-white text-[12px] font-semibold hover:bg-blue-700 disabled:opacity-50 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 transition">เริ่ม</button>
         <svg x-show="!((({{ $v }}.assignment_status === 'ASSIGNED') && {{ $v }}.can_accept) || (({{ $v }}.assignment_status === 'ACCEPTED') && {{ $v }}.can_start))"
              class="w-4 h-4 text-slate-300 group-hover:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />

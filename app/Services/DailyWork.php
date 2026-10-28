@@ -25,6 +25,8 @@ use Illuminate\Support\Collection;
  *                  longer, so it is not "received"; counted and listed with the reason until the work is handed out again
  *  - pending       the work it holds right now, not on a closed project: waiting (ASSIGNED), in progress (ACCEPTED /
  *                  IN_PROGRESS), and of those, overdue (due before today) - the same counts as the dashboard's "งานตามแผนก"
+ *  - new work      ("มีงานเข้า") pending work nobody has opened from this page yet: cabinet_subtasks.is_active = 0 until
+ *                  someone in its department's scope clicks it here (acknowledge()); then 1. Not tied to the range.
  * "ตู้" is the cabinets' quantity, as in รายงานการผลิต.
  */
 class DailyWork
@@ -37,6 +39,9 @@ class DailyWork
 
     /** "ความเคลื่อนไหว": at most this many new cabinets, newest first */
     public const FEED_NEW_CABINET_LIMIT = 200;
+
+    /** "มีงานเข้า": per department, at most this many of the work not opened yet are listed, newest first */
+    public const NEW_WORK_LIMIT = 30;
 
     public const EVENT_RECEIVED = 'received';
 
@@ -132,6 +137,7 @@ class DailyWork
                 'overdue' => $pending->filter(fn ($subtask) => $subtask->isLateOn($today))->count(),
                 'pending' => $pending->count(),
                 'rejected' => $rejectedSubtasks->where('rejected_department_id', $department->id)->count(),
+                'unacknowledged' => $pending->filter(fn ($subtask) => ! $subtask->is_active)->count(),
                 'chart' => array_map(fn ($bar) => [
                     'date' => $bar['start']->format('Y-m-d'),
                     'shortLabel' => $bar['shortLabel'],
@@ -182,13 +188,40 @@ class DailyWork
                 'overdue' => $departmentRows->sum('overdue'),
                 'pending' => $departmentRows->sum('pending'),
                 'rejected' => $departmentRows->sum('rejected'),
+                'unacknowledged' => $departmentRows->sum('unacknowledged'),
                 'activeDepartmentCount' => $departmentRows->filter(fn ($row) => $row['received'] + $row['completed'] > 0)->count(),
             ],
             'chartMax' => max(1, (int) $chartValues->max()),
             'departments' => $departmentRows->all(),
             'feed' => $feed,
             'workEventCount' => $workEventCount,
+            'newWork' => $this->newWork($shownDepartmentIds),
         ];
+    }
+
+    /**
+     * Someone opened work that came in: it is seen ("มีงานเข้า" goes away) for everyone. Only work within the viewer's
+     * department scope, and not on a closed project (read only). A plain update: no activity log, updated_at untouched.
+     *
+     * @param  list<int>|null  $departmentIds  the viewer's scope (null = every department)
+     * @return bool false = not the viewer's work, gone, or on a closed project
+     */
+    public function acknowledge(?array $departmentIds, int $subtaskId): bool
+    {
+        $subtask = CabinetSubtask::query()
+            ->whereKey($subtaskId)
+            ->whereNotNull('department_id')
+            ->when($departmentIds !== null, fn ($query) => $query->whereIn('department_id', $departmentIds))
+            ->whereHas('cabinetTask.cabinet.project', fn ($query) => $query->whereNotIn('status', Project::LOCKED_STATUSES))
+            ->first(['id', 'is_active']);
+        if (! $subtask) {
+            return false;
+        }
+        if (! $subtask->is_active) {
+            CabinetSubtask::query()->whereKey($subtask->id)->toBase()->update(['is_active' => true]);
+        }
+
+        return true;
     }
 
     /**
@@ -291,7 +324,7 @@ class DailyWork
             ->whereHas('cabinetTask.cabinet.project')
             ->withMax(['checklists as last_tick_at' => fn ($query) => $query->where('is_completed', true)], 'completed_at')
             ->with(['cabinetTask:id,cabinet_id', 'cabinetTask.cabinet:id,project_id,mo_no,cabinet_name,quantity', 'cabinetTask.cabinet.project:id,project_no,project_name'])
-            ->get(['id', 'cabinet_task_id', 'name', 'department_id', 'assignment_status', 'status',
+            ->get(['id', 'cabinet_task_id', 'name', 'department_id', 'assignment_status', 'status', 'is_active',
                 'assigned_at', 'accepted_at', 'started_at', 'completed_at', 'completed_date']);
     }
 
@@ -358,7 +391,57 @@ class DailyWork
             ->whereIn('assignment_status', self::PENDING_ASSIGNMENT_STATUSES)
             ->notDone()
             ->whereHas('cabinetTask.cabinet.project', fn ($query) => $query->whereNotIn('status', [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED]))
-            ->get(['id', 'department_id', 'assignment_status', 'status', 'due_date']);
+            ->get(['id', 'department_id', 'assignment_status', 'status', 'due_date', 'is_active']);
+    }
+
+    /** "มีงานเข้า": the pending work not opened yet, per department newest first, as feed events (the page groups them by department) */
+    private function newWork(array $departmentIds): array
+    {
+        if ($departmentIds === []) {
+            return [];
+        }
+
+        return CabinetSubtask::query()
+            ->whereIn('department_id', $departmentIds)
+            ->whereIn('assignment_status', self::PENDING_ASSIGNMENT_STATUSES)
+            ->where('is_active', false)
+            ->notDone()
+            ->whereHas('cabinetTask.cabinet.project', fn ($query) => $query->whereNotIn('status', [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED]))
+            ->with(['cabinetTask:id,cabinet_id', 'cabinetTask.cabinet:id,project_id,mo_no,cabinet_name,quantity', 'cabinetTask.cabinet.project:id,project_no,project_name'])
+            ->orderByDesc('assigned_at')->orderByDesc('id')
+            ->get(['id', 'cabinet_task_id', 'name', 'department_id', 'is_active', 'assigned_at'])
+            ->groupBy('department_id')
+            ->flatMap(fn ($subtasks) => $subtasks->take(self::NEW_WORK_LIMIT))
+            ->map(fn ($subtask) => ['key' => 'new-'.$subtask->id]
+                + $this->workEvent($subtask, self::EVENT_RECEIVED, $subtask->assigned_at, true, $subtask->assigned_at ? $this->dayAndMonth($subtask->assigned_at) : null))
+            ->values()->all();
+    }
+
+    /** one line of work in the feed; isNew = nobody has opened it from this page yet ("มีงานเข้า") */
+    private function workEvent(CabinetSubtask $subtask, string $type, ?Carbon $at, bool $hasTime, ?string $date): array
+    {
+        $cabinet = $subtask->cabinetTask?->cabinet;
+
+        return [
+            'key' => $type.'-'.$subtask->id,
+            'type' => $type,
+            'typeLabel' => self::EVENT_LABELS[$type],
+            'time' => $at && $hasTime ? $at->format('H:i') : null,
+            'date' => $date,
+            'departmentId' => $subtask->department_id,
+            'title' => (string) $subtask->name,
+            'projectNo' => (string) $cabinet?->project?->project_no,
+            'projectName' => (string) $cabinet?->project?->project_name,
+            'detail' => (string) ($cabinet?->mo_no ?: $cabinet?->cabinet_name),
+            'url' => $cabinet ? route('cabinets.show', $cabinet->id) : null,
+            'subtaskId' => $subtask->id,
+            'isNew' => ! $subtask->is_active,
+        ];
+    }
+
+    private function dayAndMonth(Carbon $date): string
+    {
+        return $date->day.' '.self::SHORT_MONTH_NAMES[$date->month - 1];
     }
 
     /** Work these departments sent back ("ไม่รับงาน") in the range, and not handed out again since. */
@@ -392,24 +475,11 @@ class DailyWork
     private function feed(Collection $movedSubtasks, Collection $newCabinets, Collection $rejectedSubtasks, Carbon $start, Carbon $end, bool $showDate): array
     {
         $workEvents = collect();
-        $dateLabel = fn (Carbon $at) => $showDate ? $at->day.' '.self::SHORT_MONTH_NAMES[$at->month - 1] : null;
+        $dateLabel = fn (Carbon $at) => $showDate ? $this->dayAndMonth($at) : null;
         foreach ($movedSubtasks as $subtask) {
             $addEvent = function (string $type, Carbon $at, bool $hasTime = true) use ($workEvents, $subtask, $dateLabel) {
-                $cabinet = $subtask->cabinetTask?->cabinet;
-                $workEvents->push([
-                    'key' => $type.'-'.$subtask->id,
-                    'type' => $type,
-                    'typeLabel' => self::EVENT_LABELS[$type],
-                    'time' => $hasTime ? $at->format('H:i') : null,
-                    'date' => $dateLabel($at),
-                    'sortAt' => $hasTime ? $at->getTimestamp() : $at->copy()->startOfDay()->getTimestamp(),
-                    'departmentId' => $subtask->department_id,
-                    'title' => (string) $subtask->name,
-                    'projectNo' => (string) $cabinet?->project?->project_no,
-                    'projectName' => (string) $cabinet?->project?->project_name,
-                    'detail' => (string) ($cabinet?->mo_no ?: $cabinet?->cabinet_name),
-                    'url' => $cabinet ? route('cabinets.show', $cabinet->id) : null,
-                ]);
+                $workEvents->push($this->workEvent($subtask, $type, $at, $hasTime, $dateLabel($at))
+                    + ['sortAt' => $hasTime ? $at->getTimestamp() : $at->copy()->startOfDay()->getTimestamp()]);
             };
             $steps = [
                 self::EVENT_RECEIVED => $subtask->assigned_at,
@@ -462,6 +532,8 @@ class DailyWork
                 'projectName' => (string) $cabinet->project?->project_name,
                 'detail' => max(1, (int) $cabinet->quantity).' ตู้'.($cabinet->mo_no ? ' · '.$cabinet->mo_no : ''),
                 'url' => route('cabinets.show', $cabinet->id),
+                'subtaskId' => null,
+                'isNew' => false,
             ]);
         }
 

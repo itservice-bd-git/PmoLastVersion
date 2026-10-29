@@ -17,8 +17,16 @@ use Illuminate\Validation\ValidationException;
  */
 class SubtaskPairs
 {
-    /** Set what a template Sub Task compares with: other Sub Tasks of the same template. @param list<int> $sourceIds */
-    public function setTemplatePairs(CabinetSubtaskTemplate $sub, array $sourceIds): void
+    /**
+     * Set what a template Sub Task compares with: other Sub Tasks of the same template. Those in $viewIds it only follows
+     * ("ดูอย่างเดียว": no copies, nothing to tick, e.g. ขาย watching จัดซื้อ → คลัง); those in $ownIds it uses the list of
+     * ("ใช้รายการเดียวกัน": copies it ticks for its own work, reaching nobody else, e.g. Production assembling them).
+     *
+     * @param  list<int>  $sourceIds
+     * @param  list<int>  $viewIds
+     * @param  list<int>  $ownIds
+     */
+    public function setTemplatePairs(CabinetSubtaskTemplate $sub, array $sourceIds, array $viewIds = [], array $ownIds = []): void
     {
         $sourceIds = collect($sourceIds)->map(fn ($id) => (int) $id)->unique()->reject(fn ($id) => $id === $sub->id)->values();
         $templateId = $sub->taskTemplate->cabinet_template_id;
@@ -26,15 +34,16 @@ class SubtaskPairs
         if ($valid->count() !== $sourceIds->count()) {
             throw ValidationException::withMessages(['sources' => 'เลือกได้เฉพาะ Sub Task ในเทมเพลตเดียวกัน']);
         }
-        $sub->pairSources()->sync($valid->all());
+        $sub->pairSources()->sync(self::withMode($valid, $viewIds, $ownIds));
         app(HandoffService::class)->forgetPairs();
     }
 
     /**
      * Change one cabinet's pairs (the cabinet page, Admin / PM): what this Sub Task compares with, other Sub Tasks of the same
-     * cabinet. Only this cabinet; the template keeps its own. @param list<int> $sourceIds
+     * cabinet. Only this cabinet; the template keeps its own. @param list<int> $sourceIds @param list<int> $viewIds only followed
+     * @param list<int> $ownIds their list used, its own ticks
      */
-    public function setCabinetPairs(CabinetSubtask $sub, array $sourceIds, ?\App\Models\User $actor = null): void
+    public function setCabinetPairs(CabinetSubtask $sub, array $sourceIds, ?\App\Models\User $actor = null, array $viewIds = [], array $ownIds = []): void
     {
         $sub->loadMissing('cabinetTask.cabinet');
         $cabinet = $sub->cabinetTask->cabinet;
@@ -44,8 +53,9 @@ class SubtaskPairs
         if ($valid->count() !== $sourceIds->count()) {
             throw ValidationException::withMessages(['sources' => 'เลือกได้เฉพาะ Sub Task ในตู้เดียวกัน']);
         }
-        $before = $sub->pairSources()->pluck('cabinet_subtasks.id')->sort()->values();
-        $sub->pairSources()->sync($valid->pluck('id')->all());
+        $mode = self::withMode($valid->pluck('id'), $viewIds, $ownIds);
+        $before = $sub->pairSources()->get()->mapWithKeys(fn ($s) => [$s->id => ['view_only' => (bool) $s->pivot->view_only, 'own_ticks' => (bool) $s->pivot->own_ticks]])->sortKeys()->all();
+        $sub->pairSources()->sync($mode);
         app(HandoffService::class)->forgetPairs();
         // this one first (a dropped pair frees its copies), then those comparing with it: an item that was a copy here can now be theirs
         $receivers = DB::table('cabinet_subtask_pairs')->where('source_subtask_id', $sub->id)->pluck('cabinet_subtask_id');
@@ -54,10 +64,11 @@ class SubtaskPairs
             $shared->syncReceivers($receivers);
         });
 
-        if ($before->all() !== $valid->pluck('id')->sort()->values()->all()) {
+        ksort($mode);
+        if ($before !== $mode) {
             \App\Models\ActivityLog::record($cabinet->project_id, $actor?->id, $sub, 'updated', $valid->isEmpty()
                 ? "เลิกเทียบ Checklist ของ {$sub->name} ({$cabinet->mo_no})"
-                : "ตั้งคู่เทียบ {$sub->name} ({$cabinet->mo_no}) กับ ".$valid->pluck('name')->implode(', '));
+                : "ตั้งคู่เทียบ {$sub->name} ({$cabinet->mo_no}) กับ ".$valid->map(fn ($s) => $s->name.($mode[$s->id]['view_only'] ? ' (ดูอย่างเดียว)' : ($mode[$s->id]['own_ticks'] ? ' (ใช้รายการเดียวกัน)' : '')))->implode(', '));
         }
     }
 
@@ -69,7 +80,7 @@ class SubtaskPairs
         }
         $rows = DB::table('cabinet_subtask_template_pairs')->whereIn('cabinet_subtask_template_id', array_keys($made))->get()
             ->filter(fn ($p) => isset($made[$p->source_subtask_template_id]))
-            ->map(fn ($p) => $this->row($made[$p->cabinet_subtask_template_id], $made[$p->source_subtask_template_id]));
+            ->map(fn ($p) => $this->row($made[$p->cabinet_subtask_template_id], $made[$p->source_subtask_template_id], (bool) $p->view_only, (bool) $p->own_ticks));
         DB::table('cabinet_subtask_pairs')->insertOrIgnore($rows->values()->all());
         app(HandoffService::class)->forgetPairs();
         $this->share(fn (SharedChecklist $shared) => $shared->syncReceivers($rows->pluck('cabinet_subtask_id')));
@@ -83,7 +94,7 @@ class SubtaskPairs
         }
         $rows = DB::table('cabinet_subtask_pairs')->whereIn('cabinet_subtask_id', array_keys($made))->get()
             ->filter(fn ($p) => isset($made[$p->source_subtask_id]))
-            ->map(fn ($p) => $this->row($made[$p->cabinet_subtask_id], $made[$p->source_subtask_id]));
+            ->map(fn ($p) => $this->row($made[$p->cabinet_subtask_id], $made[$p->source_subtask_id], (bool) $p->view_only, (bool) $p->own_ticks));
         DB::table('cabinet_subtask_pairs')->insertOrIgnore($rows->values()->all());
         app(HandoffService::class)->forgetPairs();
         $this->share(fn (SharedChecklist $shared) => $shared->syncReceivers($rows->pluck('cabinet_subtask_id')));
@@ -98,7 +109,7 @@ class SubtaskPairs
         $now = now();
         $rows = DB::table('cabinet_subtask_template_pairs')->whereIn('cabinet_subtask_template_id', array_keys($made))->get()
             ->filter(fn ($p) => isset($made[$p->source_subtask_template_id]))
-            ->map(fn ($p) => ['cabinet_subtask_template_id' => $made[$p->cabinet_subtask_template_id], 'source_subtask_template_id' => $made[$p->source_subtask_template_id], 'created_at' => $now, 'updated_at' => $now]);
+            ->map(fn ($p) => ['cabinet_subtask_template_id' => $made[$p->cabinet_subtask_template_id], 'source_subtask_template_id' => $made[$p->source_subtask_template_id], 'view_only' => (bool) $p->view_only, 'own_ticks' => (bool) $p->own_ticks, 'created_at' => $now, 'updated_at' => $now]);
         DB::table('cabinet_subtask_template_pairs')->insertOrIgnore($rows->values()->all());
         app(HandoffService::class)->forgetPairs();
     }
@@ -136,7 +147,7 @@ class SubtaskPairs
                 $made = $cabinetSubs->groupBy(fn ($s) => $s->cabinet_subtask_template_id ?: ($byName[self::norm($s->name)] ?? 0));
                 $rows = $pairs->flatMap(fn ($p) => collect($made->get($p->cabinet_subtask_template_id, []))
                     ->crossJoin(collect($made->get($p->source_subtask_template_id, [])))
-                    ->map(fn ($two) => $this->row($two[0]->id, $two[1]->id)));
+                    ->map(fn ($two) => $this->row($two[0]->id, $two[1]->id, (bool) $p->view_only, (bool) $p->own_ticks)));
                 if ($rows->isNotEmpty()) {
                     DB::table('cabinet_subtask_pairs')->insertOrIgnore($rows->all());
                     $got++;
@@ -159,9 +170,18 @@ class SubtaskPairs
         PlanningBoard::touch();
     }
 
-    private function row(int $to, int $from): array
+    private function row(int $to, int $from, bool $viewOnly = false, bool $ownTicks = false): array
     {
-        return ['cabinet_subtask_id' => $to, 'source_subtask_id' => $from, 'created_at' => now(), 'updated_at' => now()];
+        return ['cabinet_subtask_id' => $to, 'source_subtask_id' => $from, 'view_only' => $viewOnly, 'own_ticks' => $ownTicks && ! $viewOnly, 'created_at' => now(), 'updated_at' => now()];
+    }
+
+    /** sync() rows: id => ['view_only' => …, 'own_ticks' => …] (view only wins). @param Collection<int, int> $ids @param list<int> $viewIds @param list<int> $ownIds */
+    private static function withMode(Collection $ids, array $viewIds, array $ownIds = []): array
+    {
+        $view = array_map('intval', $viewIds);
+        $own = array_map('intval', $ownIds);
+
+        return $ids->mapWithKeys(fn ($id) => [(int) $id => ['view_only' => $v = in_array((int) $id, $view, true), 'own_ticks' => ! $v && in_array((int) $id, $own, true)]])->all();
     }
 
     public static function norm(string $s): string

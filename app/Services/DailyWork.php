@@ -21,8 +21,6 @@ use Illuminate\Support\Collection;
  *                  The earlier of the two is the day it was done, so a Sub Task is done on one day only.
  *  - new cabinets  cabinets (ตู้ / อุปกรณ์, by quantity) added to a project in the range; a department sees only those
  *                  it has work in. Not per department: a new cabinet's work is spread over many of them.
- *  - rejected      work the department sent back in the range ("ไม่รับงาน", SubtaskAssignmentService::reject): it holds it no
- *                  longer, so it is not "received"; counted and listed with the reason until the work is handed out again
  *  - pending       the work it holds right now, not on a closed project: waiting (ASSIGNED), in progress (ACCEPTED /
  *                  IN_PROGRESS), and of those, overdue (due before today) - the same counts as the dashboard's "งานตามแผนก"
  *  - new work      ("มีงานเข้า") pending work nobody has opened from this page yet: cabinet_subtasks.is_active = 0 until
@@ -53,16 +51,13 @@ class DailyWork
 
     public const EVENT_NEW_CABINET = 'new_cabinet';
 
-    public const EVENT_REJECTED = 'rejected';
-
     /** feed event type => the label on its tag */
     public const EVENT_LABELS = [
         self::EVENT_RECEIVED => 'งานเข้า',
         self::EVENT_ACCEPTED => 'รับงาน',
         self::EVENT_STARTED => 'เริ่มทำ',
         self::EVENT_COMPLETED => 'เสร็จ',
-        self::EVENT_NEW_CABINET => 'ตู้ใหม่',   // a cabinet added to a project ("ของเข้า" is the warehouse's word for goods arriving)
-        self::EVENT_REJECTED => 'ไม่รับ',
+        self::EVENT_NEW_CABINET => 'ของเข้า',
     ];
 
     private const SHORT_DAY_NAMES = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
@@ -106,7 +101,6 @@ class DailyWork
             ->filter(fn ($completion) => $completion['completed'] && $completion['completed']['at']->between($chartStart, $rangeEnd));
         $newCabinets = $this->newCabinets($departmentIds, $shownDepartmentIds, $rangeStart, $rangeEnd);
         $pendingSubtasks = $this->pendingSubtasks($shownDepartmentIds);
-        $rejectedSubtasks = $this->rejectedSubtasks($shownDepartmentIds, $rangeStart, $rangeEnd);
 
         $receivedBetween = fn (Collection $subtasks, Carbon $start, Carbon $end) => $subtasks
             ->filter(fn ($subtask) => $subtask->assigned_at->between($start, $end));
@@ -115,7 +109,7 @@ class DailyWork
             ->map(fn ($completion) => $completion['subtask']);
 
         $departmentRows = $departments->map(function (Department $department) use (
-            $receivedSubtasks, $completions, $pendingSubtasks, $rejectedSubtasks, $chartBars, $rangeStart, $rangeEnd, $today, $receivedBetween, $completedBetween
+            $receivedSubtasks, $completions, $pendingSubtasks, $chartBars, $rangeStart, $rangeEnd, $today, $receivedBetween, $completedBetween
         ) {
             $received = $receivedSubtasks->where('department_id', $department->id);
             $completed = $completions->filter(fn ($completion) => $completion['subtask']->department_id === $department->id);
@@ -136,7 +130,6 @@ class DailyWork
                 'inProgress' => $pending->count() - $waitingCount,
                 'overdue' => $pending->filter(fn ($subtask) => $subtask->isLateOn($today))->count(),
                 'pending' => $pending->count(),
-                'rejected' => $rejectedSubtasks->where('rejected_department_id', $department->id)->count(),
                 'unacknowledged' => $pending->filter(fn ($subtask) => ! $subtask->is_active)->count(),
                 'chart' => array_map(fn ($bar) => [
                     'date' => $bar['start']->format('Y-m-d'),
@@ -147,14 +140,14 @@ class DailyWork
                     'completed' => $completedBetween($completed, $bar['start'], $bar['end'])->count(),
                 ], $chartBars),
             ];
-            $row['isQuiet'] = $row['received'] + $row['completed'] + $row['pending'] + $row['rejected'] === 0;
+            $row['isQuiet'] = $row['received'] + $row['completed'] + $row['pending'] === 0;
 
             return $row;
         });
 
         // departments with work first, each group in name order, so cards stay put between refreshes
         $departmentRows = $departmentRows->sortBy(fn ($row) => [$row['isQuiet'] ? 1 : 0, $row['name']])->values();
-        [$feed, $workEventCount] = $this->feed($movedSubtasks, $newCabinets, $rejectedSubtasks, $rangeStart, $rangeEnd, $dayCount > 1);
+        [$feed, $workEventCount] = $this->feed($movedSubtasks, $newCabinets, $rangeStart, $rangeEnd, $dayCount > 1);
         $shiftRange = fn (int $days) => [
             'from' => $rangeStart->copy()->addDays($days)->format('Y-m-d'),
             'to' => $lastDay->copy()->addDays($days)->format('Y-m-d'),
@@ -187,7 +180,6 @@ class DailyWork
                 'inProgress' => $departmentRows->sum('inProgress'),
                 'overdue' => $departmentRows->sum('overdue'),
                 'pending' => $departmentRows->sum('pending'),
-                'rejected' => $departmentRows->sum('rejected'),
                 'unacknowledged' => $departmentRows->sum('unacknowledged'),
                 'activeDepartmentCount' => $departmentRows->filter(fn ($row) => $row['received'] + $row['completed'] > 0)->count(),
             ],
@@ -417,7 +409,10 @@ class DailyWork
             ->values()->all();
     }
 
-    /** one line of work in the feed; isNew = nobody has opened it from this page yet ("มีงานเข้า") */
+    /**
+     * one line of work in the feed; isNew = nobody has opened it from this page yet ("มีงานเข้า"). Its link opens the
+     * cabinet at that Sub Task (#goto-subtask-{id}: the cabinet page starts at its top, then scrolls down and opens it)
+     */
     private function workEvent(CabinetSubtask $subtask, string $type, ?Carbon $at, bool $hasTime, ?string $date): array
     {
         $cabinet = $subtask->cabinetTask?->cabinet;
@@ -433,7 +428,7 @@ class DailyWork
             'projectNo' => (string) $cabinet?->project?->project_no,
             'projectName' => (string) $cabinet?->project?->project_name,
             'detail' => (string) ($cabinet?->mo_no ?: $cabinet?->cabinet_name),
-            'url' => $cabinet ? route('cabinets.show', $cabinet->id) : null,
+            'url' => $cabinet ? route('cabinets.show', $cabinet->id).'#goto-subtask-'.$subtask->id : null,
             'subtaskId' => $subtask->id,
             'isNew' => ! $subtask->is_active,
         ];
@@ -442,21 +437,6 @@ class DailyWork
     private function dayAndMonth(Carbon $date): string
     {
         return $date->day.' '.self::SHORT_MONTH_NAMES[$date->month - 1];
-    }
-
-    /** Work these departments sent back ("ไม่รับงาน") in the range, and not handed out again since. */
-    private function rejectedSubtasks(array $departmentIds, Carbon $start, Carbon $end): Collection
-    {
-        if ($departmentIds === []) {
-            return collect();
-        }
-
-        return CabinetSubtask::query()
-            ->whereIn('rejected_department_id', $departmentIds)
-            ->whereBetween('rejected_at', [$start, $end])
-            ->whereHas('cabinetTask.cabinet.project')
-            ->with(['cabinetTask:id,cabinet_id', 'cabinetTask.cabinet:id,project_id,mo_no,cabinet_name,quantity', 'cabinetTask.cabinet.project:id,project_no,project_name'])
-            ->get(['id', 'cabinet_task_id', 'name', 'rejected_department_id', 'rejected_at', 'rejected_reason']);
     }
 
     /** How many cabinets (their quantity) the Sub Tasks belong to, each cabinet once. */
@@ -472,7 +452,7 @@ class DailyWork
      *
      * @return array{0: list<array>, 1: int} the events listed, and how many work events (not cabinets) there were in all
      */
-    private function feed(Collection $movedSubtasks, Collection $newCabinets, Collection $rejectedSubtasks, Carbon $start, Carbon $end, bool $showDate): array
+    private function feed(Collection $movedSubtasks, Collection $newCabinets, Carbon $start, Carbon $end, bool $showDate): array
     {
         $workEvents = collect();
         $dateLabel = fn (Carbon $at) => $showDate ? $this->dayAndMonth($at) : null;
@@ -495,25 +475,6 @@ class DailyWork
             if ($completed && $completed['at']->between($start, $end)) {
                 $addEvent(self::EVENT_COMPLETED, $completed['at'], $completed['hasTime']);
             }
-        }
-
-        foreach ($rejectedSubtasks as $subtask) {   // sent back: the department that did it, and why
-            $cabinet = $subtask->cabinetTask?->cabinet;
-            $workEvents->push([
-                'key' => self::EVENT_REJECTED.'-'.$subtask->id,
-                'type' => self::EVENT_REJECTED,
-                'typeLabel' => self::EVENT_LABELS[self::EVENT_REJECTED],
-                'time' => $subtask->rejected_at->format('H:i'),
-                'date' => $dateLabel($subtask->rejected_at),
-                'sortAt' => $subtask->rejected_at->getTimestamp(),
-                'departmentId' => $subtask->rejected_department_id,
-                'title' => (string) $subtask->name,
-                'projectNo' => (string) $cabinet?->project?->project_no,
-                'projectName' => (string) $cabinet?->project?->project_name,
-                'detail' => (string) ($cabinet?->mo_no ?: $cabinet?->cabinet_name),
-                'reason' => (string) $subtask->rejected_reason,
-                'url' => $cabinet ? route('cabinets.show', $cabinet->id) : null,
-            ]);
         }
 
         $workEventCount = $workEvents->count();

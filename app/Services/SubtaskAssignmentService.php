@@ -33,6 +33,7 @@ class SubtaskAssignmentService
         if (! $actor->canDispatchWork()) {
             throw new AssignmentException('เฉพาะผู้ดูแลระบบ (Admin) หรือ Project Manager เท่านั้นที่มีสิทธิ์เปลี่ยนแผนก', 403);
         }
+        $this->assertCanTakeWork($departmentId);
 
         return DB::transaction(function () use ($subtask, $departmentId, $actor) {
             $locked = CabinetSubtask::whereKey($subtask->id)->lockForUpdate()->firstOrFail();
@@ -97,6 +98,7 @@ class SubtaskAssignmentService
         if (! $actor->canDispatchWork()) {
             throw new AssignmentException('เฉพาะผู้ดูแลระบบ (Admin) หรือ Project Manager เท่านั้นที่มีสิทธิ์จ่ายงาน', 403);
         }
+        $this->assertCanTakeWork($departmentId);
 
         $redated = collect();   // already this department's: their date moved, which the "new work" notice does not cover
         $out = $this->notifications->batch(function () use ($subtaskIds, $departmentId, $actor, $dueDate, $redated) {
@@ -281,8 +283,20 @@ class SubtaskAssignmentService
     }
 
     /** The department's own members - or Admin / PM when Settings > กฎการทำงาน lets them act for departments. */
+    /** A department set "ดูได้อย่างเดียว" (Settings > สิทธิ์การใช้งาน, edit.work off) does no work: nothing is handed to it. */
+    private function assertCanTakeWork(?int $departmentId): void
+    {
+        if ($departmentId && ! \App\Support\Access::departmentAllows($departmentId, 'edit.work')) {
+            throw new AssignmentException('แผนก '.$this->departmentName($departmentId).' ตั้งเป็น "ดูได้อย่างเดียว" — จ่ายงานให้แผนกนี้ไม่ได้ (ตั้งค่า → สิทธิ์การใช้งาน)', 422);
+        }
+    }
+
     public function canActFor(CabinetSubtask $subtask, ?User $user): bool
     {
+        if ($user?->isViewOnly()) {
+            return false;
+        }
+
         return $this->isInAssignedDepartment($subtask, $user)
             || ($user !== null && $subtask->department_id !== null && $user->canDispatchWork() && AppSetting::get('pmo_acts_for_departments'));
     }
@@ -290,8 +304,7 @@ class SubtaskAssignmentService
     private function isInAssignedDepartment(CabinetSubtask $subtask, ?User $user): bool
     {
         return $user !== null
-            && $subtask->department_id !== null
-            && $user->department_id === $subtask->department_id;
+            && $user->inDepartment($subtask->department_id);
     }
 
     private function invalidTransitionMessage(CabinetSubtask $subtask, string $to): string

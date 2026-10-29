@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \App\Http\Middleware\DisableResponseCaching::class,
             \App\Http\Middleware\RunDailyReminders::class,   // reminders without a cron job (once a day)
+            \App\Http\Middleware\EnsureCanWork::class,       // a "ดูได้อย่างเดียว" department (edit.work off) writes nothing
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

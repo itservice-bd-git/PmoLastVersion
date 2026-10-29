@@ -11,6 +11,10 @@
 @props(['comments', 'noteRoute', 'noteModel', 'title' => 'Comment', 'subtitle' => null])
 
 <x-card :title="$title" :subtitle="$subtitle">
+    {{-- "ดูได้อย่างเดียว" (edit.work off): reads the thread, writes nothing --}}
+    @if (auth()->user()?->isViewOnly())
+        <p class="mb-1 border-b border-slate-100 pb-3 text-xs text-slate-400">👁 บัญชีนี้ดูได้อย่างเดียว — อ่านคอมเมนต์ได้ แต่เขียนไม่ได้</p>
+    @else
     <form method="POST" action="{{ route($noteRoute, $noteModel) }}" enctype="multipart/form-data" class="space-y-2 pb-4 mb-1 border-b border-slate-100">
         @csrf
         <div class="flex items-start gap-2">
@@ -23,6 +27,7 @@
             <p class="text-[12px] text-slate-400 mt-0.5">แนบไฟล์ได้สูงสุด 5 ไฟล์ — PDF, Word, Excel, รูปภาพ, DWG/DXF (ไม่เกิน 20 MB ต่อไฟล์)</p>
         </div>
     </form>
+    @endif
 
     <div class="divide-y divide-slate-100 -mx-5 -mb-5">
         @forelse ($comments as $comment)

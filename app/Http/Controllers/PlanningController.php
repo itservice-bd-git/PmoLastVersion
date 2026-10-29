@@ -69,7 +69,7 @@ class PlanningController extends Controller
 
         $subtasks = \App\Models\CabinetSubtask::query()
             ->whereHas('cabinetTask', fn ($q) => $q->where('cabinet_id', $cabinet->id))
-            ->when(! $user->canSeeAllWork(), fn ($q) => $q->where('department_id', $user->department_id))
+            ->when(! $user->canSeeAllWork(), fn ($q) => $q->whereIn('department_id', $user->departmentIds()))
             ->when(! $user->canDispatchWork(), fn ($q) => $q->whereNotNull('department_id'))
             ->with('cabinetTask:id,name,sequence', 'owner:id,name')->withCount(['checklists', 'checklists as checklists_done' => fn ($q) => $q->where('is_completed', true)])
             ->get()->sortBy(fn ($s) => sprintf('%05d-%05d-%07d', $s->cabinetTask->sequence ?? 0, $s->sequence ?? 0, $s->id))->values();
@@ -136,7 +136,9 @@ class PlanningController extends Controller
             'today' => today()->format('Y-m-d'),
             'canEdit' => $user->canDispatchWork(),          // project data and dates: Admin / Project Manager only (departments do their work: accept, checklists, fields, comments)
             'isPmo' => $user->canDispatchWork(),            // admin / PM only: delete, alert a department, dispatch; the server enforces it
-            'myDept' => $profile['dept_id'],                // '' for PMO roles (they see every department)
+            'myDept' => $profile['dept_id'],                // '' for PMO roles (they see every department), and for one looking after several
+            'myDepts' => array_map(fn ($id) => PlanningBoard::deptKey($id), $user->departmentIds()),   // the departments whose work is mine
+            'readOnly' => $user->isViewOnly(),              // "ดูได้อย่างเดียว" (edit.work off): nothing to tick, type or press; EnsureCanWork refuses it anyway
             'userName' => $user->name,
             'userId' => $user->id,                          // keys the browser-local "★" list
             'boardNo' => $current?->id,                    // null = the main board
@@ -161,10 +163,12 @@ class PlanningController extends Controller
             'jobTypes' => \App\Models\JobType::where('is_active', true)->orderBy('name')->get(['id', 'name'])->all(),
             'pmoStatuses' => \App\Models\Project::$statuses,
             // who can be the person doing a sub task (people of its department, or PMO roles)
-            'staff' => \App\Models\User::where('is_active', true)->orderBy('name')->get(['id', 'name', 'department_id', 'role'])
-                ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'deptId' => $u->department_id ? PlanningBoard::deptKey($u->department_id) : '', 'pmo' => $u->canDispatchWork()])->all(),
+            'staff' => \App\Models\User::where('is_active', true)->with('extraDepartments:id')->orderBy('name')->get(['id', 'name', 'department_id', 'role'])
+                ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'deptId' => $u->department_id ? PlanningBoard::deptKey($u->department_id) : '',
+                    'deptIds' => $u->extraDepartments->map(fn ($d) => PlanningBoard::deptKey($d->id))->all(), 'pmo' => $u->canDispatchWork()])->all(),
             'urlsCabinet' => route('planning.cabinet', ['cabinet' => '__ID__']),
-            'urlsCabinetPage' => route('cabinets.show', ['cabinet' => '__ID__']),   // the cabinet's own page (the full checklist editor)
+            'urlsCabinetPage' => route('cabinets.show', ['cabinet' => '__ID__']),
+            'urlsFollow' => route('projects.follow', ['project' => '__ID__']),   // "ติดตามโครงการ"   // the cabinet's own page (the full checklist editor)
             'managers' => $user->canDispatchWork() ? \App\Models\User::whereIn('role', [\App\Models\User::ROLE_ADMIN, \App\Models\User::ROLE_PROJECT_MANAGER])->where('is_active', true)->orderBy('name')->get(['id', 'name'])->all() : [],
             'people' => $this->mentionablePeople($user),     // for the @ picker (the server re-checks every tag)
             'open' => $request->integer('project') ?: null,  // a notification's link: open this project's window on load
@@ -196,7 +200,7 @@ class PlanningController extends Controller
         return \App\Models\User::query()->where('is_active', true)->where('id', '!=', $user->id)
             ->when(! $user->canViewOtherDepartments() && ! \App\Models\AppSetting::get('cross_mention'), fn ($q) => $q->where(fn ($w) => $w
                 ->whereIn('role', [\App\Models\User::ROLE_ADMIN, \App\Models\User::ROLE_PROJECT_MANAGER])
-                ->when($user->department_id, fn ($d) => $d->orWhere('department_id', $user->department_id))))
+                ->when($user->departmentIds(), fn ($d) => $d->orWhere(fn ($o) => $o->ofDepartment($user->departmentIds())))))
             ->with('department:id,name')->orderBy('name')->limit(300)->get(['id', 'name', 'role', 'department_id'])
             ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'dept' => $u->department?->name])->all();
     }

@@ -11,18 +11,27 @@ use Illuminate\Http\Request;
 /** "เทียบกับ…": which Sub Task shows which other one's checklist next to its own - on the cabinet template (perm:edit.templates) or one cabinet (Admin / PM). */
 class TemplatePairController extends Controller
 {
+    /** sources = what it compares with; view = those of them it only follows ("ดูอย่างเดียว"); own = those whose list it uses, ticking its own ("ใช้รายการเดียวกัน") */
+    private const RULES = ['sources' => ['present', 'array'], 'sources.*' => ['integer'], 'view' => ['sometimes', 'array'], 'view.*' => ['integer'], 'own' => ['sometimes', 'array'], 'own.*' => ['integer']];
+
     public function __construct(private SubtaskPairs $pairs) {}
+
+    /** One chosen pair for the picker (x-pair-picker). */
+    public static function chip($source): array
+    {
+        return ['id' => $source->id, 'name' => $source->name, 'dept' => (string) $source->department?->name, 'view' => (bool) $source->pivot?->view_only, 'own' => (bool) $source->pivot?->own_ticks];
+    }
 
     public function update(Request $request, CabinetSubtaskTemplate $subtaskTemplate)
     {
-        $data = $request->validate(['sources' => ['present', 'array'], 'sources.*' => ['integer']]);
-        $this->pairs->setTemplatePairs($subtaskTemplate, $data['sources']);
+        $data = $request->validate(self::RULES);
+        $this->pairs->setTemplatePairs($subtaskTemplate, $data['sources'], $data['view'] ?? [], $data['own'] ?? []);
         $sources = $subtaskTemplate->pairSources()->with('department:id,name')->get();
 
         return response()->json([
             'ok' => true,
             'message' => $sources->isEmpty() ? 'ไม่เทียบกับงานใดแล้ว' : 'บันทึกคู่เทียบแล้ว',
-            'sources' => $sources->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'dept' => (string) $s->department?->name])->values(),
+            'sources' => $sources->map(fn ($s) => self::chip($s))->values(),
             'cabinets' => $this->pairs->cabinetsOf($subtaskTemplate->taskTemplate->cabinetTemplate)->count(),
         ]);
     }
@@ -31,14 +40,14 @@ class TemplatePairController extends Controller
     public function updateCabinet(Request $request, CabinetSubtask $cabinetSubtask)
     {
         abort_unless($request->user()->canDispatchWork(), 403, 'เฉพาะผู้ดูแลระบบ (Admin) หรือ Project Manager เท่านั้นที่แก้คู่เทียบได้');
-        $data = $request->validate(['sources' => ['present', 'array'], 'sources.*' => ['integer']]);
-        $this->pairs->setCabinetPairs($cabinetSubtask, $data['sources'], $request->user());
+        $data = $request->validate(self::RULES);
+        $this->pairs->setCabinetPairs($cabinetSubtask, $data['sources'], $request->user(), $data['view'] ?? [], $data['own'] ?? []);
         $sources = $cabinetSubtask->pairSources()->with('department:id,name')->get();
 
         return response()->json([
             'ok' => true,
             'message' => $sources->isEmpty() ? 'ไม่เทียบกับงานใดแล้ว' : 'บันทึกคู่เทียบของตู้นี้แล้ว',
-            'sources' => $sources->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'dept' => (string) $s->department?->name])->values(),
+            'sources' => $sources->map(fn ($s) => self::chip($s))->values(),
         ]);
     }
 

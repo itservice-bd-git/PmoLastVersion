@@ -27,6 +27,21 @@
                     <span class="font-semibold text-slate-700">{{ $project->project_no }}</span>
                     @if ($project->customer_name)<span class="text-slate-300" aria-hidden="true">·</span><span>{{ $project->customer_name }}</span>@endif
                 </p>
+                {{-- "ติดตามโครงการ": anyone who sees the project (ProjectFollowers); its พนักงานขาย follow it already --}}
+                @php $followers = $project->followers()->orderBy('name')->get(['users.id', 'name']); $following = $followers->contains('id', auth()->id()); @endphp
+                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <form method="POST" action="{{ route('projects.follow', $project) }}">
+                        @csrf
+                        <button class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 font-semibold {{ $following ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50' }}"
+                                title="{{ $following ? 'กดเพื่อเลิกติดตาม' : 'รับแจ้งเตือนความเคลื่อนไหวของโครงการนี้' }}">
+                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                            {{ $following ? 'ติดตามอยู่' : 'ติดตามโครงการ' }}
+                        </button>
+                    </form>
+                    @if ($followers->isNotEmpty())
+                        <span>ผู้ติดตาม: {{ $followers->pluck('name')->implode(', ') }}</span>
+                    @endif
+                </div>
             </div>
             @editplan
             <div class="flex shrink-0 gap-2">

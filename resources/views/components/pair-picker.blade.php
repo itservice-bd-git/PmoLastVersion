@@ -1,10 +1,12 @@
 {{--
-    "เทียบกับ…": choose the other Sub Tasks whose checklist shows next to this one's (several at once), saved by PUT {sources}.
+    "เทียบกับ…": choose the other Sub Tasks whose checklist shows next to this one's (several at once), saved by PUT {sources, view}.
+    Each one chosen is "เทียบ/รับงาน" (takes its items, its ticks tick them: คลัง ← จัดซื้อ), "ใช้รายการเดียวกัน" (own: the same
+    items to tick for its own work, reaching nobody: Production assembling) or "ดูอย่างเดียว" (view: only follows it).
     On the cabinet template (every cabinet made from it) or on one cabinet (Admin / PM; the page reloads to show the new pairs).
 --}}
 @props(['url', 'chosen', 'options', 'canEdit' => false, 'chips' => true, 'reload' => false, 'hint' => 'เลือก Sub Task ที่จะวาง Checklist ข้างกัน (เลือกได้หลายงาน)'])
 <div {{ $attributes->merge(['class' => 'relative flex flex-wrap items-center gap-1.5 text-xs']) }}
-     x-data="{ open: false, busy: false, chosen: @js($chosen), sel: [], options: @js($options), pos: '',
+     x-data="{ open: false, busy: false, chosen: @js($chosen), sel: [], view: [], own: [], options: @js($options), pos: '',
                // fixed to the screen, so the card around it (overflow hidden) cannot cut it; above the button when there is no room below
                place() {
                    const r = this.$refs.btn.getBoundingClientRect(), w = Math.min(320, window.innerWidth - 24), h = 380;
@@ -15,7 +17,7 @@
                async save() {
                    this.busy = true;
                    try {
-                       const res = await fetch(@js($url), { method: 'PUT', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }, body: JSON.stringify({ sources: this.sel }) });
+                       const res = await fetch(@js($url), { method: 'PUT', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }, body: JSON.stringify({ sources: this.sel, view: this.view.filter((id) => this.sel.includes(id)), own: this.own.filter((id) => this.sel.includes(id)) }) });
                        const data = await res.json().catch(() => ({}));
                        if (!res.ok) throw new Error(data.message || 'บันทึกไม่สำเร็จ');
                        this.chosen = data.sources; this.open = false;
@@ -28,23 +30,37 @@
         <template x-for="c in chosen" :key="c.id">
             <span class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-800 ring-1 ring-blue-200">
                 <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>
-                <span x-text="'เทียบกับ ' + c.name + (c.dept ? ' · ' + c.dept : '')"></span>
+                <span x-text="(c.view ? 'ดู ' : (c.own ? 'ใช้รายการของ ' : 'เทียบกับ ')) + c.name + (c.dept ? ' · ' + c.dept : '') + (c.view ? ' (ดูอย่างเดียว)' : (c.own ? ' (ติ๊กของตัวเอง)' : ''))"></span>
             </span>
         </template>
     @endif
     @if ($canEdit)
-        <button type="button" x-ref="btn" @click="open = !open; sel = chosen.map((c) => c.id); open && place()" :aria-expanded="open"
+        <button type="button" x-ref="btn" @click="open = !open; sel = chosen.map((c) => c.id); view = chosen.filter((c) => c.view).map((c) => c.id); own = chosen.filter((c) => c.own).map((c) => c.id); open && place()" :aria-expanded="open"
                 class="rounded-full border border-dashed border-slate-300 px-2 py-0.5 font-medium text-slate-600 hover:border-blue-400 hover:text-blue-700"
                 x-text="chosen.length ? '⇄ แก้คู่เทียบ' : '＋ เทียบกับ…'"></button>
         <div x-show="open" x-cloak :style="pos" class="fixed z-50 flex flex-col rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
             <p class="px-1 pb-1.5 text-[12px] font-semibold text-slate-500">{{ $hint }}</p>
             <div class="min-h-0 flex-1 overflow-y-auto">
                 <template x-for="o in options" :key="o.id">
-                    <label class="flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1.5 hover:bg-slate-50">
-                        <input type="checkbox" :value="o.id" x-model.number="sel" class="mt-0.5 rounded border-slate-300 text-blue-600">
-                        <span class="min-w-0 leading-snug"><span class="block text-[13px] text-slate-800" x-text="o.name"></span>
-                            <span class="text-[12px] text-slate-500" x-text="o.task + (o.dept ? ' · ' + o.dept : '')"></span></span>
-                    </label>
+                    <div class="rounded-md hover:bg-slate-50">
+                        <label class="flex cursor-pointer items-start gap-2 px-1.5 py-1.5">
+                            <input type="checkbox" :value="o.id" x-model.number="sel" class="mt-0.5 rounded border-slate-300 text-blue-600">
+                            <span class="min-w-0 leading-snug"><span class="block text-[13px] text-slate-800" x-text="o.name"></span>
+                                <span class="text-[12px] text-slate-500" x-text="o.task + (o.dept ? ' · ' + o.dept : '')"></span></span>
+                        </label>
+                        {{-- how: take its items (tick them, they tick the source) or only follow them --}}
+                        <div x-show="sel.includes(o.id)" class="flex flex-wrap gap-1 pb-1.5 pl-7 pr-1.5 text-[12px]">
+                            <button type="button" @click="view = view.filter((id) => id !== o.id); own = own.filter((id) => id !== o.id)" class="rounded-full px-2 py-0.5 ring-1"
+                                    :class="!view.includes(o.id) && !own.includes(o.id) ? 'bg-blue-600 font-semibold text-white ring-blue-600' : 'text-slate-600 ring-slate-300 hover:bg-white'"
+                                    title="ได้รายการเดียวกัน ติ๊กรับได้ (ติ๊กแล้วต้นทางถูกติ๊กด้วย) — เช่น คลังรับของจากจัดซื้อ">เทียบ/รับงาน</button>
+                            <button type="button" @click="view = view.filter((id) => id !== o.id); own.includes(o.id) || own.push(o.id)" class="rounded-full px-2 py-0.5 ring-1"
+                                    :class="own.includes(o.id) ? 'bg-emerald-600 font-semibold text-white ring-emerald-600' : 'text-slate-600 ring-slate-300 hover:bg-white'"
+                                    title="ได้รายการเดียวกันไว้ติ๊กงานของตัวเอง (นับใน %) ติ๊กแล้วไม่ไปติ๊กต้นทาง — เห็นว่าคลังรับของแล้วหรือยัง เช่น Production ประกอบ">ใช้รายการเดียวกัน</button>
+                            <button type="button" @click="own = own.filter((id) => id !== o.id); view.includes(o.id) || view.push(o.id)" class="rounded-full px-2 py-0.5 ring-1"
+                                    :class="view.includes(o.id) ? 'bg-slate-700 font-semibold text-white ring-slate-700' : 'text-slate-600 ring-slate-300 hover:bg-white'"
+                                    title="เห็นรายการ วันที่ และการรับของ แต่ไม่มีรายการเพิ่มในงานนี้ ติ๊กไม่ได้ ไม่นับใน %">ดูอย่างเดียว</button>
+                        </div>
+                    </div>
                 </template>
                 <p x-show="!options.length" class="px-1.5 py-2 text-slate-400">ยังไม่มี Sub Task อื่น</p>
             </div>

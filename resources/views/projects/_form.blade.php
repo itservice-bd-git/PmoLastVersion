@@ -36,10 +36,29 @@
         <x-input-label for="po_no" value="เลขที่ใบสั่งซื้อ (PO)" />
         <x-text-input id="po_no" name="po_no" class="mt-1 block w-full" :value="old('po_no', $p?->po_no)" />
     </div>
-    <div>
-        <x-input-label for="sales_person" value="พนักงานขาย" />
-        <x-text-input id="sales_person" name="sales_person" class="mt-1 block w-full" :value="old('sales_person', $p?->sales_person)" />
+    {{-- พนักงานขาย: tick the sales people (several at once) - they follow the project and hear its news (ProjectFollowers);
+         a project made before this keeps its typed names, and a name that is one of them comes ticked --}}
+    @php
+        $salesPeople ??= collect();
+        $typed = collect(preg_split('/\s*,\s*/u', (string) $p?->sales_person))->filter();
+        $salesTicked = collect(old('sales_ids', ($salesChosen ?? []) ?: $salesPeople->whereIn('name', $typed->all())->pluck('id')->all()))->map(fn ($id) => (int) $id);
+        $salesOther = old('sales_person', \App\Services\ProjectFollowers::otherNames($p?->sales_person, $salesPeople->whereIn('id', $salesTicked->all())));
+    @endphp
+    <div class="md:col-span-2">
+        <span class="block text-sm font-medium text-slate-700">พนักงานขาย <span class="font-normal text-slate-400">— เลือกได้หลายคน · คนที่เลือกจะติดตามโครงการนี้และได้รับแจ้งเตือนความเคลื่อนไหว</span></span>
+        <div class="mt-1 flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white p-2">
+            @forelse ($salesPeople as $person)
+                <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-700 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-800">
+                    <input type="checkbox" name="sales_ids[]" value="{{ $person->id }}" @checked($salesTicked->contains($person->id)) class="rounded border-slate-300 text-blue-600">
+                    {{ $person->name }}
+                </label>
+            @empty
+                <span class="px-1 py-1 text-xs text-slate-400">ยังไม่มีผู้ใช้ในแผนกขาย (ตั้งค่า → ผู้ใช้งาน)</span>
+            @endforelse
+        </div>
+        <x-text-input id="sales_person" name="sales_person" class="mt-2 block w-full" :value="$salesOther" placeholder="ชื่ออื่นที่ไม่มีบัญชีในระบบ (คั่นด้วย ,)" />
         <x-input-error :messages="$errors->get('sales_person')" class="mt-1" />
+        <x-input-error :messages="$errors->get('sales_ids')" class="mt-1" />
     </div>
     <div>
         <x-input-label for="project_manager_id" value="ผู้จัดการโครงการ (PM)" />

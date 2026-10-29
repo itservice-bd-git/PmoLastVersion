@@ -41,13 +41,13 @@ class CabinetSubtaskTemplate extends Model
     /** The Sub Tasks whose checklist this one is shown next to, to compare (copied to every cabinet made from the template). */
     public function pairSources()
     {
-        return $this->belongsToMany(self::class, 'cabinet_subtask_template_pairs', 'cabinet_subtask_template_id', 'source_subtask_template_id')->withTimestamps();
+        return $this->belongsToMany(self::class, 'cabinet_subtask_template_pairs', 'cabinet_subtask_template_id', 'source_subtask_template_id')->withPivot('view_only', 'own_ticks')->withTimestamps();
     }
 
     /** The Sub Tasks that compare with this one. */
     public function pairReceivers()
     {
-        return $this->belongsToMany(self::class, 'cabinet_subtask_template_pairs', 'source_subtask_template_id', 'cabinet_subtask_template_id');
+        return $this->belongsToMany(self::class, 'cabinet_subtask_template_pairs', 'source_subtask_template_id', 'cabinet_subtask_template_id')->withPivot('view_only', 'own_ticks');
     }
 
     public function checklistTemplates()

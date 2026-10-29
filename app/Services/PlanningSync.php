@@ -119,6 +119,7 @@ class PlanningSync
                 'stage_status' => $this->stageStatus($user, $op),
                 'checklist_rename' => $this->checklistRename($user, $op),
                 'checklist_remark' => $this->checklistRemark($user, $op),
+                'checklist_tags' => $this->checklistTags($user, $op),
                 'checklist_date' => $this->checklistDate($user, $op),
                 'checklist_date_all' => $this->checklistDateAll($user, $op),
                 'checklist_move' => $this->checklistMove($user, $op),
@@ -323,7 +324,7 @@ class PlanningSync
 
         foreach (User::whereIn('id', $ids)->where('is_active', true)->get() as $target) {
             $sameCircle = AppSetting::get('cross_mention') || $sender->canViewOtherDepartments() || $target->canViewOtherDepartments()
-                || ($sender->department_id !== null && $sender->department_id === $target->department_id);
+                || array_intersect($sender->departmentIds(), $target->departmentIds()) !== [];
 
             if ($target->id !== $sender->id && $sameCircle && WorkScope::canSeeProject($project, $target)) {
                 $allowed->push($target);
@@ -392,7 +393,7 @@ class PlanningSync
         }
 
         // everyone else following the project hears about the new comment / reply (not those already tagged / alerted)
-        $skip = array_merge($told ?? [], isset($dept) ? User::where('department_id', $dept->id)->pluck('id')->all() : []);
+        $skip = array_merge($told ?? [], isset($dept) ? User::ofDepartment($dept->id)->pluck('id')->all() : []);
         $this->notifications->commented($project, $user, $this->lastNote, $skip);
 
         return $notes ? 'บันทึกคอมเมนต์แล้ว · '.implode(' · ', $notes) : null;
@@ -515,7 +516,7 @@ class PlanningSync
     {
         $this->requirePmo($user, 'แก้วันกำหนดส่งของแผนก');
         $project = $this->projectFor($user, $op['taskId'] ?? null);
-        $this->moveDue($this->deptSubtasks($project, $user, $op['deptId'] ?? null)->when(! $user->canDispatchWork(), fn ($c) => $c->where('department_id', $user->department_id)), $this->date($op['due'] ?? null), $user);
+        $this->moveDue($this->deptSubtasks($project, $user, $op['deptId'] ?? null)->when(! $user->canDispatchWork(), fn ($c) => $c->whereIn('department_id', $user->departmentIds())), $this->date($op['due'] ?? null), $user);
 
         return null;
     }
@@ -528,7 +529,7 @@ class PlanningSync
 
         $subtasks = WorkScope::projectSubtasks($project, $user)
             ->whereHas('cabinetTask', fn ($q) => $q->where('cabinet_id', $cabinetId))
-            ->when(! $user->canDispatchWork(), fn ($q) => $q->where('department_id', $user->department_id))   // dates stay inside your own department's work, even if you may SEE more
+            ->when(! $user->canDispatchWork(), fn ($q) => $q->whereIn('department_id', $user->departmentIds()))   // dates stay inside your own department's work, even if you may SEE more
             ->when($perDept, fn ($q) => $q->where('department_id', $this->id($op['deptId'] ?? null, 'd_')))
             ->with('cabinetTask.cabinet')->get();
 
@@ -621,7 +622,7 @@ class PlanningSync
         ProjectLock::assertOpen($project->id);
         $deptId = $this->id($op['deptId'] ?? null, 'd_');
 
-        if (! $user->canDispatchWork() && $user->department_id !== $deptId) {
+        if (! $user->canDispatchWork() && ! $user->inDepartment($deptId)) {
             throw new PlanningRejected('แก้ข้อมูลเพิ่มเติมได้เฉพาะของแผนกตัวเอง');
         }
         if (! WorkScope::projectSubtasks($project, $user)->where('department_id', $deptId)->exists()) {

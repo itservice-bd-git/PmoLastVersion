@@ -13,8 +13,6 @@
                             class="border-r border-slate-100 last:border-r-0 px-3 pt-2 pb-1 text-left hover:bg-blue-50/50 focus:outline-none">
                         <span :class="d.date === today ? 'bg-blue-600 text-white' : (d.inMonth ? 'text-slate-800' : 'text-slate-300')"
                               class="inline-flex items-center justify-center min-w-[1.6rem] h-[1.6rem] rounded-full text-xs font-semibold" x-text="d.day"></span>
-                        <span x-show="dayLoad(d.date).n" class="float-right mt-1 rounded-full px-1.5 text-[11.5px] font-bold tabular-nums" :class="dayLoad(d.date).late ? 'bg-red-100 text-red-700' : 'bg-blue-50 text-blue-700'"
-                              :title="dayLoad(d.date).n + ' งานที่ยังไม่เสร็จในวันนี้' + (dayLoad(d.date).late ? ' (มีงานเลยกำหนด)' : '')" x-text="dayLoad(d.date).n"></span>
                     </button>
                 </template>
             </div>
@@ -38,6 +36,7 @@
                                   x-text="barLabel(b)"></span>
                             <span class="mt-0.5 flex items-center gap-1.5">
                                 <button type="button" x-show="canEdit" @click.stop="openStatusPop($event, b.t)" class="h-3 w-3 shrink-0 rounded-full ring-2 ring-white" :style="'background-color:' + statusColor(b.t)" :title="statusOf(b.t).name + ' — คลิกเพื่อเปลี่ยนสถานะ'" :aria-label="'สถานะ: ' + statusOf(b.t).name"></button>
+                                <span x-show="remarkCount(b.t)" class="shrink-0 text-amber-700" :title="'มีหมายเหตุ ' + remarkCount(b.t) + ' รายการ'"><svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4h16v12H8l-4 4z"/></svg></span>
                                 <span x-show="b.t.alertPending" class="text-[12px] leading-none" title="มีแจ้งเตือนถึงแผนกคุณที่ยังไม่ได้รับทราบ">🔔</span>
                                 <span x-show="isPmo && warningList(b.t).length" class="text-[11.5px] leading-none text-amber-600" :title="'ข้อมูลยังขาด: ' + warningList(b.t).map((w) => w.text).join(' · ')">⚠</span>
                                 <span class="inline-flex min-w-[18px] h-[18px] items-center justify-center rounded px-1 text-[11.5px] font-bold text-white tabular-nums" :style="'background-color:' + statusColor(b.t)" x-text="b.t.subtasks.length"></span>

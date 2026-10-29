@@ -41,7 +41,8 @@ class DepartmentDashboard
             return $requestedDepartmentId ? [$requestedDepartmentId] : null;
         }
 
-        return $user->department_id ? [$user->department_id] : [];
+        // their departments (their own, and the ones they look after); one of them when they ask for it
+        return $requestedDepartmentId && $user->inDepartment($requestedDepartmentId) ? [$requestedDepartmentId] : $user->departmentIds();
     }
 
     /**

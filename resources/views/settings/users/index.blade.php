@@ -30,7 +30,7 @@
                                 <td class="px-5 py-3 font-medium text-slate-800">{{ $user->name }}</td>
                                 <td class="px-5 py-3 text-slate-600">{{ $user->email }}</td>
                                 <td class="px-5 py-3 text-slate-600">{{ str($user->role)->headline() }}</td>
-                                <td class="px-5 py-3 text-slate-600">{{ $user->department?->name ?? '-' }}</td>
+                                <td class="px-5 py-3 text-slate-600">{{ $user->department?->name ?? '-' }}@if ($user->extraDepartments->isNotEmpty())<span class="block text-xs text-slate-400">+ {{ $user->extraDepartments->pluck('name')->implode(', ') }}</span>@endif</td>
                                 <td class="px-5 py-3">
                                     @if ($user->is_active)
                                         <span class="text-emerald-600 text-xs font-semibold">Active</span>

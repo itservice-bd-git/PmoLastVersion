@@ -108,7 +108,7 @@ class ChecklistNoticeRules
     /** The items the Sub Tasks paired with this one have not dealt with yet (none paired: the ones not ticked). */
     private function pending(CabinetSubtask $sub, Collection $items): Collection
     {
-        $receivers = CabinetSubtask::whereKey(DB::table('cabinet_subtask_pairs')->where('source_subtask_id', $sub->id)->pluck('cabinet_subtask_id'))
+        $receivers = CabinetSubtask::whereKey(DB::table('cabinet_subtask_pairs')->where('source_subtask_id', $sub->id)->where('view_only', false)->where('own_ticks', false)->pluck('cabinet_subtask_id'))
             ->with('checklists')->get();
         if ($receivers->isEmpty()) {
             return $items->reject(fn ($i) => $i->is_completed);
@@ -186,7 +186,7 @@ class ChecklistNoticeRules
         }
 
         return User::where('is_active', true)
-            ->where(fn ($q) => $q->whereIn('department_id', $depts->all() ?: [0])->orWhereIn('id', $users->all() ?: [0]))
+            ->where(fn ($q) => $q->ofDepartment($depts->all() ?: [0])->orWhereIn('id', $users->all() ?: [0]))
             ->when($actor, fn ($q) => $q->where('id', '!=', $actor->id))->get();
     }
 

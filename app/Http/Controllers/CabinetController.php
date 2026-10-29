@@ -123,7 +123,7 @@ class CabinetController extends Controller
             'tasks.subtasks.acceptedBy',
             'tasks.subtasks.startedBy',
             'tasks.subtasks.completedBy',
-            'tasks.subtasks.pairSources',   // "แก้คู่เทียบ"
+            'tasks.subtasks.pairSources.department:id,name',   // "แก้คู่เทียบ"
         ]);
 
         \App\Services\WorkScope::trimCabinet($cabinet, $request->user());   // only their own department's work, unless they may see all
@@ -148,6 +148,7 @@ class CabinetController extends Controller
             'departments' => \App\Models\Department::orderBy('name')->get(),
             'users' => \App\Models\User::orderBy('name')->get(),
             'comments' => $comments,
+            'remarks' => \App\Services\Remarks::forCabinet($cabinet),   // the "หมายเหตุ" tab: only the work this user sees (trimmed above)
         ]);
     }
     public function edit(Cabinet $cabinet)

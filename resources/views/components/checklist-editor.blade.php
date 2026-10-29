@@ -5,7 +5,7 @@
 --}}
 @props(['kind', 'owner', 'items', 'editable' => false, 'tickable' => false, 'dateLabel' => null, 'linked' => [], 'receivers' => []])
 
-<div x-data="checklistEditor(@js(['kind' => $kind, 'ownerId' => $owner->id, 'url' => route('checklist-editor.apply', [$kind, $owner->id]), 'items' => $items, 'editable' => (bool) $editable, 'tickable' => (bool) $tickable, 'dateLabel' => $dateLabel, 'linked' => $linked, 'receivers' => $receivers]))"
+<div x-data="checklistEditor(@js(['kind' => $kind, 'ownerId' => $owner->id, 'url' => route('checklist-editor.apply', [$kind, $owner->id]), 'items' => $items, 'editable' => (bool) $editable, 'tickable' => (bool) $tickable, 'dateLabel' => $dateLabel, 'linked' => $linked, 'receivers' => $receivers, 'deptId' => $kind === 'subtask' ? $owner->department_id : null]))"
      {{ $attributes->merge(['class' => 'text-sm']) }} @keydown.escape.stop="paste = null; dialog = null; cancelEdit()">
 
     {{-- several selected: one bar of actions --}}
@@ -52,6 +52,51 @@
         </div>
     </div>
 
+    {{-- "ดูอย่างเดียว": another department's list this one only follows - its date per item and whether the ones taking the
+         items have them yet (e.g. Production: จัดซื้อ's วันของเข้า | คลัง รับแล้ว), nothing here to tick --}}
+    <template x-for="l in watched" :key="'w' + l.id">
+        <div class="mb-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70">
+            <a :href="l.href" class="flex flex-wrap items-center gap-x-1.5 border-b border-slate-200 px-2 py-1 text-xs hover:bg-blue-50">
+                <span class="font-bold uppercase tracking-wide text-slate-500">ดูอย่างเดียว</span>
+                <span class="font-semibold text-slate-800" x-text="l.deptName || 'ยังไม่จ่ายแผนก'"></span>
+                <span class="text-slate-600" x-text="'· ' + l.title"></span>
+                <span class="ml-auto tabular-nums text-slate-500" x-text="'ของเข้า ' + l.got + '/' + l.total + ' · ไปดู →'"></span>
+            </a>
+            <ul class="divide-y divide-slate-100">
+                <template x-for="m in l.items" :key="m.id">
+                    <li class="flex items-start gap-2 px-2 py-1.5 text-sm">
+                        <span class="w-4 shrink-0 text-center" :class="m.received ? 'text-emerald-600' : 'text-slate-300'" x-text="m.received ? '✓' : '○'"></span>
+                        <div class="min-w-0 flex-1">
+                        <span class="block break-words leading-snug" :class="m.received ? 'text-slate-800' : 'text-slate-600'" x-text="m.text"></span>
+                        <div class="mt-0.5 flex flex-wrap items-center gap-1.5">
+                        <span class="shrink-0 rounded px-1 text-xs" :class="m.expected ? (!m.received && m.expected < today ? 'bg-red-50 font-semibold text-red-600' : 'bg-amber-50 text-amber-800') : 'text-slate-400'"
+                              x-text="m.expected ? '📦 ' + (l.dateLabel ? l.dateLabel + ' ' : '') + fmtDate(m.expected) : 'ยังไม่ลงวัน'"></span>
+                        <template x-for="h in (m.receipts || [])" :key="h.dept">
+                            <span class="shrink-0 rounded-full px-1.5 text-xs font-medium" :class="h.received ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'"
+                                  x-text="h.received ? '✓ ' + h.dept + ' ' + (h.verb || 'รับ') + 'แล้ว' + (h.at ? ' ' + fmtDate(h.at) : '') : 'รอ' + h.dept + (h.verb || 'รับ')"></span>
+                        </template>
+                        </div>
+                        </div>
+                    </li>
+                </template>
+                <li x-show="!l.items.length" class="px-2 py-1.5 text-xs text-slate-400">ยังไม่มีรายการ</li>
+            </ul>
+        </div>
+    </template>
+
+    {{-- Settings > สีสถานะ Checklist: the rows show only colour dots, so this says what each colour of this list means
+         (with how many items carry it); a colour filters the list to it --}}
+    <div x-show="tagOn && tagLegend.length" x-cloak class="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[13px]">
+        <span class="mr-1 font-semibold text-slate-900">สีนี้คืออะไร</span>
+        <template x-for="s in tagLegend" :key="s.id">
+            <button type="button" @click="toggleTagFilter(s.id)" :aria-pressed="tagFilter.includes(s.id)" :title="(s.desc ? s.desc + ' · ' : '') + 'กดเพื่อแสดงเฉพาะสีนี้'" class="inline-flex h-8 items-center gap-1.5 rounded-full border px-3 font-semibold"
+                    :class="tagFilter.includes(s.id) ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'">
+                <span class="h-2 w-2 rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name"></span><span class="tabular-nums" x-text="s.n"></span></button>
+        </template>
+        <button type="button" x-show="tagFilter.length" @click="tagFilter = []" class="h-8 px-2 font-semibold text-blue-700 hover:underline">ล้างตัวกรอง</button>
+        <span x-show="tagFilter.length" class="ml-auto text-slate-600" x-text="'แสดง ' + shownCount + ' จาก ' + items.length + ' รายการ'"></span>
+    </div>
+
     <ul class="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
         <li x-show="items.length > 1 && editable" x-cloak class="flex items-center gap-2 bg-slate-50 px-2 py-1 text-[12px] text-slate-500">
             <input type="checkbox" :checked="allSelected" @change="toggleAll()" class="h-3.5 w-3.5 rounded border-slate-300" aria-label="เลือกทั้งหมด">
@@ -61,7 +106,7 @@
         </li>
         <template x-for="item in items" :key="item.id">
             {{-- comparing: one row = this item | the other list's item it is a copy of, or of the same name (side by side on a wide screen, under it on a phone) --}}
-            <li class="group" :class="[linked.length ? 'lg:grid lg:grid-cols-2' : '', dragId === item.id ? 'opacity-40' : '', isSelected(item.id) ? 'bg-blue-50/60' : '']"
+            <li x-show="shown(item)" class="group scroll-mt-24" :id="'checklist-' + item.id" :class="[linked.length ? 'lg:grid lg:grid-cols-2' : '', dragId === item.id ? 'opacity-40' : '', isSelected(item.id) ? 'bg-blue-50/60' : '']"
                 tabindex="-1" @keydown.alt.arrow-up.prevent="nudge(item, -1)" @keydown.alt.arrow-down.prevent="nudge(item, 1)"
                 @dragover.prevent @drop.prevent="drop(item)">
               <div class="relative flex min-w-0 items-start gap-2 px-2 py-1.5">
@@ -78,9 +123,18 @@
                         <input data-edit-input type="text" x-model="editing.value" maxlength="255" class="w-full rounded-md border-blue-400 px-1.5 py-0.5 text-sm"
                                @keydown.enter.prevent="commitEdit('down')" @keydown.tab.prevent="commitEdit('right')" @blur="commitEdit()">
                     </template>
-                    <span x-show="!(editing && editing.id === item.id && editing.field === 'name')" @click="startEdit(item, 'name')"
-                          class="block break-words text-sm leading-snug" :class="[item.done ? 'text-slate-400 line-through' : 'text-slate-800', editable && !item.from ? 'cursor-text hover:bg-slate-50 rounded' : '']"
+                    {{-- the name, its statuses right after it (wrapping on as needed) --}}
+                    <div x-show="!(editing && editing.id === item.id && editing.field === 'name')" class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <span @click="startEdit(item, 'name')"
+                          class="min-w-0 break-words text-sm leading-snug" :class="[item.done ? 'text-slate-400 line-through' : 'text-slate-800', editable && !item.from ? 'cursor-text hover:bg-slate-50 rounded' : '']"
                           :title="item.from ? 'รายการจาก ' + fromOf(item) + ' — แก้ชื่อ / ลบ ได้ที่ต้นทาง' : ''"><span x-show="item.from" class="mr-1 text-xs text-blue-500" aria-label="รายการจากแผนกที่เทียบ">🔗</span><span x-text="item.name"></span></span>
+                    {{-- its statuses as colour dots only (the bar above says what each colour is); a tap opens the panel below --}}
+                    <button type="button" x-show="tagOn && (item.tags || []).length" @click="openPick(item)" :aria-expanded="picking === item.id"
+                            :aria-label="'สถานะ: ' + tagsOf(item).map((s) => s.name).join(', ')" :title="tagsOf(item).map((s) => s.name).join(' · ')"
+                            class="inline-flex h-7 items-center gap-1 rounded-full border bg-white px-1.5" :class="picking === item.id ? 'border-slate-800' : 'border-slate-200 hover:border-slate-400'">
+                        <template x-for="s in tagsOf(item)" :key="s.id"><span class="h-[11px] w-[11px] rounded-full" :style="'background:' + s.dot + (s.active ? '' : ';opacity:.5')"></span></template>
+                    </button>
+                    </div>
                     {{-- remark / date --}}
                     <div x-show="item.remark || dateLabel || (item.handoff && item.handoff.length) || (editing && editing.id === item.id && editing.field === 'remark')"
                          class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
@@ -89,11 +143,12 @@
                                    @keydown.enter.prevent="commitEdit('down')" @blur="commitEdit()">
                         </template>
                         <span x-show="item.remark && !(editing && editing.id === item.id && editing.field === 'remark')" @click="startEdit(item, 'remark')"
-                              class="cursor-text text-slate-600" x-text="'📝 ' + item.remark"></span>
+                              class="cursor-text whitespace-pre-line rounded bg-amber-50 px-1.5 py-0.5 text-[13px] text-amber-900" x-text="item.remark" title="หมายเหตุ (คลิกเพื่อแก้)"></span>
                         <template x-if="dateLabel">
-                            <span class="inline-flex items-center gap-1">📦 <span x-text="dateLabel"></span>
+                            <span class="inline-flex items-center gap-1 text-[13px] font-medium text-slate-700">📦 <span x-text="dateLabel"></span>
                                 <input type="date" :value="item.date || ''" :disabled="!editable" @change="send({ type: 'update', id: item.id, date: $event.target.value }, { quiet: true })"
-                                       class="h-6 rounded border-slate-300 px-1 py-0 text-xs"></span>
+                                       class="h-7 rounded border-slate-300 px-1.5 py-0 text-[13px] font-semibold tabular-nums"
+                                       :class="item.date ? (item.date < today ? 'border-red-300 bg-red-50 text-red-700' : 'border-amber-300 bg-amber-50 text-amber-900') : 'text-slate-400'"></span>
                         </template>
                         {{-- has the Sub Task comparing with this one got it --}}
                         <template x-for="h in (item.handoff || [])" :key="h.dept">
@@ -101,9 +156,35 @@
                                   x-text="h.received ? '✓ ' + h.dept + ' รับแล้ว' : (item.date && item.date < today ? 'เลยวันแล้ว · ' + h.dept + ' ยังไม่รับ' : 'รอ ' + h.dept + ' รับ')"></span>
                         </template>
                     </div>
+                    {{-- the panel: each status by name (× takes it off) and "+ เพิ่ม" a colour (one of a group replaces the other); saved at once --}}
+                    <div x-show="tagOn && picking === item.id" x-cloak role="group" :aria-label="'สถานะของ ' + item.name" @keydown.escape.stop="picking = null"
+                         class="mt-1.5 flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+                        <div x-show="(item.tags || []).length" class="flex flex-wrap gap-1.5">
+                            <template x-for="s in tagsOf(item)" :key="s.id">
+                                <span class="inline-flex h-[30px] items-center gap-1.5 rounded-full pl-2.5 text-[13px] font-semibold" :class="editable ? 'pr-1' : 'pr-2.5'" :style="chipStyle(s)" :title="(s.desc || s.name) + (s.active ? '' : ' (ปิดใช้แล้ว)')">
+                                    <span class="h-[9px] w-[9px] rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name + (s.active ? '' : ' (ปิดใช้แล้ว)')"></span>
+                                    <button type="button" x-show="editable" @click="removeTag(item, s.id)" class="flex h-6 w-6 items-center justify-center rounded-full text-[15px] hover:bg-white/60" :aria-label="'เอา ' + s.name + ' ออก'">×</button>
+                                </span>
+                            </template>
+                        </div>
+                        <div x-show="editable && addable(item).length" class="flex flex-wrap items-center gap-1.5">
+                            <span class="text-[13px] text-slate-600">+ เพิ่ม</span>
+                            <template x-for="s in addable(item)" :key="s.id">
+                                <button type="button" @click="addTag(item, s.id)" :title="s.desc || s.name"
+                                        class="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-dashed border-slate-400 bg-white px-2.5 text-[13px] font-semibold text-slate-700 hover:border-slate-600 hover:bg-slate-50">
+                                    <span class="h-[9px] w-[9px] rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name + (rivalOf(item, s) ? ' (แทน ' + rivalOf(item, s).name + ')' : '')"></span></button>
+                            </template>
+                        </div>
+                        <p x-show="!(item.tags || []).length && !(editable && addable(item).length)" class="text-[13px] text-slate-600">ยังไม่มีสถานะ</p>
+                    </div>
                 </div>
-                {{-- floats over the row on hover so it takes no width --}}
-                <span x-show="editable" class="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(hover:hover)]:absolute [@media(hover:hover)]:right-1 [@media(hover:hover)]:top-1 [@media(hover:hover)]:rounded [@media(hover:hover)]:bg-white [@media(hover:hover)]:shadow-sm [@media(hover:hover)]:ring-1 [@media(hover:hover)]:ring-slate-200">
+                {{-- statuses: always on the row's right, as the dots after the name (the same panel) --}}
+                <button type="button" x-show="tagOn && editable" @click="openPick(item)" :aria-expanded="picking === item.id" :aria-label="'ติดสถานะให้ ' + item.name" title="ติดสถานะ"
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border" :class="picking === item.id ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-800'">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9z"/><circle cx="8" cy="8" r="1.5"/></svg></button>
+                {{-- floats over the row on hover so it takes no width (left of the status button) --}}
+                <span x-show="editable" class="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(hover:hover)]:absolute [@media(hover:hover)]:top-1 [@media(hover:hover)]:rounded [@media(hover:hover)]:bg-white [@media(hover:hover)]:shadow-sm [@media(hover:hover)]:ring-1 [@media(hover:hover)]:ring-slate-200"
+                      :class="tagOn ? '[@media(hover:hover)]:right-11' : '[@media(hover:hover)]:right-1'">
                     <button type="button" x-show="!item.remark" @click="startEdit(item, 'remark')" class="px-1 text-slate-400 hover:text-blue-600" title="เพิ่มหมายเหตุ" aria-label="เพิ่มหมายเหตุ">📝</button>
                     <button type="button" @click="nudge(item, -1)" class="px-1 text-slate-400 hover:text-slate-800" title="ขึ้น (Alt+↑)" aria-label="ย้ายขึ้น">↑</button>
                     <button type="button" @click="nudge(item, 1)" class="px-1 text-slate-400 hover:text-slate-800" title="ลง (Alt+↓)" aria-label="ย้ายลง">↓</button>
@@ -113,15 +194,20 @@
               <template x-if="linked.length">
                 <div class="border-dashed border-slate-200 bg-slate-50/70 py-1.5 pl-10 pr-2 text-sm max-lg:pt-0 lg:border-l lg:pl-2">
                     <template x-for="m in matchesOf(item)" :key="m.l.id + m.id">
-                        <div class="flex items-start gap-2">
+                        <div class="flex flex-wrap items-start gap-x-2 gap-y-0.5">
                             <span class="mt-0.5 w-4 shrink-0 text-center" :class="m.done ? 'text-emerald-600' : 'text-slate-300'" x-text="m.done ? '✓' : '○'"></span>
-                            <div class="min-w-0 flex-1">
+                            <div class="min-w-[60%] flex-1">
                                 <span class="block break-words leading-snug" :class="m.done ? 'text-slate-800' : 'text-slate-500'" x-text="m.text"></span>
                                 <span x-show="m.remark" class="mt-0.5 block text-xs text-slate-500" x-text="'📝 ' + m.remark"></span>
                             </div>
                             <span x-show="linked.length > 1" class="shrink-0 text-xs text-slate-400" x-text="m.l.deptName"></span>
                             <span x-show="m.expected" class="shrink-0 rounded px-1 text-xs" :class="!m.received && m.expected < today ? 'bg-red-50 font-semibold text-red-600' : 'bg-amber-50 text-amber-800'"
                                   x-text="'📦 ' + (m.l.dateLabel ? m.l.dateLabel + ' ' : '') + fmtDate(m.expected)"></span>
+                            {{-- "ใช้รายการเดียวกัน": has คลัง got it (its tick, not this list's) --}}
+                            <template x-for="h in (m.receipts || [])" :key="h.dept">
+                                <span class="shrink-0 rounded-full px-1.5 text-xs font-medium" :class="h.received ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'"
+                                      x-text="h.received ? '✓ ' + h.dept + ' ' + (h.verb || 'รับ') + 'แล้ว' + (h.at ? ' ' + fmtDate(h.at) : '') : 'รอ' + h.dept + (h.verb || 'รับ')"></span>
+                            </template>
                         </div>
                     </template>
                     <span x-show="!matchesOf(item).length" class="block text-xs leading-6 text-slate-400"
@@ -137,19 +223,25 @@
                     <span>— ยังไม่มีในรายการนี้</span>
                     <button type="button" x-show="editable" @click="addFromLinked(m)" class="font-medium text-blue-600 hover:underline">＋ เพิ่ม</button>
                 </div>
-                <div class="flex items-start gap-2 border-dashed border-slate-200 bg-slate-50/70 py-1.5 pl-10 pr-2 text-sm max-lg:pt-0 lg:border-l lg:pl-2">
+                <div class="flex flex-wrap items-start gap-x-2 gap-y-0.5 border-dashed border-slate-200 bg-slate-50/70 py-1.5 pl-10 pr-2 text-sm max-lg:pt-0 lg:border-l lg:pl-2">
                     <span class="mt-0.5 w-4 shrink-0 text-center" :class="m.done ? 'text-emerald-600' : 'text-slate-300'" x-text="m.done ? '✓' : '○'"></span>
-                    <div class="min-w-0 flex-1">
+                    <div class="min-w-[60%] flex-1">
                         <span class="block break-words leading-snug" :class="m.done ? 'text-slate-800' : 'text-slate-500'" x-text="m.text"></span>
                         <span x-show="m.remark" class="mt-0.5 block text-xs text-slate-500" x-text="'📝 ' + m.remark"></span>
                     </div>
                     <span x-show="linked.length > 1" class="shrink-0 text-xs text-slate-400" x-text="m.l.deptName"></span>
                     <span x-show="m.expected" class="shrink-0 rounded px-1 text-xs" :class="m.expected < today ? 'bg-red-50 font-semibold text-red-600' : 'bg-amber-50 text-amber-800'"
                           x-text="'📦 ' + (m.l.dateLabel ? m.l.dateLabel + ' ' : '') + fmtDate(m.expected)"></span>
+                            {{-- "ใช้รายการเดียวกัน": has คลัง got it (its tick, not this list's) --}}
+                            <template x-for="h in (m.receipts || [])" :key="h.dept">
+                                <span class="shrink-0 rounded-full px-1.5 text-xs font-medium" :class="h.received ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'"
+                                      x-text="h.received ? '✓ ' + h.dept + ' ' + (h.verb || 'รับ') + 'แล้ว' + (h.at ? ' ' + fmtDate(h.at) : '') : 'รอ' + h.dept + (h.verb || 'รับ')"></span>
+                            </template>
                 </div>
             </li>
         </template>
         <li x-show="!items.length && !unmatched.length" class="px-2 py-2 text-xs text-slate-400">ยังไม่มีรายการ</li>
+        <li x-show="items.length && tagFilter.length && !shownCount" class="px-2 py-2 text-[13px] text-slate-600">ไม่มีรายการที่ติดสถานะที่เลือก · <button type="button" @click="tagFilter = []" class="font-semibold text-blue-700 hover:underline">ดูทั้งหมด</button></li>
         {{-- add: type one, or paste many (from Excel: name | remark | date) --}}
         <li x-show="editable" class="flex items-center gap-2 px-2 py-1.5">
             <span class="text-slate-300">＋</span>

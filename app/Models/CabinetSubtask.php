@@ -190,13 +190,13 @@ class CabinetSubtask extends Model
 
     public function tickWouldAccept(?User $user): bool
     {
-        return $user !== null && $this->department_id !== null && $user->department_id === $this->department_id
+        return $user !== null && ! $user->isViewOnly() && $user->inDepartment($this->department_id)
             && $this->assignment_status === self::ASSIGNMENT_ASSIGNED && (bool) AppSetting::get('tick_accepts');
     }
 
     public function isChecklistEditableBy(?User $user): bool
     {
-        if ($user === null) {
+        if ($user === null || $user->isViewOnly()) {
             return false;
         }
 
@@ -204,8 +204,7 @@ class CabinetSubtask extends Model
             return true;
         }
 
-        return $this->department_id !== null
-            && $user->department_id === $this->department_id
+        return $user->inDepartment($this->department_id)   // their own department, or one they look after too
             && in_array($this->assignment_status, self::CHECKLIST_EDITABLE_STATUSES, true);
     }
 
@@ -232,13 +231,13 @@ class CabinetSubtask extends Model
     /** The Sub Tasks of the same cabinet whose checklist this one is shown next to, to compare (from the template, App\Services\SubtaskPairs). */
     public function pairSources()
     {
-        return $this->belongsToMany(self::class, 'cabinet_subtask_pairs', 'cabinet_subtask_id', 'source_subtask_id')->withTimestamps();
+        return $this->belongsToMany(self::class, 'cabinet_subtask_pairs', 'cabinet_subtask_id', 'source_subtask_id')->withPivot('view_only', 'own_ticks')->withTimestamps();
     }
 
     /** The Sub Tasks that compare with this one. */
     public function pairReceivers()
     {
-        return $this->belongsToMany(self::class, 'cabinet_subtask_pairs', 'source_subtask_id', 'cabinet_subtask_id');
+        return $this->belongsToMany(self::class, 'cabinet_subtask_pairs', 'source_subtask_id', 'cabinet_subtask_id')->withPivot('view_only', 'own_ticks');
     }
 
     public function checklists()

@@ -13,7 +13,7 @@ class UserController extends Controller
     public function index()
     {
         return view('settings.users.index', [
-            'users' => User::with('department')->orderBy('name')->paginate(20),
+            'users' => User::with('department', 'extraDepartments:id,name')->orderBy('name')->paginate(20),
         ]);
     }
 
@@ -34,6 +34,9 @@ class UserController extends Controller
             'password' => ['required', 'string', 'min:8'],
             'role' => ['required', 'in:'.implode(',', array_keys($this->roles()))],
             'department_id' => ['nullable', 'exists:departments,id'],
+            // "ดูแลแผนกเพิ่มเติม": departments they work for on top of their own (User::departmentIds)
+            'extra_department_ids' => ['nullable', 'array'],
+            'extra_department_ids.*' => ['integer', 'exists:departments,id'],
             'position' => ['nullable', 'string', 'max:255'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
@@ -42,7 +45,10 @@ class UserController extends Controller
         $data['is_active'] = $request->boolean('is_active', true);
         $data['email_verified_at'] = now();
 
-        User::create($data);
+        $extra = $data['extra_department_ids'] ?? [];
+        unset($data['extra_department_ids']);
+        $user = User::create($data);
+        $this->setExtraDepartments($user, $extra);
 
         return redirect()->route('settings.users.index')->with('success', 'เพิ่มผู้ใช้งานเรียบร้อยแล้ว');
     }
@@ -65,6 +71,9 @@ class UserController extends Controller
             'password' => ['nullable', 'string', 'min:8'],
             'role' => ['required', 'in:'.implode(',', array_keys($this->roles()))],
             'department_id' => ['nullable', 'exists:departments,id'],
+            // "ดูแลแผนกเพิ่มเติม": departments they work for on top of their own (User::departmentIds)
+            'extra_department_ids' => ['nullable', 'array'],
+            'extra_department_ids.*' => ['integer', 'exists:departments,id'],
             'position' => ['nullable', 'string', 'max:255'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
@@ -76,7 +85,10 @@ class UserController extends Controller
         }
         $data['is_active'] = $request->boolean('is_active');
 
+        $extra = $data['extra_department_ids'] ?? [];
+        unset($data['extra_department_ids']);
         $user->update($data);
+        $this->setExtraDepartments($user, $extra);
 
         return redirect()->route('settings.users.index')->with('success', 'บันทึกข้อมูลผู้ใช้งานเรียบร้อยแล้ว');
     }
@@ -90,6 +102,12 @@ class UserController extends Controller
         $user->delete();
 
         return back()->with('success', 'ลบผู้ใช้งานเรียบร้อยแล้ว');
+    }
+
+    /** The departments looked after on top of their own (never their own again). @param list<int> $ids */
+    private function setExtraDepartments(User $user, array $ids): void
+    {
+        $user->extraDepartments()->sync(collect($ids)->map(fn ($id) => (int) $id)->reject(fn ($id) => $id === $user->department_id)->unique()->values()->all());
     }
 
     private function roles(): array

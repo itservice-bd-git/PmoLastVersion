@@ -35,6 +35,21 @@
             </select>
         </div>
     </div>
+    {{-- departments looked after on top of their own: they see and do that work as one of its members --}}
+    @php $extra = collect(old('extra_department_ids', $u?->extraDepartments()->pluck('departments.id')->all() ?? []))->map(fn ($id) => (int) $id); @endphp
+    <div>
+        <x-input-label value="ดูแลแผนกเพิ่มเติม" />
+        <p class="text-xs text-slate-500">เช่น หัวหน้าจัดซื้อที่ดูแลคลังด้วย — เห็นและทำงานของแผนกที่ติ๊กได้เหมือนคนในแผนกนั้น (รับงาน ติ๊ก Checklist ได้รับแจ้งเตือนงานเข้า) · สิทธิ์การใช้งานยังเป็นของแผนกหลัก</p>
+        <div class="mt-1.5 flex flex-wrap gap-2">
+            @foreach ($departments as $department)
+                <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-700 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:text-blue-800">
+                    <input type="checkbox" name="extra_department_ids[]" value="{{ $department->id }}" @checked($extra->contains($department->id)) class="rounded border-slate-300 text-blue-600">
+                    {{ $department->name }}
+                </label>
+            @endforeach
+        </div>
+        <x-input-error :messages="$errors->get('extra_department_ids')" class="mt-1" />
+    </div>
     <div>
         <x-input-label value="Position" />
         <x-text-input name="position" class="mt-1 block w-full" :value="old('position', $u?->position)" />

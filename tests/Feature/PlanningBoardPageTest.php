@@ -68,8 +68,8 @@ class PlanningBoardPageTest extends TestCase
         $this->assertNotNull($res->headers->get('Server-Timing'));
         // the page's own templates only (~90 KB of Blade + the app layout), not the 600 KB single-file SPA, and not its script:
         // the Alpine component moved into the cached bundle (resources/js/planning-board.js), so the page dropped from ~290 KB.
-        // gzip (GzipResponse) sends a small fraction of it.
-        $this->assertLessThan(240 * 1024, strlen($html));
+        // gzip (GzipResponse) sends a small fraction of it. (240 -> 256 KB with the project window's "หมายเหตุ" tab, 2026-10.)
+        $this->assertLessThan(256 * 1024, strlen($html));
     }
 
     public function test_pmo_roles_can_edit_and_department_users_start_on_their_own_department(): void

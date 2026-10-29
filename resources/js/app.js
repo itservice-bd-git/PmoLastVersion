@@ -10,6 +10,19 @@ window.Sortable = Sortable;
 window.flatpickr = flatpickr; // for date fields created after page load (e.g. the project modal on My Department)
 
 Alpine.data('checklistEditor', checklistEditor);   // x-checklist-editor (cabinet + template pages)
+// Settings > สีสถานะ Checklist: every list of the cabinet page puts its items' statuses here (ownerId => [{ id, done, tags }]),
+// so "สถานะในตู้นี้" and the Task headers add them up as they change
+Alpine.store('checklistTags', {
+    lists: {},
+    tally(owners = null) {
+        const n = {};
+        Object.entries(this.lists).forEach(([o, items]) => {
+            if (owners && !owners.includes(Number(o))) return;
+            items.forEach((i) => i.tags.forEach((t) => { n[t] = n[t] || { n: 0 }; n[t].n++; }));
+        });
+        return (window.pmoChecklistStatuses || []).filter((s) => n[s.id]).map((s) => ({ ...s, ...n[s.id] }));
+    },
+});
 registerPlanningBoard();                           // /planning/board's x-data="planningBoard(...)" 
 registerWorkDays();                                // "จำนวนวัน" beside a Sub Task's start / due dates (work-days.js)
 Alpine.start();

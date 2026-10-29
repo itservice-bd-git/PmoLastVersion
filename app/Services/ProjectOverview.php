@@ -35,7 +35,7 @@ class ProjectOverview
 
         // the alerts list sub tasks: everyone in PMO sees all of them, a department member only their own department's
         $visible = $cabinets->flatMap->tasks->flatMap->subtasks
-            ->when(! $user->canSeeAllWork(), fn ($c) => $c->where('department_id', $user->department_id));
+            ->when(! $user->canSeeAllWork(), fn ($c) => $c->whereIn('department_id', $user->departmentIds()));
 
         $rows = $cabinets->map(fn (Cabinet $c) => $this->row($c, $project, $late, $today));
         $prefix = $this->sharedPrefix($rows->pluck('mo'));

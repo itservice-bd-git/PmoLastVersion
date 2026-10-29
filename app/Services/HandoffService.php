@@ -90,10 +90,10 @@ class HandoffService
             ->join('cabinet_subtasks as r', 'r.id', '=', 'p.cabinet_subtask_id')
             ->join('cabinet_tasks as t', 't.id', '=', 'r.cabinet_task_id')
             ->whereIn('t.cabinet_id', $missing)->whereNull('r.deleted_at')
-            ->get(['t.cabinet_id as cabinet', 'p.cabinet_subtask_id as to', 'p.source_subtask_id as from'])
+            ->get(['t.cabinet_id as cabinet', 'p.cabinet_subtask_id as to', 'p.source_subtask_id as from', 'p.view_only as view', 'p.own_ticks as own'])
             ->groupBy('cabinet');
         foreach ($missing as $id) {
-            $this->pairs[$id] = ($rows->get($id) ?? collect())->map(fn ($r) => ['to' => (int) $r->to, 'from' => (int) $r->from])->values();
+            $this->pairs[$id] = ($rows->get($id) ?? collect())->map(fn ($r) => ['to' => (int) $r->to, 'from' => (int) $r->from, 'view' => (bool) $r->view, 'own' => (bool) $r->own])->values();
         }
     }
 
@@ -109,9 +109,20 @@ class HandoffService
         return $this->pairsIn((int) $s->cabinetTask->cabinet_id)->where('to', $s->id)->pluck('from');
     }
 
-    private function receiverIds(CabinetSubtask $s): Collection
+    /**
+     * @param  string|null  $kind  null = all; 'take' = the ones receiving the items (their tick is "received": คลัง);
+     *                             'follow' = the ones following them only ("ดูอย่างเดียว", or "ใช้รายการเดียวกัน" ticking their own)
+     */
+    private function receiverIds(CabinetSubtask $s, ?string $kind = null): Collection
     {
-        return $this->pairsIn((int) $s->cabinetTask->cabinet_id)->where('from', $s->id)->pluck('to');
+        return $this->pairsIn((int) $s->cabinetTask->cabinet_id)->where('from', $s->id)
+            ->when($kind !== null, fn ($p) => $p->filter(fn ($r) => ($r['view'] || $r['own']) === ($kind === 'follow')))->pluck('to');
+    }
+
+    /** @return array{to: int, from: int, view: bool, own: bool} */
+    private function pairOf(CabinetSubtask $receiver, CabinetSubtask $source): array
+    {
+        return $this->pairsIn((int) $receiver->cabinetTask->cabinet_id)->first(fn ($p) => $p['to'] === $receiver->id && $p['from'] === $source->id);
     }
 
     /** The Sub Tasks with their checklists as they are now (not deleted). @return Collection<int, CabinetSubtask> */
@@ -136,25 +147,60 @@ class HandoffService
     // ---- what each side sees ----
 
     /**
-     * Under a Sub Task: the lists it compares with, each with whether this Sub Task has dealt with each item.
+     * Under a Sub Task: the lists it compares with, each with whether this Sub Task has dealt with each item. A list it only
+     * follows ("ดูอย่างเดียว", watch) says instead whether the Sub Tasks taking its items have (e.g. Production sees จัดซื้อ's
+     * date and คลัง's "รับแล้ว" on one row): each item's receipts, and how many items have come (got). A watched list nobody
+     * takes items from (e.g. Production watching คลัง itself) shows its own ticks ("คลัง ติ๊กแล้ว"), and a copy in it shows
+     * the date its source gave (จัดซื้อ's วันของเข้า).
      *
-     * @return list<array{id: string, deptId: string, deptName: string, title: string, dateLabel: ?string, items: list<array>, done: int, total: int}>
+     * @return list<array{id: string, deptId: string, deptName: string, title: string, dateLabel: ?string, watch: bool, items: list<array>, done: int, total: int}>
      */
     public function linkedForSubtask(CabinetSubtask $receiver): array
     {
         $sources = $this->load($this->sourceIds($receiver));
         $mine = $receiver->checklists;
 
-        return $sources->sortBy(fn ($s) => self::order($s))->map(function (CabinetSubtask $s) use ($mine) {
-            $items = $s->checklists->sortBy(fn ($c) => sprintf('%05d-%09d', $c->sequence ?? 0, $c->id))->map(fn (CabinetChecklist $c) => [
-                'id' => 'k'.$c->id, 'text' => $c->name, 'done' => (bool) $c->is_completed, 'remark' => (string) $c->remark,
-                'expected' => $c->expected_date?->format('Y-m-d'), 'received' => self::received($c, $mine),
-            ])->values();
+        return $sources->sortBy(fn ($s) => self::order($s))->map(function (CabinetSubtask $s) use ($mine, $receiver) {
+            ['view' => $watch, 'own' => $own] = $this->pairOf($receiver, $s);
+            // the ones receiving its items (คลัง): "ดูอย่างเดียว" and "ใช้รายการเดียวกัน" show their "รับแล้ว"
+            $takers = $watch || $own ? $this->load($this->receiverIds($s, 'take'))->sortBy(fn ($r) => self::order($r))->values() : collect();
+            if ($watch || $own) {
+                $s->checklists->loadMissing('sourceItem:id,cabinet_subtask_id,expected_date', 'sourceItem.subtask:id,department_id');
+            }
+            $ownName = (string) ($s->department?->name ?? $s->name);
+            $items = $s->checklists->sortBy(fn ($c) => sprintf('%05d-%09d', $c->sequence ?? 0, $c->id))->map(function (CabinetChecklist $c) use ($mine, $watch, $own, $takers, $ownName) {
+                $row = ['id' => 'k'.$c->id, 'text' => $c->name, 'done' => (bool) $c->is_completed, 'remark' => (string) $c->remark,
+                    'expected' => ($c->expected_date ?? ($watch || $own ? $c->sourceItem?->expected_date : null))?->format('Y-m-d')];
+                // whether the ones receiving it have it (คลัง); none receive from this list (it is คลัง's own): its own tick
+                $receipts = fn () => $takers->isEmpty()
+                    ? [['dept' => $ownName, 'at' => $c->is_completed ? $c->completed_at?->format('Y-m-d') : null, 'received' => (bool) $c->is_completed, 'verb' => 'ติ๊ก']]
+                    : $takers->map(fn (CabinetSubtask $r) => ['dept' => (string) ($r->department?->name ?? $r->name),
+                        'at' => self::receivedAt($c, $r->checklists)?->format('Y-m-d'), 'received' => self::received($c, $r->checklists)])->all();
+                if (! $watch) {   // comparing: whether this Sub Task has it; using the list for its own work: also whether คลัง has
+                    return $row + ['received' => self::received($c, $mine)] + ($own ? ['receipts' => $receipts()] : []);
+                }
+                $receipts = $receipts();
+
+                return $row + ['received' => collect($receipts)->every('received'), 'receipts' => $receipts];
+            })->values();
+            // the date's name: its own department's, else (a watched list of copies) the one of the department they come from
+            $label = $this->dateLabel($s->department_id)
+                ?? ($watch || $own ? $this->dateLabel($s->checklists->map(fn ($c) => $c->sourceItem?->subtask?->department_id)->filter()->first()) : null);
 
             return ['id' => 's'.$s->id, 'deptId' => PlanningBoard::deptKey((int) $s->department_id), 'deptName' => (string) $s->department?->name,
-                'title' => $s->name, 'dateLabel' => $this->dateLabel($s->department_id)] + $this->whereIs($s) + [
-                'items' => $items->all(), 'done' => $items->where('done', true)->count(), 'total' => $items->count()];
+                'title' => $s->name, 'dateLabel' => $label, 'watch' => $watch, 'own' => $own] + $this->whereIs($s) + [
+                'items' => $items->all(), 'done' => $items->where('done', true)->count(), 'total' => $items->count(),
+                'got' => $items->where('received', true)->count()];
         })->values()->all();
+    }
+
+    /** When the receiving side ticked this item (its copy, else one of the same name), for "รับแล้ว 03/11". */
+    private static function receivedAt(CabinetChecklist $item, Collection $receiverItems): ?Carbon
+    {
+        $copy = $receiverItems->where('source_checklist_id', $item->id)->firstWhere('is_completed', true)
+            ?? $receiverItems->first(fn ($r) => $r->is_completed && ! $r->source_checklist_id && self::norm($r->name) === self::norm($item->name));
+
+        return $copy?->completed_at;
     }
 
     /** The other side of a pair at a glance: where its work is, when it is due, and a link to it (so a stalled one can be chased). */
@@ -185,12 +231,12 @@ class HandoffService
      */
     public function linkedFor(User $user, Collection $cabinetIds): Collection
     {
-        if ($user->canSeeAllWork() || ! $user->department_id || $cabinetIds->isEmpty()) {
+        if ($user->canSeeAllWork() || ! $user->departmentIds() || $cabinetIds->isEmpty()) {
             return collect();
         }
         $this->preload($cabinetIds);
         $receiverIds = $cabinetIds->flatMap(fn ($id) => $this->pairs[(int) $id]->pluck('to'))->unique()->values();
-        $mine = $this->load($receiverIds)->where('department_id', $user->department_id);
+        $mine = $this->load($receiverIds)->whereIn('department_id', $user->departmentIds());
 
         return $mine->groupBy(fn ($s) => $s->cabinetTask->cabinet_id)->map(fn (Collection $subs) => $subs->sortBy(fn ($s) => self::order($s))
             ->flatMap(fn ($s) => array_map(fn ($l) => $l + ['for' => $s->name, 'forId' => 's'.$s->id], $this->linkedForSubtask($s)))
@@ -204,7 +250,7 @@ class HandoffService
      */
     public function receiptsFor(CabinetSubtask $source): array
     {
-        $receivers = $this->load($this->receiverIds($source));
+        $receivers = $this->load($this->receiverIds($source, 'take'));   // one only following (or using the list for its own work) receives nothing
         $out = [];
         foreach ($source->checklists as $item) {
             foreach ($receivers as $r) {
@@ -222,7 +268,7 @@ class HandoffService
     {
         $depts = $receivers->pluck('department_id')->filter()->unique();
 
-        return $depts->isEmpty() ? collect() : User::whereIn('department_id', $depts)->where('is_active', true)->when($actor, fn ($q) => $q->where('id', '!=', $actor->id))->get();
+        return $depts->isEmpty() ? collect() : User::ofDepartment($depts->all())->where('is_active', true)->when($actor, fn ($q) => $q->where('id', '!=', $actor->id))->get();
     }
 
     /** A source set / moved the dates of some of its items. @param Collection<int, CabinetChecklist> $items (saved) */
@@ -252,17 +298,23 @@ class HandoffService
         return $sent;
     }
 
-    /** A receiver ticked its copy and the source's item was ticked with it (SharedChecklist::copyTicked): the source's department hears it. */
+    /**
+     * A receiver ticked its copy and the source's item was ticked with it (SharedChecklist::copyTicked): the source's
+     * department hears it, and so do the ones only following that list ("ดูอย่างเดียว", e.g. Production: คลังรับของแล้ว).
+     */
     public function receivedBack(CabinetChecklist $copy, CabinetChecklist $source, ?User $actor): int
     {
         $copy->loadMissing('subtask.department');
         $cabinet = $source->subtask->cabinetTask->cabinet;
         $dept = $copy->subtask->department?->name ?? $copy->subtask->name;
+        $title = "{$dept} รับ \"{$source->name}\" แล้ว · {$cabinet->project->project_no}";
+        $owners = $this->people(collect([$source->subtask]), $actor);
+        $watchers = $this->people($this->load($this->receiverIds($source->subtask, 'follow')), $actor)->reject(fn ($u) => $owners->contains('id', $u->id));
 
-        return app(NotificationService::class)->handoff($this->people(collect([$source->subtask]), $actor), $cabinet->project,
-            "{$dept} รับ \"{$source->name}\" แล้ว · {$cabinet->project->project_no}",
-            "{$cabinet->mo_no} · ติ๊กใน \"{$source->subtask->name}\" ให้แล้ว",
-            ["handoff_recv|{$dept}" => 1]);
+        return app(NotificationService::class)->handoff($owners, $cabinet->project, $title,
+            "{$cabinet->mo_no} · ติ๊กใน \"{$source->subtask->name}\" ให้แล้ว", ["handoff_recv|{$dept}" => 1])
+            + ($watchers->isEmpty() ? 0 : app(NotificationService::class)->handoff($watchers, $cabinet->project, $title,
+                "{$cabinet->mo_no} · รายการของ{$source->subtask->department?->name}", ["handoff_recv|{$dept}" => 1]));
     }
 
     /** A source ticked an item: the departments comparing hear it, and once more when the source has finished its list. */
@@ -312,7 +364,7 @@ class HandoffService
             // each item against the Sub Tasks comparing with its own one, grouped by their department
             $pending = [];
             foreach ($group as $item) {
-                foreach ($this->load($this->receiverIds($item->subtask)) as $r) {
+                foreach ($this->load($this->receiverIds($item->subtask, 'take')) as $r) {
                     if ($r->department_id && ! self::received($item, $r->checklists)) {
                         $pending[$r->department_id][$item->id] = $item;
                     }
@@ -324,7 +376,7 @@ class HandoffService
                 $late = $list->filter(fn ($i) => $i->expected_date->lt($today))->count();
                 $now = $list->count() - $late;
                 $lateForSender = max($lateForSender, $late);
-                $people = User::where('department_id', $to)->where('is_active', true)->get();
+                $people = User::ofDepartment($to)->where('is_active', true)->get();
                 $sent += $notices->handoff($people, $project,
                     $late ? "📦 เลย{$label} {$late} รายการ · {$project->project_no}" : "📦 {$label}วันนี้ {$now} รายการ · {$project->project_no}",
                     "{$project->project_name} · จาก{$sub->department->name}".($late && $now ? " · วันนี้อีก {$now} รายการ" : ''),
@@ -333,7 +385,7 @@ class HandoffService
             }
 
             if ($lateForSender) {
-                $people = User::where('department_id', $sub->department_id)->where('is_active', true)->get();
+                $people = User::ofDepartment($sub->department_id)->where('is_active', true)->get();
                 $sent += $notices->handoff($people, $project, "📦 เลย{$label} {$lateForSender} รายการ · {$project->project_no}", "{$project->project_name} · ปลายทางยังไม่ได้รับ",
                     ['handoff_late' => ['n' => $lateForSender, 'label' => $label]], "handoff-sender:{$sub->department_id}:{$project->id}:".$today->toDateString(), 'handoff_due');
             }

@@ -23,6 +23,11 @@
                     <button type="button" @click="toggleStar(cur)" :aria-pressed="isStarred(cur)" :title="isStarred(cur) ? 'เอาดาวออก' : 'ติดดาว (เก็บไว้ในเบราว์เซอร์นี้)'" class="rounded-lg p-1.5 hover:bg-slate-100" :class="isStarred(cur) ? 'text-amber-500' : 'text-slate-400 hover:text-slate-600'">
                         <svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" :fill="isStarred(cur) ? 'currentColor' : 'none'"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>
                     </button>
+                    <button type="button" @click="toggleFollow(cur)" :aria-pressed="isFollowing(cur)" class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm"
+                            :class="isFollowing(cur) ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-600 hover:bg-slate-100'">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                        <span x-text="isFollowing(cur) ? 'ติดตามอยู่' : 'ติดตามโครงการ'"></span>
+                    </button>
                     <button type="button" x-show="isPmo" @click="shiftProject(cur)" class="rounded-lg px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100" title="เลื่อนวันของโครงการ ตู้ และงานที่ยังไม่เสร็จพร้อมกัน">⇆ เลื่อนทั้งโครงการ</button>
                     <button type="button" x-show="isPmo" @click="duplicateProject(cur)" class="rounded-lg px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100" title="คัดลอกโครงการนี้ (พร้อมตู้ งาน checklist)">⧉ คัดลอก</button>
                     <button type="button" @click="openProjectDash(cur.id)" class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100" title="แดชบอร์ดของโครงการนี้">
@@ -228,14 +233,17 @@
                                             <span class="min-w-[44px] flex-1 truncate" :class="cabDone(c) ? '' : 'text-slate-500'" x-text="c.mo"></span>
                                             <span class="flex-[4] truncate" :class="cabDone(c) ? '' : 'text-slate-800'" x-text="c.text"></span>
                                         </div>
+                                        <button type="button" x-show="cabRemarkCount(cur, c)" @click.stop="openRemarks(cur.id, c.id)" class="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-px text-[12px] font-semibold text-amber-800 hover:bg-amber-100"
+                                                :title="'หมายเหตุของตู้นี้ ' + cabRemarkCount(cur, c) + ' รายการ'" :aria-label="'หมายเหตุของตู้นี้ ' + cabRemarkCount(cur, c) + ' รายการ'"><svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4h16v12H8l-4 4z"/></svg><span x-text="cabRemarkCount(cur, c)"></span></button>
+                                        <template x-for="s in ckTally(c).slice(0, 3)" :key="'ct' + s.id"><button type="button" @click.stop="openChecklistTag(cur, c, s.id, $event)" class="inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-px text-[12px] font-semibold" :style="ckChip(s)" :title="s.name + ' ' + s.n + ' รายการ · เปิด Checklist เฉพาะสถานะนี้'"><span class="h-1.5 w-1.5 rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name + ' ' + s.n"></span></button></template>
                                         <button type="button" @click.stop="openChecklist(cur.id, c.id, $event)" class="inline-flex shrink-0 items-center gap-1 rounded-xl border bg-white px-2.5 py-[3px] text-[12px] font-semibold hover:bg-slate-100"
                                                 :class="cabProgress(c, dept || null).total > 0 && cabProgress(c, dept || null).done === cabProgress(c, dept || null).total ? 'border-emerald-500 text-emerald-600' : 'border-slate-300 text-slate-500 hover:border-blue-500 hover:text-blue-600'" title="Checklist ของตู้นี้ (คลิกเพื่อเปิด)">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M8 12l3 3 5-6"/></svg><span class="tabular-nums" x-text="cabProgress(c, dept || null).done + '/' + cabProgress(c, dept || null).total"></span>
                                         </button>
                                         <template x-for="l in (c.linked || [])" :key="'lk' + l.deptId">
                                             <button type="button" @click.stop="openChecklist(cur.id, c.id, $event)" class="shrink-0 rounded-xl border border-dashed px-2 py-[3px] text-[12px] font-semibold tabular-nums"
-                                                    :class="l.total && l.done === l.total ? 'border-emerald-400 text-emerald-600' : 'border-slate-300 text-slate-500 hover:border-blue-500 hover:text-blue-600'"
-                                                    :title="'Checklist ของ ' + deptOf(l.deptId).name + ' (ดูอย่างเดียว)'" x-text="'จาก' + deptOf(l.deptId).name + ' ' + l.done + '/' + l.total"></button>
+                                                    :class="l.total && (l.watch ? l.got : l.done) === l.total ? 'border-emerald-400 text-emerald-600' : 'border-slate-300 text-slate-500 hover:border-blue-500 hover:text-blue-600'"
+                                                    :title="'Checklist ของ ' + deptOf(l.deptId).name + ' (ดูอย่างเดียว)'" x-text="l.watch ? '📦 ของเข้า ' + l.got + '/' + l.total : 'จาก' + deptOf(l.deptId).name + ' ' + l.done + '/' + l.total"></button>
                                         </template>
                                         <button type="button" x-show="isPmo && (c.free || []).length" @click.stop="openDispatch(cur, c.id, '')" class="shrink-0 rounded bg-amber-100 px-1.5 text-[12px] font-semibold text-amber-800 hover:bg-amber-200" :title="(c.free || []).length + ' งานย่อยยังไม่ได้จ่ายให้แผนก'" x-text="'จ่ายงาน ' + (c.free || []).length"></button>
                                         <span x-show="isPmo" class="flex shrink-0 items-center">
@@ -317,6 +325,7 @@
                     <div class="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 text-[13px] font-bold">
                         <div class="flex items-center gap-1" role="tablist">
                             <button type="button" role="tab" @click="feedTab = 'activity'" :aria-selected="feedTab === 'activity'" class="rounded-full px-2.5 py-1 text-[13px] font-bold" :class="feedTab === 'activity' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-200'">Activity</button>
+                            <button type="button" role="tab" @click="feedTab = 'remarks'" :aria-selected="feedTab === 'remarks'" class="rounded-full px-2.5 py-1 text-[13px] font-bold" :class="feedTab === 'remarks' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-200'" x-text="'หมายเหตุ' + (remarkCount(cur) ? ' ' + remarkCount(cur) : '')"></button>
                             <button type="button" role="tab" x-show="cur.logUrl" @click="openLog()" :aria-selected="feedTab === 'log'" class="rounded-full px-2.5 py-1 text-[13px] font-bold" :class="feedTab === 'log' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-200'" title="บันทึกการเปลี่ยนแปลงทั้งหมดของโครงการ">การดำเนินการ</button>
                         </div>
                     </div>
@@ -345,10 +354,10 @@
                                             <span x-show="c.receipt" :class="c.receipt && !c.receipt.pending.length ? 'font-semibold text-emerald-700' : ''"
                                                   x-text="c.receipt ? ' · รับทราบแล้ว ' + c.receipt.acked + '/' + c.receipt.total + ' คน' + (c.receipt.pending.length ? ' · ยังไม่รับทราบ: ' + c.receipt.pending.join(', ') : ' ✓ ครบ') : ''"></span>
                                             <span x-show="!c.receipt" x-text="c.alert && c.alert.acks.length ? ' · รับทราบแล้ว: ' + c.alert.acks.map((a) => a.name).join(', ') : ' · ยังไม่มีใครรับทราบ'"></span>
-                                            <button type="button" x-show="(c.alert && c.alert.forMe && !c.alert.acked) || (c.receipt && c.receipt.askMe)" @click="ackAlert(c)" class="ml-1 rounded bg-amber-500 px-2 py-0.5 font-semibold text-white hover:bg-amber-600">รับทราบ</button>
+                                            <button type="button" x-show="!readOnly && ((c.alert && c.alert.forMe && !c.alert.acked) || (c.receipt && c.receipt.askMe))" @click="ackAlert(c)" class="ml-1 rounded bg-amber-500 px-2 py-0.5 font-semibold text-white hover:bg-amber-600">รับทราบ</button>
                                         </div>
                                         <div class="mt-0.5 flex gap-3 text-[12px] text-slate-400">
-                                            <button type="button" @click="startReply(c)" class="hover:text-blue-600">ตอบกลับ</button>
+                                            <button type="button" x-show="!readOnly" @click="startReply(c)" class="hover:text-blue-600">ตอบกลับ</button>
                                             <button type="button" x-show="c.mine" @click="editComment(c)" class="hover:text-blue-600">แก้ไข</button>
                                             <button type="button" x-show="c.mine || isPmo" @click="deleteComment(c)" class="hover:text-red-600">ลบ</button>
                                             <span x-show="c.edited">(แก้ไขแล้ว)</span>
@@ -357,6 +366,24 @@
                                 </div>
                             </div>
                         </template>
+                    </div>
+                    {{-- หมายเหตุ: every remark of the project (remarkRows), by cabinet; filter by department / cabinet; "ไปที่รายการ" opens the checklist there --}}
+                    <div x-show="feedTab === 'remarks'" x-cloak class="flex min-h-0 flex-1 flex-col overflow-hidden">
+<div x-show="remarkDepts(cur).length > 1 || remarkCab" class="flex flex-wrap gap-1.5 border-b border-slate-200 bg-white px-3.5 py-2">
+<template x-for="d in (remarkDepts(cur).length > 1 ? [''].concat(remarkDepts(cur)) : [])" :key="'rd' + d"><button type="button" @click="remarkDept = d" :class="remarkChip(remarkDept === d)"><span x-show="d" class="h-2 w-2 rounded-full" :style="'background-color:' + deptOf(d).color"></span><span x-text="d ? deptOf(d).name : 'ทุกแผนก'"></span></button></template>
+<button type="button" x-show="remarkCab" @click="remarkCab = ''" :class="remarkChip(false) + ' !border-amber-300 !bg-amber-50 !text-amber-800'" x-text="((cur.subtasks.find((c) => c.id === remarkCab) || {}).mo || 'ตู้') + ' ✕'" aria-label="เลิกกรองตู้"></button>
+</div>
+<div class="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-3.5 py-3">
+<p x-show="!remarkGroups(cur).length" class="py-6 text-center text-xs text-slate-400" x-text="remarkCount(cur) ? 'ไม่มีหมายเหตุตามที่เลือก' : 'ยังไม่มีหมายเหตุในโครงการนี้'"></p>
+<template x-for="g in remarkGroups(cur)" :key="g.cabId"><div class="flex flex-col gap-1.5">
+<p class="truncate text-[12px] font-bold text-slate-600" x-text="g.label"></p>
+<template x-for="r in g.rows" :key="r.key"><div class="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[12px] text-slate-500">
+<p class="flex min-w-0 items-center gap-1.5"><span class="shrink-0 rounded bg-slate-100 px-1.5 font-semibold text-slate-700" x-text="r.level"></span><span x-show="r.deptId" class="h-2 w-2 shrink-0 rounded-full" :style="'background-color:' + deptOf(r.deptId).color" :title="deptOf(r.deptId).name"></span><span class="truncate" x-text="r.path" :title="r.path"></span></p>
+<p class="my-1 whitespace-pre-line break-words text-[13px] text-slate-900" x-text="r.text"></p>
+<p class="flex gap-2"><span class="min-w-0 flex-1 truncate text-slate-400" x-text="r.by"></span><button type="button" @click.stop="goRemark(cur, r, $event)" class="font-semibold text-blue-600 hover:underline" x-text="r.level === 'ตู้' ? 'ดูข้อมูลตู้ ›' : 'ไปที่รายการ ›'"></button></p>
+</div></template>
+</div></template>
+</div>
                     </div>
                     {{-- Change log = the project page's Activity Log tree (Cabinet > Task > Sub Task > Checklist > activity), read-only, PMO roles only --}}
                     <div x-show="feedTab === 'log'" x-cloak class="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -397,7 +424,7 @@
                             </template>
                         </div>
                     </div>
-                    <div x-show="feedTab === 'activity' && perms.comments" class="border-t border-slate-200 bg-white px-3 py-2.5">
+                    <div x-show="feedTab === 'activity' && perms.comments && !readOnly" class="border-t border-slate-200 bg-white px-3 py-2.5">
                         <div class="relative">
                             {{-- @ picker: type "@" and a name; ↑↓ + Enter/Tab picks, Esc closes. The tagged people get a notice (bell + popup). --}}
                             <div x-show="mentionOpen && mentionList().length" x-cloak class="absolute bottom-full left-0 z-10 mb-1 max-h-48 w-full overflow-y-auto rounded-[10px] border border-slate-200 bg-white p-1 shadow-lg" role="listbox" aria-label="แท็กคน">

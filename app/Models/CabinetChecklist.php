@@ -62,6 +62,12 @@ class CabinetChecklist extends Model
         return $this->hasMany(self::class, 'source_checklist_id');
     }
 
+    /** Settings > สีสถานะ Checklist: the coloured tags it carries (App\Services\ChecklistStatuses). */
+    public function statuses()
+    {
+        return $this->belongsToMany(ChecklistStatus::class, 'cabinet_checklist_status')->withPivot('created_by')->withTimestamps();
+    }
+
     protected function activityProjectId(): ?int
     {
         return $this->subtask?->cabinetTask?->cabinet?->project_id;

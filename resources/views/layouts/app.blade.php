@@ -78,6 +78,9 @@
                         </div>
 
                         <div class="flex items-center gap-4">
+                            @if (auth()->user()->isViewOnly())
+                                <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200" title="แผนกนี้ตั้งเป็นดูได้อย่างเดียว (ตั้งค่า → สิทธิ์การใช้งาน)">👁 ดูได้อย่างเดียว</span>
+                            @endif
                             <button type="button" @click="$dispatch('open-status-report')" class="text-slate-500 hover:text-slate-700" title="รายงานสถานะงาน" aria-label="รายงานสถานะงาน">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
                             </button>

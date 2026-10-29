@@ -218,7 +218,7 @@ trait PlanningSyncExtras
         ProjectLock::assertOpen($project->id);
         $subtask = \App\Models\CabinetSubtask::with('cabinetTask')->whereHas('cabinetTask.cabinet', fn ($q) => $q->where('project_id', $project->id))
             ->find($this->id($op['subtaskId'] ?? null, 's')) ?? throw new PlanningRejected('ไม่พบงานย่อยนี้');
-        if (! $user->canDispatchWork() && ($subtask->department_id === null || $subtask->department_id !== $user->department_id)) {
+        if (! $user->canDispatchWork() && ! $user->inDepartment($subtask->department_id)) {
             throw new PlanningRejected('แก้ได้เฉพาะงานของแผนกตัวเอง');
         }
         if ($subtask->assignment_status === \App\Models\CabinetSubtask::ASSIGNMENT_COMPLETED && (array_key_exists('startDate', $op['fields'] ?? []) || array_key_exists('dueDate', $op['fields'] ?? []))) {
@@ -238,7 +238,7 @@ trait PlanningSyncExtras
         if (array_key_exists('ownerId', $f)) {
             $owner = $f['ownerId'] === '' || $f['ownerId'] === null ? null
                 : User::where('is_active', true)->find((int) $f['ownerId']) ?? throw new PlanningRejected('ไม่พบผู้ใช้นี้');
-            if ($owner && $subtask->department_id && $owner->department_id !== $subtask->department_id && ! $owner->canDispatchWork()) {
+            if ($owner && $subtask->department_id && ! $owner->inDepartment($subtask->department_id) && ! $owner->canDispatchWork()) {
                 throw new PlanningRejected('ผู้รับผิดชอบต้องอยู่ในแผนกของงานนี้');
             }
             $map['owner_id'] = $owner?->id;
@@ -395,6 +395,14 @@ trait PlanningSyncExtras
         return null;
     }
 
+    /** Settings > สีสถานะ Checklist: one item's statuses, all at once. */
+    private function checklistTags(User $user, array $op): ?string
+    {
+        app(\App\Services\ChecklistStatuses::class)->set($this->editableItem($user, $op['itemId'] ?? null), (array) ($op['tags'] ?? []), $user);
+
+        return null;
+    }
+
     /** Settings > การส่งต่องาน: the date a sending department gives an item ("วันของเข้า"); the receiving departments hear it. */
     private function checklistDate(User $user, array $op): ?string
     {
@@ -504,7 +512,7 @@ trait PlanningSyncExtras
         if (empty($changes['alert_department_id']) && ! $asked) {
             throw new PlanningRejected('คอมเมนต์นี้ไม่ใช่การแจ้งเตือน');
         }
-        if (! $asked && (int) ($changes['alert_department_id'] ?? 0) !== (int) $user->department_id) {
+        if (! $asked && ! $user->inDepartment((int) ($changes['alert_department_id'] ?? 0))) {
             throw new PlanningRejected('รับทราบได้เฉพาะแผนกที่ถูกแจ้งเตือน');
         }
         $this->notifications->ackNote($user, $note);

@@ -14,7 +14,9 @@ use App\Models\User;
  *  - scope.* which projects a person sees (off = the ones their department has work in, or they are in charge of);
  *            for a department this IS its "เห็นงานทุกแผนก" switch (departments.sees_all), the same box on both pages
  *  - data.*  parts of a project; left out of the page, Planning's JSON and the CSV - not just hidden on screen
- *  - edit.*  the PM-level powers (edit.manage is what canDispatchWork() and the 'pmo' middleware mean)
+ *  - edit.*  the PM-level powers (edit.manage is what canDispatchWork() and the 'pmo' middleware mean); edit.work is a
+ *            department doing anything at all - off = "ดูได้อย่างเดียว" (e.g. ขาย): every write is refused (EnsureCanWork)
+ *            and no work can be handed to it
  */
 final class Access
 {
@@ -46,13 +48,14 @@ final class Access
         'data.contact' => ['data', '📞 ข้อมูลติดต่อลูกค้า', 'เบอร์ติดต่อ', false],
         'data.comments' => ['data', '💬 คอมเมนต์และประวัติ', 'อ่านและเขียนคอมเมนต์ ดูประวัติการแก้ไข', true],
         'data.other_fields' => ['data', 'ฟิลด์เพิ่มเติมของแผนกอื่น', 'ไม่ติ๊ก = เห็นเฉพาะฟิลด์ของแผนกตัวเอง', false],
+        'edit.work' => ['edit', 'ทำงานของแผนก', 'ติ๊ก Checklist, รับ / ไม่รับงาน, ลงวันที่, คอมเมนต์ — ไม่ติ๊ก = ดูได้อย่างเดียว กดแก้อะไรไม่ได้ และจ่ายงานให้แผนกนี้ไม่ได้', true],
         'edit.manage' => ['edit', 'จัดการโครงการและจ่ายงาน', 'สร้าง / แก้โครงการ ตู้ งาน วันที่ จ่ายงาน (สิทธิ์ระดับ PM — เห็นทุกโครงการด้วย)', false],
         'edit.templates' => ['edit', 'แก้เทมเพลตตู้ / เช็คลิสต์', '', false],
         'edit.trash' => ['edit', 'ลบ / กู้คืน (ถังขยะ)', '', false],
     ];
 
     /** a permission that comes with another one (who may edit the templates may open their page) */
-    public const IMPLIED = ['page.templates' => 'edit.templates'];
+    public const IMPLIED = ['page.templates' => 'edit.templates', 'edit.work' => 'edit.manage'];
 
     /** @return array<string, array<string, bool>> column ('none' or a department id) => key => allowed, for the active departments */
     public static function table(): array
@@ -91,6 +94,14 @@ final class Access
         }
         $col = $user->department_id ? (string) $user->department_id : self::NO_DEPARTMENT;
         $saved = (array) (((array) AppSetting::get('department_permissions'))[$col] ?? []);
+
+        return array_key_exists($key, $saved) ? (bool) $saved[$key] : self::PERMISSIONS[$key][3];
+    }
+
+    /** What a department's column says (no person needed): e.g. may work be handed to it (edit.work). */
+    public static function departmentAllows(int $departmentId, string $key): bool
+    {
+        $saved = (array) (((array) AppSetting::get('department_permissions'))[(string) $departmentId] ?? []);
 
         return array_key_exists($key, $saved) ? (bool) $saved[$key] : self::PERMISSIONS[$key][3];
     }

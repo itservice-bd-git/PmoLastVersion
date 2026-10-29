@@ -318,4 +318,176 @@ class SharedChecklistTest extends TestCase
         $this->actingAs($this->user($this->production))->patchJson(route('checklists.toggle', $this->item($this->receive, 'ตู้เหล็ก')), ['is_completed' => true])->assertOk();
         $this->assertNotSame($v, $this->actingAs($reader)->getJson($url.'?v='.$v)->json('version'));
     }
+
+    public function test_a_view_only_pair_follows_the_list_and_who_received_it_without_copies(): void
+    {
+        // จัดซื้อ orders, คลัง receives (takes the items), ผลิต only follows: จัดซื้อ's date and คลัง's "รับแล้ว" on one row
+        $store = Department::create(['name' => 'คลัง', 'code' => 'WH', 'is_active' => true]);
+        $stock = $this->work($store, 'รับของเข้าคลัง', []);
+        app(SubtaskPairs::class)->setCabinetPairs($stock, [$this->buy->id]);
+        app(SubtaskPairs::class)->setCabinetPairs($this->receive, [$this->buy->id], null, [$this->buy->id]);
+
+        $this->assertSame(['สายไฟ  25 ✓', 'ตรวจสภาพกล่อง'], $this->list($this->receive), 'no copies: its list and progress stay its own');
+        $this->assertSame(['🔗Breaker 100A', '🔗สายไฟ 25'], $this->list($stock));
+        $this->assertSame(['คลัง'], collect(app(HandoffService::class)->receiptsFor($this->buy->load('checklists'))[$this->item($this->buy, 'Breaker 100A')->id])->pluck('dept')->all(),
+            'one only following has nothing to receive');
+
+        // a new item at the source reaches คลัง only
+        $this->edit($this->user($this->purchasing), $this->buy, ['type' => 'add', 'items' => ['ตู้เหล็ก']])->assertOk();
+        $this->assertCount(2, $this->list($this->receive));
+        $this->assertCount(3, $this->list($stock));
+
+        // คลัง receives: the source is ticked, and ผลิต hears it too
+        $maker = $this->user($this->production);
+        $this->actingAs($this->user($store))->patchJson(route('checklists.toggle', $this->item($stock, 'Breaker 100A')), ['is_completed' => true])->assertOk();
+        $this->assertTrue($this->item($this->buy, 'Breaker 100A')->is_completed);
+        $this->assertStringContainsString('คลัง รับแล้ว 1 รายการ', $maker->notifications()->first()->data['body']);
+
+        $linked = app(HandoffService::class)->linkedForSubtask($this->receive->fresh()->load('cabinetTask', 'checklists'));
+        $this->assertCount(1, $linked);
+        $this->assertTrue($linked[0]['watch']);
+        $this->assertSame(1, $linked[0]['got']);
+        $this->assertSame([true, false, false], array_column($linked[0]['items'], 'received'));
+        $this->assertSame(['dept' => 'คลัง', 'at' => now()->format('Y-m-d'), 'received' => true], $linked[0]['items'][0]['receipts'][0]);
+    }
+
+    public function test_turning_a_pair_view_only_drops_the_copies_not_ticked_and_keeps_the_ticked_as_its_own(): void
+    {
+        $this->pairUp();
+        $this->assertSame(['🔗Breaker 100A', '🔗สายไฟ 25 ✓', 'ตรวจสภาพกล่อง'], $this->list($this->receive));
+
+        $pm = $this->user(null, 'project_manager');
+        $this->actingAs($pm)->putJson(route('cabinet-subtasks.pairs', $this->receive), ['sources' => [$this->buy->id], 'view' => [$this->buy->id]])
+            ->assertOk()->assertJsonPath('sources.0.view', true);
+
+        $this->assertSame(['สายไฟ 25 ✓', 'ตรวจสภาพกล่อง'], $this->list($this->receive));
+        $this->assertSame(50, $this->receive->fresh()->progress);
+        $this->assertSame(['Breaker 100A', 'สายไฟ 25'], $this->list($this->buy), 'the source keeps its list and ticks');
+        $this->assertStringContainsString('(ดูอย่างเดียว)', \App\Models\ActivityLog::where('project_id', $this->project->id)->latest('id')->value('description'));
+
+        // back to comparing: the copies come again
+        app(SubtaskPairs::class)->setCabinetPairs($this->receive, [$this->buy->id]);
+        $this->assertSame(['🔗Breaker 100A', '🔗สายไฟ 25 ✓', 'ตรวจสภาพกล่อง'], $this->list($this->receive));
+    }
+
+    public function test_a_view_only_pair_on_the_template_reaches_new_and_earlier_cabinets(): void
+    {
+        $template = CabinetTemplate::create(['name' => 'DB', 'code' => 'DB', 'is_active' => true]);
+        $t = CabinetTaskTemplate::create(['cabinet_template_id' => $template->id, 'name' => 'งาน', 'sequence' => 1]);
+        $order = CabinetSubtaskTemplate::create(['cabinet_task_template_id' => $t->id, 'name' => 'สั่งซื้อ', 'department_id' => $this->purchasing->id, 'sequence' => 1]);
+        $watch = CabinetSubtaskTemplate::create(['cabinet_task_template_id' => $t->id, 'name' => 'ประกอบ', 'department_id' => $this->production->id, 'sequence' => 2]);
+        ChecklistTemplate::create(['cabinet_subtask_template_id' => $order->id, 'name' => 'A', 'sequence' => 1]);
+        $admin = $this->user(null, 'admin');
+        $this->actingAs($admin)->putJson(route('subtask-templates.pairs', $watch), ['sources' => [$order->id], 'view' => [$order->id]])
+            ->assertOk()->assertJsonPath('sources.0.view', true);
+
+        $made = function () use ($template) {
+            $cab = Cabinet::forceCreate(['project_id' => $this->project->id, 'mo_no' => 'MO-T', 'cabinet_name' => 'T', 'quantity' => 1, 'status' => 'not_started', 'progress' => 0]);
+            app(CabinetTemplateService::class)->applyToCabinet($cab, $template->fresh());
+
+            return CabinetSubtask::whereHas('cabinetTask', fn ($q) => $q->where('cabinet_id', $cab->id))->where('name', 'ประกอบ')->first();
+        };
+        $sub = $made();
+        $this->assertSame([], $this->list($sub));
+        $this->assertTrue((bool) $sub->pairSources()->first()->pivot->view_only);
+
+        // "ใช้คู่เทียบกับตู้เดิม" keeps it view only
+        app(SubtaskPairs::class)->applyToCabinets($template);
+        $this->assertTrue((bool) $sub->pairSources()->first()->pivot->view_only);
+        $this->assertSame([], $this->list($sub));
+    }
+
+    public function test_watching_the_receiving_list_itself_shows_its_own_ticks_and_the_sources_dates(): void
+    {
+        // จัดซื้อ → คลัง (takes the items, adds one of its own); ผลิต watches คลัง: every item of คลัง, ticked or not by คลัง
+        $store = Department::create(['name' => 'คลัง', 'code' => 'WH', 'is_active' => true]);
+        $this->purchasing->update(['handoff_date_label' => 'วันของเข้า']);
+        $stock = $this->work($store, 'รับของเข้าคลัง', []);
+        app(SubtaskPairs::class)->setCabinetPairs($stock, [$this->buy->id]);
+        CabinetChecklist::forceCreate(['cabinet_subtask_id' => $stock->id, 'name' => 'ตรวจนับ', 'is_completed' => false, 'sequence' => 9]);
+        $this->item($this->buy, 'Breaker 100A')->forceFill(['expected_date' => '2026-11-05'])->saveQuietly();
+        app(SubtaskPairs::class)->setCabinetPairs($this->receive, [$stock->id], null, [$stock->id]);
+        $this->actingAs($this->user($store))->patchJson(route('checklists.toggle', $this->item($stock, 'Breaker 100A')), ['is_completed' => true])->assertOk();
+
+        $l = app(HandoffService::class)->linkedForSubtask($this->receive->fresh()->load('cabinetTask', 'checklists'))[0];
+        $this->assertTrue($l['watch']);
+        $this->assertSame('วันของเข้า', $l['dateLabel'], 'the copies\' dates are จัดซื้อ\'s');
+        $this->assertSame(['Breaker 100A', 'สายไฟ 25', 'ตรวจนับ'], array_column($l['items'], 'text'));
+        $this->assertSame([true, false, false], array_column($l['items'], 'received'), 'คลัง\'s own ticks');
+        $this->assertSame('2026-11-05', $l['items'][0]['expected']);
+        $this->assertSame(['dept' => 'คลัง', 'at' => now()->format('Y-m-d'), 'received' => true, 'verb' => 'ติ๊ก'], $l['items'][0]['receipts'][0]);
+        $this->assertSame(1, $l['got']);
+    }
+
+    public function test_using_the_same_list_gives_copies_whose_ticks_stay_its_own(): void
+    {
+        // จัดซื้อ → คลัง receives (its ticks tick จัดซื้อ); ผลิต uses the same list to assemble: its ticks reach nobody
+        $store = Department::create(['name' => 'คลัง', 'code' => 'WH', 'is_active' => true]);
+        $stock = $this->work($store, 'รับของเข้าคลัง', []);
+        app(SubtaskPairs::class)->setCabinetPairs($stock, [$this->buy->id]);
+        $pm = $this->user(null, 'project_manager');
+        $this->actingAs($pm)->putJson(route('cabinet-subtasks.pairs', $this->receive), ['sources' => [$this->buy->id], 'own' => [$this->buy->id]])
+            ->assertOk()->assertJsonPath('sources.0.own', true)->assertJsonPath('sources.0.view', false);
+        $this->assertSame(['🔗Breaker 100A', '🔗สายไฟ 25 ✓', 'ตรวจสภาพกล่อง'], $this->list($this->receive), 'the same items, in its own list');
+
+        // ผลิต ticks its copy: จัดซื้อ and คลัง stay as they are
+        $maker = $this->user($this->production);
+        $this->actingAs($maker)->patchJson(route('checklists.toggle', $this->item($this->receive, 'Breaker 100A')), ['is_completed' => true])->assertOk();
+        $this->assertFalse($this->item($this->buy, 'Breaker 100A')->is_completed);
+        $this->assertFalse($this->item($stock, 'Breaker 100A')->is_completed);
+        $this->assertSame(['คลัง'], collect(app(HandoffService::class)->receiptsFor($this->buy->load('checklists'))[$this->item($this->buy, 'Breaker 100A')->id])->pluck('dept')->all());
+
+        // คลัง receives: จัดซื้อ is ticked, ผลิต hears it and sees it beside its item; its own tick is untouched
+        $this->actingAs($this->user($store))->patchJson(route('checklists.toggle', $this->item($stock, 'สายไฟ 25')), ['is_completed' => true])->assertOk();
+        $this->assertTrue($this->item($this->buy, 'สายไฟ 25')->is_completed);
+        $this->assertStringContainsString('คลัง รับแล้ว 1 รายการ', $maker->notifications()->first()->data['body']);
+        $l = app(HandoffService::class)->linkedForSubtask($this->receive->fresh()->load('cabinetTask', 'checklists'))[0];
+        $this->assertTrue($l['own']);
+        $this->assertFalse($l['watch']);
+        $this->assertSame([true, true], array_column($l['items'], 'received'), 'ผลิต has both (its tick, and the one it had)');
+        $this->assertSame([[false], [true]], array_map(fn ($i) => array_column($i['receipts'], 'received'), $l['items']), 'คลัง has only the second');
+
+        // a new item at the source reaches both
+        $this->edit($this->user($this->purchasing), $this->buy, ['type' => 'add', 'items' => ['ตู้เหล็ก']])->assertOk();
+        $this->assertContains('🔗ตู้เหล็ก', $this->list($this->receive));
+        $this->assertContains('🔗ตู้เหล็ก', $this->list($stock));
+    }
+
+    public function test_using_the_receiving_list_takes_all_of_it_one_step_further(): void
+    {
+        // จัดซื้อ → คลัง (its copies + one of its own, checked ready to draw) → ผลิต uses คลัง's whole list for assembling
+        $store = Department::create(['name' => 'คลัง', 'code' => 'WH', 'is_active' => true]);
+        $stock = $this->work($store, 'เตรียมของ', []);
+        app(SubtaskPairs::class)->setCabinetPairs($stock, [$this->buy->id]);
+        CabinetChecklist::forceCreate(['cabinet_subtask_id' => $stock->id, 'name' => 'น็อต M8', 'is_completed' => false, 'sequence' => 9]);
+        $this->item($this->buy, 'Breaker 100A')->forceFill(['expected_date' => '2026-11-05'])->saveQuietly();
+        app(SubtaskPairs::class)->setCabinetPairs($this->receive, [$stock->id], null, [], [$stock->id]);
+        $this->assertSame(['🔗Breaker 100A', '🔗สายไฟ 25 ✓', '🔗น็อต M8', 'ตรวจสภาพกล่อง'], $this->list($this->receive), 'all of คลัง\'s list');
+
+        // คลัง checks one ready: ผลิต sees it beside its own copy, with จัดซื้อ's date; ผลิต's tick reaches nobody
+        $this->actingAs($this->user($store))->patchJson(route('checklists.toggle', $this->item($stock, 'Breaker 100A')), ['is_completed' => true])->assertOk();
+        $l = app(HandoffService::class)->linkedForSubtask($this->receive->fresh()->load('cabinetTask', 'checklists'))[0];
+        $this->assertTrue($l['own']);
+        $this->assertSame('2026-11-05', $l['items'][0]['expected']);
+        $this->assertSame(['dept' => 'คลัง', 'at' => now()->format('Y-m-d'), 'received' => true, 'verb' => 'ติ๊ก'], $l['items'][0]['receipts'][0]);
+        $this->actingAs($this->user($this->production))->patchJson(route('checklists.toggle', $this->item($this->receive, 'น็อต M8')), ['is_completed' => true])->assertOk();
+        $this->assertFalse($this->item($stock, 'น็อต M8')->is_completed);
+
+        // จัดซื้อ adds, renames, deletes: through คลัง to ผลิต
+        $buyer = $this->user($this->purchasing);
+        $this->edit($buyer, $this->buy, ['type' => 'add', 'items' => ['ตู้เหล็ก']])->assertOk();
+        $this->edit($buyer, $this->buy, ['type' => 'update', 'id' => $this->item($this->buy, 'สายไฟ 25')->id, 'name' => 'สายไฟ 35'])->assertOk();
+        $this->assertSame(['🔗Breaker 100A', '🔗สายไฟ 35 ✓', '🔗ตู้เหล็ก', '🔗น็อต M8 ✓', 'ตรวจสภาพกล่อง'], $this->list($this->receive));
+        $this->edit($buyer, $this->buy, ['type' => 'delete', 'ids' => [$this->item($this->buy, 'ตู้เหล็ก')->id]])->assertOk();
+        $this->assertNotContains('🔗ตู้เหล็ก', $this->list($this->receive));
+        // ผลิต ticked a copy of it: จัดซื้อ may not delete it
+        $this->edit($buyer, $this->buy, ['type' => 'delete', 'ids' => [$this->item($this->buy, 'สายไฟ 35')->id]])->assertStatus(422);
+
+        // never round: คลัง using ผลิต's list too stays as it is after syncing again
+        app(SubtaskPairs::class)->setCabinetPairs($stock, [$this->buy->id, $this->receive->id], null, [], [$this->receive->id]);
+        $before = [count($this->list($stock)), count($this->list($this->receive))];
+        app(SubtaskPairs::class)->setCabinetPairs($this->receive, [$stock->id], null, [], [$stock->id]);
+        app(SubtaskPairs::class)->setCabinetPairs($stock, [$this->buy->id, $this->receive->id], null, [], [$this->receive->id]);
+        $this->assertSame($before, [count($this->list($stock)), count($this->list($this->receive))]);
+    }
 }

@@ -100,7 +100,7 @@ class NotificationService
      */
     public function projectAlert(Project $project, Department $department, User $actor, string $note, ?ActivityLog $log = null): int
     {
-        $users = User::where('department_id', $department->id)->where('is_active', true)->where('id', '!=', $actor->id)->get();
+        $users = User::ofDepartment($department->id)->where('is_active', true)->where('id', '!=', $actor->id)->get();
 
         $sent = $this->send($users, new PmoNotice(
             'alert',
@@ -289,7 +289,7 @@ class NotificationService
             ->whereHas('cabinetTask.cabinet', fn ($q) => $q->where('project_id', $project->id))
             ->whereIn('assignment_status', [CabinetSubtask::ASSIGNMENT_ASSIGNED, CabinetSubtask::ASSIGNMENT_ACCEPTED, CabinetSubtask::ASSIGNMENT_IN_PROGRESS])
             ->exists()) {
-            $this->send($this->peopleInCharge($project, $actor), new PmoNotice(
+            $this->send($this->peopleInCharge($project, $actor)->merge($this->projectFollowers($project, $actor))->unique('id'), new PmoNotice(
                 'project_done', "งานทุกแผนกของ {$project->project_no} เสร็จแล้ว", $project->project_name,
                 route('planning.board', ['project' => $project->id]), "project_done:{$project->id}", projectId: $project->id,
                 group: "project:{$project->id}", parts: ['project_done' => 1], projectLabel: "{$project->project_no} · {$project->project_name}",
@@ -327,7 +327,31 @@ class NotificationService
         $people = $this->peopleInCharge($project, $actor)
             ->merge(User::where('id', $dispatcher)->where('is_active', true)->where('id', '!=', $actor->id)->get())->unique('id');
 
-        return $people->isNotEmpty() ? $people : $this->pmoPeople($actor);
+        return ($people->isNotEmpty() ? $people : $this->pmoPeople($actor))->merge($this->projectFollowers($project, $actor))->unique('id')->values();
+    }
+
+    /** The people following the project (ProjectFollowers) who can see it, active, not $except. */
+    private function projectFollowers(Project $project, ?User $except = null): Collection
+    {
+        return $project->followers()->where('users.is_active', true)->when($except, fn ($q) => $q->where('users.id', '!=', $except->id))->get()
+            ->filter(fn (User $u) => \App\Services\WorkScope::canSeeProject($project, $u))->values();
+    }
+
+    /** Ticked as a project's พนักงานขาย (ProjectFollowers::setSales): they follow it now - its news comes to them. */
+    public function followerAdded(Project $project, User $actor, Collection $people): int
+    {
+        $people = $people->reject(fn (User $u) => $u->id === $actor->id)->filter(fn (User $u) => \App\Services\WorkScope::canSeeProject($project, $u));
+
+        return $this->send($people, new PmoNotice(
+            'follow',
+            "{$actor->name} ให้คุณติดตามโครงการ {$project->project_no}",
+            $project->project_name.($project->customer_name ? ' · '.$project->customer_name : '').' — แจ้งเตือนความเคลื่อนไหวของโครงการนี้จะมาที่คุณ',
+            route('planning.board', ['project' => $project->id]),
+            projectId: $project->id,
+            group: "project:{$project->id}",
+            parts: ['follow' => 1],
+            projectLabel: "{$project->project_no} · {$project->project_name}",
+        ));
     }
 
     /** The project's PM and its people in charge (Planning), active, not $except. */
@@ -354,6 +378,7 @@ class NotificationService
     {
         $ids = \App\Models\ActivityLog::where('project_id', $project->id)->where('action', 'note')->where('id', '!=', $note->id)->pluck('user_id')
             ->merge($this->peopleInCharge($project)->pluck('id'))
+            ->merge($project->followers()->pluck('users.id'))
             ->filter()->unique()->reject(fn ($id) => $id === $actor->id || in_array($id, $skip, true));
         // the author of the comment being answered hears it too (even if they never wrote here otherwise - they did, by definition)
 
@@ -380,7 +405,7 @@ class NotificationService
     {
         $sent = 0;
         // a member moving their own department's dates is not news to that department
-        foreach ($subtasks->filter(fn ($s) => $s->department_id && $s->department_id !== $actor->department_id)->groupBy(fn ($s) => $s->department_id.'|'.$s->cabinetTask->cabinet->project_id) as $group) {
+        foreach ($subtasks->filter(fn ($s) => $s->department_id && ! $actor->inDepartment($s->department_id))->groupBy(fn ($s) => $s->department_id.'|'.$s->cabinetTask->cabinet->project_id) as $group) {
             $first = $group->first()->loadMissing('cabinetTask.cabinet.project');
             $project = $first->cabinetTask->cabinet->project;
             $dues = $group->pluck('due_date')->filter();
@@ -450,7 +475,7 @@ class NotificationService
     /** How many active people a department has (0 = nobody would ever see what is sent there). */
     public function headcount(int $departmentId): int
     {
-        return User::where('department_id', $departmentId)->where('is_active', true)->count();
+        return User::ofDepartment($departmentId)->where('is_active', true)->count();
     }
 
     /**
@@ -505,7 +530,7 @@ class NotificationService
             if ($lateRows->isNotEmpty()) {
                 [$late, , $worst] = $summary($lateRows);
                 $depts = $lateRows->pluck('department.name')->filter()->unique()->implode(', ');
-                $sent += $this->send($this->peopleInCharge($project)->reject(fn ($u) => $lateRows->pluck('department_id')->contains($u->department_id)), new PmoNotice(
+                $sent += $this->send($this->peopleInCharge($project)->reject(fn ($u) => $lateRows->pluck('department_id')->intersect($u->departmentIds())->isNotEmpty()), new PmoNotice(
                     'overdue',
                     "งานเกินกำหนด {$late} งาน · {$project->project_no}",
                     "{$project->project_name} · {$depts} · เกินสุด {$worst} วัน",
@@ -591,7 +616,7 @@ class NotificationService
 
             $depts = $projectRows->pluck('department_id')->unique();
             $people = $this->peopleInCharge($project);
-            $sent += $this->send(($people->isNotEmpty() ? $people : $this->pmoPeople())->reject(fn ($u) => $depts->contains($u->department_id)), new PmoNotice(
+            $sent += $this->send(($people->isNotEmpty() ? $people : $this->pmoPeople())->reject(fn ($u) => $depts->intersect($u->departmentIds())->isNotEmpty()), new PmoNotice(
                 'waiting',
                 "ยังไม่มีคนรับงาน {$projectRows->count()} งาน · {$project->project_no}",
                 "{$project->project_name} · ".$projectRows->pluck('department.name')->filter()->unique()->implode(', ')." · รอมาแล้ว {$longest($projectRows)} วัน",
@@ -628,7 +653,7 @@ class NotificationService
             return false;
         }
 
-        return ! ($pref->only_my_department && $departmentId && $user->department_id && $user->department_id !== $departmentId
+        return ! ($pref->only_my_department && $departmentId && $user->department_id && ! $user->inDepartment($departmentId)
             && isset(self::PREFERENCE_FOR_KIND[$notice->kind]));
     }
 
@@ -736,7 +761,7 @@ class NotificationService
             return collect();
         }
 
-        return User::where('department_id', $subtask->department_id)->where('is_active', true)
+        return User::ofDepartment($subtask->department_id)->where('is_active', true)
             ->when($except, fn ($q) => $q->where('id', '!=', $except->id))->get();
     }
 

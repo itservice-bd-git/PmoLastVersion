@@ -12,17 +12,20 @@
         $checklistEditor = app(\App\Services\ChecklistEditor::class);
         $handoff = app(\App\Services\HandoffService::class);   // one instance: the cabinet's checklist pairs are read once for the page
         $canComments = auth()->user()->allows('data.comments');   // Settings > สิทธิ์การใช้งาน
-        $initialTab = in_array(request('tab'), array_merge(['tasks'], $canComments ? ['comment', 'activity'] : [])) ? request('tab') : 'tasks';
+        $initialTab = in_array(request('tab'), array_merge(['tasks', 'remarks'], $canComments ? ['comment', 'activity'] : [])) ? request('tab') : 'tasks';
 
         $allSubtasks = $cabinet->tasks->flatMap->subtasks;
         // "แก้คู่เทียบ" of this cabinet (Admin / PM): any other Sub Task of the cabinet
         $canPair = auth()->user()->canDispatchWork() && ! \App\Services\ProjectLock::isLocked($cabinet->project_id);
         $canBuild = $canPair;   // "+ เพิ่ม Task / Sub Task" (Admin / PM, open project): this cabinet only
         $pairOptions = $canPair ? $cabinet->tasks->flatMap(fn ($t) => $t->subtasks->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'task' => $t->name, 'dept' => (string) $s->department?->name]))->values() : collect();
+        $tagCatalog = app(\App\Services\ChecklistStatuses::class)->catalog();   // Settings > สีสถานะ Checklist
         $expectedLate = $cabinet->expected_completion_date && $cabinet->due_date && $cabinet->expected_completion_date->gt($cabinet->due_date);
     @endphp
 
-    <div class="max-w-screen-2xl mx-auto space-y-5" x-data="{ tab: '{{ $initialTab }}' }" x-init="$watch('tab', (t) => keepTabInUrl(t, 'tasks'))">
+    {{-- every checklist editor and the status summaries below draw their chips from this --}}
+    <script>window.pmoChecklistStatuses = @js($tagCatalog);</script>
+    <div class="max-w-screen-2xl mx-auto space-y-5" x-data="{ tab: '{{ $initialTab }}', remarkTask: null, remarkDept: null }" x-init="$watch('tab', (t) => keepTabInUrl(t, 'tasks'))">
 
         <x-closed-project-banner :project="$cabinet->project" />
 
@@ -67,6 +70,9 @@
             <button type="button" @click="tab = 'tasks'"
                     :class="tab === 'tasks' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'"
                     class="whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px">งาน ({{ $allSubtasks->count() }})</button>
+            <button type="button" @click="tab = 'remarks'; remarkTask = null"
+                    :class="tab === 'remarks' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'"
+                    class="whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px">หมายเหตุ ({{ $remarks->count() }})</button>
             @if ($canComments)
             <button type="button" @click="tab = 'comment'"
                     :class="tab === 'comment' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'"
@@ -77,6 +83,7 @@
             @endif
         </div>
 
+        @include('cabinets.partials._remarks', ['remarks' => $remarks])
         @if ($canComments)
         <div x-show="tab === 'comment'" x-cloak>
             <x-comment-thread :comments="$comments" note-route="cabinets.notes.store" :note-model="$cabinet"
@@ -117,6 +124,47 @@
                         @endif
                     </dl>
                 </div>
+                {{-- Settings > สีสถานะ Checklist: each status of the cabinet and how many items carry it (live, from the lists below);
+                     a row filters the lists to it and scrolls to its first item --}}
+                @if ($tagCatalog)
+                    <div x-show="$store.checklistTags.tally().length" x-cloak class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                         x-data="{ showTag(id) {
+                            this.tab = 'tasks';
+                            window.dispatchEvent(new CustomEvent('checklist-tag-filter', { detail: { id } }));
+                            const hit = Object.values(this.$store.checklistTags.lists).flat().find((i) => i.tags.includes(id));
+                            this.$nextTick(() => {
+                                const el = hit && document.getElementById('checklist-' + hit.id);
+                                if (!el) return;
+                                for (let d = el.closest('details'); d; d = d.parentElement.closest('details')) d.open = true;
+                                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            });
+                         } }">
+                        <p class="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">สถานะในตู้นี้</p>
+                        <template x-for="t in $store.checklistTags.tally()" :key="t.id">
+                            <button type="button" @click="showTag(t.id)" class="flex min-h-[44px] w-full items-center gap-2.5 border-b border-slate-50 px-4 text-left hover:bg-slate-50" :title="'แสดงเฉพาะรายการที่ติด ' + t.name">
+                                <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="'background:' + t.dot"></span>
+                                <span class="min-w-0 flex-1 truncate text-sm text-slate-900" x-text="t.name"></span>
+                                <span class="text-sm font-bold tabular-nums text-slate-900" x-text="t.n + ' รายการ'"></span>
+                            </button>
+                        </template>
+                    </div>
+                @endif
+                {{-- the latest remarks of the cabinet's work; all of them in the "หมายเหตุ" tab --}}
+                @if ($remarks->isNotEmpty())
+                    <div class="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
+                        <div class="flex items-center gap-1.5 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-900">
+                            <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4h16v12H8l-4 4z"/><path stroke-linecap="round" d="M8 9h8M8 12h5"/></svg>
+                            หมายเหตุ ({{ $remarks->count() }})
+                            <button type="button" @click="tab = 'remarks'; remarkTask = null; window.scrollTo({ top: 0 })" class="ml-auto text-xs font-semibold text-blue-600 hover:underline">ดูทั้งหมด ›</button>
+                        </div>
+                        @foreach ($remarks->sortByDesc('at')->take(3) as $r)
+                            <div class="border-t border-amber-100 px-4 py-2">
+                                <p class="truncate text-xs text-slate-500" title="{{ $r['path'] }}">{{ $r['path'] }}</p>
+                                <p class="whitespace-pre-line break-words text-sm text-slate-800">{{ \Illuminate\Support\Str::limit($r['text'], 140) }}</p>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
                 <a href="{{ route('projects.show', [$cabinet->project, 'tab' => 'cabinets']) }}" class="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300">
                     <div class="text-xs text-slate-500">โครงการ {{ $cabinet->project->project_no }}</div>
                     <div class="font-bold text-ae-navy">{{ $cabinet->project->project_name }}</div>
@@ -131,18 +179,32 @@
                     <x-card><p class="text-sm text-slate-500">ตู้นี้ยังไม่มีงานของแผนกคุณ</p></x-card>
                 @endif
                 @foreach ($cabinet->tasks as $task)
-                    <x-card class="!p-0">
+                    <x-card class="!p-0 scroll-mt-20" id="task-card-{{ $task->id }}">
                         <details open class="group">
                             <summary class="list-none cursor-pointer px-5 py-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                                 <div class="flex flex-wrap items-center gap-3 min-w-0">
                                     <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                                     <h3 class="font-semibold text-slate-900">{{ $task->name }}</h3>
+                                    @if ($tagCatalog)
+                                        {{-- its items' statuses, added up (only the ones it has) --}}
+                                        <template x-for="t in $store.checklistTags.tally(@js($task->subtasks->pluck('id')->values()))" :key="t.id">
+                                            <span class="inline-flex h-6 items-center gap-1.5 rounded-full px-2 text-[13px] font-semibold" :style="'background:' + t.bg + ';color:' + t.fg" :title="t.name + ' ' + t.n + ' รายการ'">
+                                                <span class="h-2 w-2 rounded-full" :style="'background:' + t.dot"></span><span x-text="t.name + ' ' + t.n"></span></span>
+                                        </template>
+                                    @endif
+                                    @if ($n = $remarks->where('taskId', $task->id)->count())
+                                        <button type="button" @click.stop.prevent="remarkTask = {{ $task->id }}; tab = 'remarks'; window.scrollTo({ top: 0 })"
+                                                class="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                                                title="ดูหมายเหตุของงานนี้" aria-label="หมายเหตุ {{ $n }} รายการ ของ {{ $task->name }}">
+                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4h16v12H8l-4 4z"/></svg>{{ $n }}
+                                        </button>
+                                    @endif
                                     <x-status-badge :status="$task->status" id="task-{{ $task->id }}" />
                                     @if ($task->start_date)
-                                        <span class="text-xs text-slate-400 whitespace-nowrap">เริ่ม {{ $task->start_date->thaiDate() }}</span>
+                                        <span class="text-[13px] text-slate-500 whitespace-nowrap">เริ่ม <span class="font-semibold text-slate-800 tabular-nums">{{ $task->start_date->thaiDate() }}</span></span>
                                     @endif
                                     @if ($task->due_date)
-                                        <span class="text-xs text-slate-400 whitespace-nowrap">จบ {{ $task->due_date->thaiDate() }}</span>
+                                        <span class="text-[13px] text-slate-500 whitespace-nowrap">จบ <span class="font-semibold text-slate-800 tabular-nums">{{ $task->due_date->thaiDate() }}</span></span>
                                         @if ($task->status !== \App\Models\CabinetTask::STATUS_COMPLETED)
                                             <span class="text-xs font-medium px-1.5 py-0.5 rounded whitespace-nowrap {{ $task->days_remaining < 0 ? 'bg-red-100 text-red-700' : ($task->days_remaining <= 3 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500') }}">
                                                 {{ $task->days_remaining >= 0 ? 'เหลือ '.$task->days_remaining.' วัน' : 'เลยกำหนด '.abs($task->days_remaining).' วัน' }}
@@ -166,21 +228,29 @@
 
                             <div class="border-t border-slate-100 divide-y divide-slate-100">
                                 @forelse ($task->subtasks as $subtask)
-                                    {{-- opens by itself when a link points at it (alerts, notifications: #subtask-{id}) --}}
+                                    {{-- opens by itself when a link points at it (alerts, notifications: #subtask-{id}; สรุปงาน: #goto-subtask-{id}) --}}
                                     <details class="pl-12 pr-5 py-3 border-l-2 border-slate-100 ml-5 scroll-mt-20" id="subtask-{{ $subtask->id }}"
-                                             x-data x-init="if (location.hash === '#subtask-{{ $subtask->id }}') $el.open = true">
+                                             x-data="linkedSubtask({{ $subtask->id }})">
                                         <summary class="list-none cursor-pointer flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                                             <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 sm:min-w-[22rem] flex-1">
+                                                {{-- the one a link from สรุปงาน came to: marked for a few seconds --}}
+                                                <span x-show="marked" x-cloak x-transition.opacity.duration.500ms class="relative inline-flex h-6 w-6 shrink-0 items-center justify-center" title="หัวข้อที่ลิงก์มา">
+                                                    <span class="absolute inset-0 rounded-full bg-blue-600 opacity-75 motion-safe:animate-ping"></span>
+                                                    <span class="relative inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white">
+                                                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                                                    </span>
+                                                    <span class="sr-only">หัวข้อที่ลิงก์มา</span>
+                                                </span>
                                                 <span class="text-sm font-medium text-slate-800 min-w-[10rem] max-w-xs">{{ $subtask->name }}</span>
                                                 <x-status-badge :status="$subtask->status" id="subtask-{{ $subtask->id }}" />
                                                 <div class="flex flex-wrap items-center gap-2" data-assignment="{{ $subtask->id }}" data-no-step-bar @click.stop>
                                                     @include('cabinets.partials._assignment', ['subtask' => $subtask, 'departments' => $departments, 'stepBar' => false])
                                                 </div>
                                                 @if ($subtask->start_date)
-                                                    <span class="text-xs text-slate-400 whitespace-nowrap">เริ่ม {{ $subtask->start_date->thaiDate() }}</span>
+                                                    <span class="text-[13px] text-slate-500 whitespace-nowrap">เริ่ม <span class="font-semibold text-slate-800 tabular-nums">{{ $subtask->start_date->thaiDate() }}</span></span>
                                                 @endif
                                                 @if ($subtask->due_date)
-                                                    <span class="text-xs text-slate-400 whitespace-nowrap">จบ {{ $subtask->due_date->thaiDate() }}</span>
+                                                    <span class="text-[13px] text-slate-500 whitespace-nowrap">จบ <span class="font-semibold text-slate-800 tabular-nums">{{ $subtask->due_date->thaiDate() }}</span></span>
                                                     @if ($subtask->status !== \App\Models\CabinetSubtask::STATUS_COMPLETED)
                                                         <span class="text-xs font-medium px-1.5 py-0.5 rounded whitespace-nowrap {{ $subtask->days_remaining < 0 ? 'bg-red-100 text-red-700' : ($subtask->days_remaining <= 3 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500') }}">
                                                             {{ $subtask->days_remaining >= 0 ? 'เหลือ '.$subtask->days_remaining.' วัน' : 'เลยกำหนด '.abs($subtask->days_remaining).' วัน' }}
@@ -202,11 +272,35 @@
                                                 <button type="button" x-data @click.stop.prevent="$dispatch('open-modal', 'edit-subtask-{{ $subtask->id }}')" class="text-xs font-medium text-blue-600 hover:underline">แก้ไข</button>
                                                 @endeditplan
                                             </div>
+                                            {{-- the Sub Task's remark, seen at once (it was only in the edit window) --}}
+                                            @if (filled($subtask->remark))
+                                                <div class="flex basis-full gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm leading-relaxed text-amber-900">
+                                                    <span aria-hidden="true">📝</span>
+                                                    <span class="min-w-0 whitespace-pre-line break-words">{{ $subtask->remark }}@editplan <button type="button" x-data @click.stop.prevent="$dispatch('open-modal', 'edit-subtask-{{ $subtask->id }}')" class="ml-1 text-xs font-semibold text-blue-600 hover:underline">แก้ไข</button>@endeditplan</span>
+                                                </div>
+                                            @endif
+                                            {{-- its checklist items' remarks, seen without opening it (all of them: the "หมายเหตุ" tab) --}}
+                                            @php $itemRemarks = $subtask->checklists->filter(fn ($c) => filled($c->remark))->sortBy('sequence'); @endphp
+                                            @if ($itemRemarks->isNotEmpty())
+                                                <div class="basis-full rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-sm leading-relaxed text-amber-900" x-data="{ all: false }">
+                                                    <p class="text-xs font-semibold text-amber-800">หมายเหตุในรายการ ({{ $itemRemarks->count() }})</p>
+                                                    <ul class="mt-0.5 space-y-0.5">
+                                                        @foreach ($itemRemarks->values() as $i => $item)
+                                                            <li class="break-words" @if ($i >= 5) x-show="all" x-cloak @endif><span class="font-medium">{{ $item->name }}:</span> <span class="whitespace-pre-line">{{ $item->remark }}</span></li>
+                                                        @endforeach
+                                                    </ul>
+                                                    {{-- the first 5; the rest open here (a click in the row would otherwise open / close the Sub Task) --}}
+                                                    @if ($itemRemarks->count() > 5)
+                                                        <button type="button" @click.stop.prevent="all = !all" :aria-expanded="all" class="mt-0.5 text-xs font-semibold text-blue-600 hover:underline"
+                                                                x-text="all ? 'ย่อ ▴' : 'แสดงอีก {{ $itemRemarks->count() - 5 }} รายการ ▾'">แสดงอีก {{ $itemRemarks->count() - 5 }} รายการ ▾</button>
+                                                    @endif
+                                                </div>
+                                            @endif
                                         </summary>
 
                                         @if ($canPair)
                                             <x-pair-picker class="mt-3 ml-7" :url="route('cabinet-subtasks.pairs', $subtask)" :can-edit="true" :chips="false" :reload="true"
-                                                           :chosen="$subtask->pairSources->map(fn ($s) => ['id' => $s->id, 'name' => $s->name])->values()"
+                                                           :chosen="$subtask->pairSources->map(fn ($s) => \App\Http\Controllers\TemplatePairController::chip($s))->values()"
                                                            :options="$pairOptions->where('id', '!=', $subtask->id)->values()"
                                                            hint="เลือก Sub Task ที่จะเทียบ Checklist ด้วย (เฉพาะตู้นี้ · เทมเพลตไม่เปลี่ยน)" />
                                         @endif
@@ -445,6 +539,27 @@
             document.addEventListener('visibilitychange', check);
             window.addEventListener('checklist-changed', () => setTimeout(check, 200));
         })();
+
+        // one Sub Task (x-data): a link to it opens it. #subtask-{id} goes straight there (the browser's own jump);
+        // #goto-subtask-{id} (from สรุปงาน) shows the top of the page first, then scrolls down to it, its name marked for
+        // a few seconds (marked). The address is left with the plain #subtask-{id}, so a reload or a copied link goes
+        // straight there.
+        function linkedSubtask(id) {
+            return {
+                marked: false,
+                init() {
+                    const el = this.$el;
+                    if (location.hash === '#subtask-' + id) { el.open = true; return; }
+                    if (location.hash !== '#goto-subtask-' + id) return;
+                    el.open = true;
+                    this.marked = true;
+                    history.replaceState(history.state, '', '#subtask-' + id);
+                    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+                    setTimeout(() => el.scrollIntoView({ behavior, block: 'start' }), 400);
+                    setTimeout(() => { this.marked = false; }, 8000);
+                },
+            };
+        }
 
         // the checklist editor (x-checklist-editor) reports every change: the Sub Task / Task / cabinet bars follow
         window.addEventListener('checklist-progress', (e) => {

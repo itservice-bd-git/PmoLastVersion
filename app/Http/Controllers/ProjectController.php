@@ -7,6 +7,7 @@ use App\Models\JobType;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\CommentAttachmentUploader;
+use App\Services\ProjectFollowers;
 use App\Support\Csv;
 use Illuminate\Http\Request;
 
@@ -121,14 +122,17 @@ class ProjectController extends Controller
             'priorities' => Project::$priorities,
             'jobTypes' => JobType::where('is_active', true)->orderBy('name')->get(),
             'boards' => \App\Models\Board::orderBy('sort')->orderBy('id')->get(),
+            'salesPeople' => ProjectFollowers::salesPeople(),
+            'salesChosen' => [],
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, ProjectFollowers $followers)
     {
         $data = $this->validateData($request);
 
         $project = Project::create($data);
+        $followers->setSales($project, $request->input('sales_ids', []), $request->user());   // the ticked พนักงานขาย follow it
 
         return redirect()->route('projects.show', $project)->with('success', 'สร้างโครงการเรียบร้อยแล้ว');
     }
@@ -174,16 +178,30 @@ class ProjectController extends Controller
             'priorities' => Project::$priorities,
             'jobTypes' => JobType::where('is_active', true)->orderBy('name')->get(),
             'boards' => \App\Models\Board::orderBy('sort')->orderBy('id')->get(),
+            'salesPeople' => ProjectFollowers::salesPeople(),
+            'salesChosen' => $project->followers()->wherePivot('source', ProjectFollowers::SALES)->pluck('users.id')->all(),
         ]);
     }
 
-    public function update(Request $request, Project $project)
+    public function update(Request $request, Project $project, ProjectFollowers $followers)
     {
         $data = $this->validateData($request, $project);
 
         $project->update($data);
+        $followers->setSales($project, $request->input('sales_ids', []), $request->user());
 
         return redirect()->route('projects.show', $project)->with('success', 'บันทึกการแก้ไขโครงการเรียบร้อยแล้ว');
+    }
+
+    /** "ติดตามโครงการ" / "เลิกติดตาม": its news comes to me too (ProjectFollowers). Anyone who sees the project (project.visible). */
+    public function follow(Request $request, Project $project, ProjectFollowers $followers)
+    {
+        $following = $followers->toggle($project, $request->user());
+        $message = $following ? 'ติดตามโครงการแล้ว — จะได้รับแจ้งเตือนความเคลื่อนไหว' : 'เลิกติดตามโครงการแล้ว';
+
+        return $request->wantsJson()
+            ? response()->json(['following' => $following, 'followers' => $project->followers()->pluck('users.id'), 'message' => $message])
+            : back()->with('success', $message);
     }
 
     public function destroy(Project $project)
@@ -254,6 +272,9 @@ class ProjectController extends Controller
             'po_no' => ['nullable', 'string', 'max:100'],
             'sales_order_no' => ['nullable', 'string', 'max:100'],
             'project_owner' => ['nullable', 'string', 'max:255'],
+            // พนักงานขาย: ticked from the sales people (they follow the project), plus names typed for anyone without an account
+            'sales_ids' => ['nullable', 'array'],
+            'sales_ids.*' => ['integer', 'exists:users,id'],
             'sales_person' => ['nullable', 'string', 'max:255'],
             // Admin / PM only (a manager already on the project before this rule may stay when it is edited)
             'project_manager_id' => ['nullable', 'exists:users,id', function (string $attr, mixed $value, \Closure $fail) use ($project) {
@@ -275,6 +296,8 @@ class ProjectController extends Controller
         if (! $project) {
             $data['status'] ??= Project::STATUS_DRAFT;
         }
+        $data['sales_person'] = ProjectFollowers::salesText($data['sales_ids'] ?? [], $data['sales_person'] ?? null);
+        unset($data['sales_ids']);
         // what this person may not see, they do not change either (the old values stay) - Settings > สิทธิ์การใช้งาน
         if (! $request->user()->allows('data.finance')) {
             unset($data['contract_value'], $data['margin']);

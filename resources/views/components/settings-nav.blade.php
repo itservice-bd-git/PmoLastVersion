@@ -12,6 +12,7 @@
         $u?->isAdmin() ? ['Automation', route('settings.automation.index'), 'settings.automation.*'] : null,
         $u?->isAdmin() ? ['แจ้งเตือน Checklist', route('settings.notice-rules.index'), 'settings.notice-rules.*'] : null,
         $u?->isAdmin() ? ['สถานะงาน', route('settings.statuses.edit'), 'settings.statuses.*'] : null,
+        $u?->isAdmin() ? ['สีสถานะ Checklist', route('settings.checklist-statuses.index'), 'settings.checklist-statuses.*'] : null,
         $u?->isAdmin() ? ['แท็ก', route('settings.labels.index'), 'settings.labels.*'] : null,
         $u?->isAdmin() ? ['บอร์ด', route('settings.boards.index'), 'settings.boards.*'] : null,
         $u?->isAdmin() ? ['ฟิลด์เพิ่มเติม', route('settings.fields.index'), 'settings.fields.*'] : null,

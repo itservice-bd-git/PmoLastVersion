@@ -29,7 +29,7 @@ class ActivityTreeBuilder
         'edit' => ['updated', 'extended'],
         'status' => ['accepted', 'started', 'completed'],
         'assignment' => ['assigned', 'department_changed', 'accepted', 'started', 'completed'],
-        'checklist' => ['checked', 'unchecked', 'checklists_copied'],
+        'checklist' => ['checked', 'unchecked', 'checklists_copied', 'checklist_status'],
         'attachment' => ['attachment_uploaded', 'attachment_deleted'],
         'delete' => ['deleted', 'attachment_deleted'],
     ];
@@ -44,6 +44,7 @@ class ActivityTreeBuilder
         'checked' => 'ทำเครื่องหมายเสร็จ',
         'unchecked' => 'ยกเลิกเครื่องหมายเสร็จ',
         'checklists_copied' => 'คัดลอก Checklist',
+        'checklist_status' => 'สถานะ Checklist',
         'assigned' => 'มอบหมายงานให้แผนก',
         'department_changed' => 'เปลี่ยนแผนกที่รับผิดชอบ',
         'accepted' => 'แผนกรับงาน',
@@ -63,6 +64,7 @@ class ActivityTreeBuilder
         'assigned' => 'arrow', 'department_changed' => 'arrow', 'accepted' => 'arrow',
         'started' => 'play',
         'checklists_copied' => 'copy',
+        'checklist_status' => 'edit',
         'attachment_uploaded' => 'clip', 'attachment_deleted' => 'clip',
         'deleted' => 'trash',
     ];
@@ -348,7 +350,7 @@ class ActivityTreeBuilder
         // The tree already says WHICH entity; only keep the sentence where it
         // carries information nothing else shows (counts, file names, deletions).
         $known = isset(self::ACTION_LABELS[$log->action]);
-        $detail = (! $changes && (! $known || in_array($log->action, ['deleted', 'checklists_copied', 'attachment_uploaded', 'attachment_deleted', 'template_applied', 'copied_from_cabinet', 'accepted', 'started', 'completed'], true)))
+        $detail = (! $changes && (! $known || in_array($log->action, ['deleted', 'checklists_copied', 'checklist_status', 'attachment_uploaded', 'attachment_deleted', 'template_applied', 'copied_from_cabinet', 'accepted', 'started', 'completed'], true)))
             ? $description : null;
 
         $name = $log->user?->name;

@@ -26,7 +26,7 @@ class WorkScope
             ->whereHas('cabinetTask.cabinet', fn ($q) => $q->where('project_id', $project->id))
             ->whereNotNull('department_id')
             ->whereIn('assignment_status', self::ACTIVE_STATUSES)
-            ->when(! $user->canSeeAllWork(), fn ($q) => $q->where('department_id', $user->department_id));
+            ->when(! $user->canSeeAllWork(), fn ($q) => $q->whereIn('department_id', $user->departmentIds()));
     }
 
     /**
@@ -39,7 +39,7 @@ class WorkScope
         if ($user->canSeeAllWork()) {
             return;
         }
-        $mine = fn (CabinetSubtask $s) => $s->department_id !== null && $s->department_id === $user->department_id;
+        $mine = fn (CabinetSubtask $s) => $user->inDepartment($s->department_id);
         $cabinet->setRelation('tasks', $cabinet->tasks
             ->each(fn ($t) => $t->setRelation('subtasks', $t->subtasks->filter($mine)->values()))
             ->filter(fn ($t) => $t->subtasks->isNotEmpty())->values());
@@ -65,8 +65,8 @@ class WorkScope
 
         return $query->where(function ($q) use ($user) {
             $q->where('project_manager_id', $user->id)->orWhereHas('assignees', fn ($a) => $a->whereKey($user->id));
-            if ($user->department_id) {
-                $q->orWhereHas('cabinets.tasks.subtasks', fn ($s) => $s->where('department_id', $user->department_id)->whereIn('assignment_status', self::ACTIVE_STATUSES));
+            if ($user->departmentIds()) {
+                $q->orWhereHas('cabinets.tasks.subtasks', fn ($s) => $s->whereIn('department_id', $user->departmentIds())->whereIn('assignment_status', self::ACTIVE_STATUSES));
             }
         });
     }

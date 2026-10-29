@@ -55,6 +55,41 @@ class User extends Authenticatable
         return $this->belongsTo(Department::class);
     }
 
+    /** The departments this person looks after on top of their own (Settings > ผู้ใช้งาน): they work for them as a member. */
+    public function extraDepartments()
+    {
+        return $this->belongsToMany(Department::class, 'department_user')->withTimestamps();
+    }
+
+    /** @var list<int>|null */
+    private ?array $departmentIdsCache = null;
+
+    /**
+     * Every department this person works for: their own, then the ones they look after too. Use this (or inDepartment())
+     * wherever "is this my department's work" is asked - never department_id alone. Permissions (Settings > สิทธิ์การใช้งาน)
+     * still come from their own department.
+     *
+     * @return list<int>
+     */
+    public function departmentIds(): array
+    {
+        return $this->departmentIdsCache ??= array_values(array_unique(array_filter(array_merge(
+            [$this->department_id], $this->id ? $this->extraDepartments()->pluck('departments.id')->map(fn ($id) => (int) $id)->all() : []))));
+    }
+
+    public function inDepartment(?int $departmentId): bool
+    {
+        return $departmentId !== null && in_array($departmentId, $this->departmentIds(), true);
+    }
+
+    /** People who work for a department: its members and the ones looking after it too. */
+    public function scopeOfDepartment($query, int|array $departmentIds)
+    {
+        $ids = (array) $departmentIds;
+
+        return $query->where(fn ($q) => $q->whereIn('department_id', $ids)->orWhereHas('extraDepartments', fn ($d) => $d->whereIn('departments.id', $ids)));
+    }
+
     /** Sub Tasks this user bookmarked ("ติดดาว") - personal, see MyDepartmentController::toggleStar(). */
     public function starredSubtasks()
     {
@@ -77,6 +112,12 @@ class User extends Authenticatable
     }
 
     /** May SEE every project (read only): a PMO role, or a member of a department an admin marked "sees everything". */
+    /** "ดูได้อย่างเดียว": the department may not work (Settings > สิทธิ์การใช้งาน, edit.work), e.g. ขาย following projects. */
+    public function isViewOnly(): bool
+    {
+        return ! $this->allows('edit.work');
+    }
+
     public function canSeeAllWork(): bool
     {
         return $this->canViewOtherDepartments() || $this->allows('scope.all_projects') || (bool) $this->department?->sees_all;

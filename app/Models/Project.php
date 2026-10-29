@@ -154,6 +154,12 @@ class Project extends Model
         return $this->belongsToMany(User::class);
     }
 
+    /** People following it for its news (ProjectFollowers): its พนักงานขาย and whoever pressed "ติดตามโครงการ". */
+    public function followers()
+    {
+        return $this->belongsToMany(User::class, 'project_followers')->withPivot('source')->withTimestamps();
+    }
+
     public function jobType()
     {
         return $this->belongsTo(JobType::class);

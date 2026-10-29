@@ -20,14 +20,22 @@
 
     {{-- "เทียบกับ…": the other Sub Tasks whose checklist cabinets made from this template show next to this one's --}}
     @php
-        $pairChosen = $subtaskTemplate->pairSources->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'dept' => (string) $s->department?->name])->values();
-        $pairFeeds = $subtaskTemplate->pairReceivers->pluck('name');
+        $pairChosen = $subtaskTemplate->pairSources->map(fn ($s) => \App\Http\Controllers\TemplatePairController::chip($s))->values();
+        $pairFeeds = $subtaskTemplate->pairReceivers->reject(fn ($s) => $s->pivot->view_only || $s->pivot->own_ticks)->pluck('name');
+        $pairUsers = $subtaskTemplate->pairReceivers->filter(fn ($s) => $s->pivot->own_ticks)->pluck('name');
+        $pairWatchers = $subtaskTemplate->pairReceivers->filter(fn ($s) => $s->pivot->view_only)->pluck('name');
     @endphp
     @php $canEditTemplates = auth()->user()->allows('edit.templates'); @endphp
     <x-pair-picker class="mt-1.5 ml-6" :url="route('subtask-templates.pairs', $subtaskTemplate)" :chosen="$pairChosen" :can-edit="$canEditTemplates"
                    :options="($pairOptions ?? collect())->where('id', '!=', $subtaskTemplate->id)->values()">
         @if ($pairFeeds->isNotEmpty())
             <span class="text-slate-500">ส่งรายการให้ <span class="font-medium text-slate-700">{{ $pairFeeds->implode(', ') }}</span> เทียบ</span>
+        @endif
+        @if ($pairUsers->isNotEmpty())
+            <span class="text-slate-500"><span class="font-medium text-slate-700">{{ $pairUsers->implode(', ') }}</span> ใช้รายการเดียวกัน</span>
+        @endif
+        @if ($pairWatchers->isNotEmpty())
+            <span class="text-slate-500"><span class="font-medium text-slate-700">{{ $pairWatchers->implode(', ') }}</span> ดูอย่างเดียว</span>
         @endif
     </x-pair-picker>
 

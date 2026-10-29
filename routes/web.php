@@ -40,6 +40,7 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     });
 
     Route::get('projects/export', [ProjectController::class, 'export'])->middleware('perm:page.export')->name('projects.export');
+    Route::post('projects/{project}/follow', [ProjectController::class, 'follow'])->name('projects.follow');   // "ติดตามโครงการ" (anyone who sees it)
     Route::middleware('perm:data.comments')->group(function () {   // the change log and comments
         Route::get('projects/{project}/activity-export', [ActivityLogController::class, 'projectExport'])->middleware('perm:page.export')->name('projects.activity-export');
         Route::get('cabinets/{cabinet}/activity-export', [ActivityLogController::class, 'cabinetExport'])->middleware('perm:page.export')->name('cabinets.activity-export');
@@ -178,6 +179,14 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
         Route::delete('statuses/{status}', [\App\Http\Controllers\Settings\StatusController::class, 'destroy'])->name('settings.statuses.destroy');
         Route::patch('statuses/{status}/move', [\App\Http\Controllers\Settings\StatusController::class, 'move'])->name('settings.statuses.move');
         $boards = \App\Http\Controllers\Settings\BoardController::class;
+        // สีสถานะ Checklist: coloured tags a checklist item can carry (App\Services\ChecklistStatuses)
+        Route::get('checklist-statuses', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'index'])->name('settings.checklist-statuses.index');
+        Route::post('checklist-statuses', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'store'])->name('settings.checklist-statuses.store');
+        Route::post('checklist-statuses/starter', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'starter'])->name('settings.checklist-statuses.starter');
+        Route::put('checklist-statuses/{status}', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'update'])->name('settings.checklist-statuses.update');
+        Route::delete('checklist-statuses/{status}', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'destroy'])->name('settings.checklist-statuses.destroy');
+        Route::patch('checklist-statuses/{status}/toggle', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'toggle'])->name('settings.checklist-statuses.toggle');
+        Route::patch('checklist-statuses/{status}/move', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'move'])->name('settings.checklist-statuses.move');
         Route::get('boards', [$boards, 'boards'])->name('settings.boards.index');
         Route::post('boards', [$boards, 'storeBoard'])->name('settings.boards.store');
         Route::put('boards/{board}', [$boards, 'updateBoard'])->name('settings.boards.update');

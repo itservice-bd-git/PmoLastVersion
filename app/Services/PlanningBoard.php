@@ -73,7 +73,8 @@ class PlanningBoard
             'approved' => true,
             'blocked' => false,
             'name_set' => true,
-            'dept_id' => ($user->canSeeAllWork() || ! $user->department_id) ? '' : self::deptKey($user->department_id),
+            // the page starts on this department (none: every one in view); looking after several, it starts on all of them
+            'dept_id' => ($user->canSeeAllWork() || count($user->departmentIds()) !== 1) ? '' : self::deptKey($user->department_id),
         ];
     }
 
@@ -111,11 +112,12 @@ class PlanningBoard
                 'pmoStatusList' => self::pmoStatuses(),
                 'labels' => BoardLabel::orderBy('sort')->orderBy('id')->get()->map(fn (BoardLabel $l) => ['id' => 'l'.$l->id, 'name' => $l->name, 'color' => $l->color])->all(),
                 'departments' => $departments,
+                'checklistStatuses' => app(ChecklistStatuses::class)->catalog(),   // Settings > สีสถานะ Checklist
                 'tasks' => $tasks,
                 'trash' => [],
                 'settings' => [
                     'currentUser' => $user->name,
-                    'myDept' => ($user->department_id && ! $user->canSeeAllWork()) ? self::deptKey($user->department_id) : '',
+                    'myDept' => (count($user->departmentIds()) === 1 && ! $user->canSeeAllWork()) ? self::deptKey($user->department_id) : '',
                     'defaultStages' => [],
                     'dateLimit' => ['enabled' => false, 'anchorDept' => null, 'blockedDepts' => []],
                 ],
@@ -145,7 +147,7 @@ class PlanningBoard
             ->whereHas('cabinetTask.cabinet', fn ($c) => $c
                 ->when($projectIds !== null, fn ($c) => $c->whereIn('project_id', $projectIds))
                 ->whereHas('project', $onBoard))
-            ->with('cabinetTask.cabinet.project.boardStatus', 'cabinetTask.cabinet.project.boardLabels', 'cabinetTask.cabinet.project.assignees:id', 'cabinetTask.cabinet.boardStatus', 'checklists')
+            ->with('cabinetTask.cabinet.project.boardStatus', 'cabinetTask.cabinet.project.boardLabels', 'cabinetTask.cabinet.project.assignees:id', 'cabinetTask.cabinet.project.followers:id', 'cabinetTask.cabinet.boardStatus', 'checklists')
             ->orderBy('id')
             ->get();
 
@@ -160,11 +162,18 @@ class PlanningBoard
             ->when(! $builder, fn ($q) => $q->whereHas('assignees', fn ($a) => $a->whereKey($user->id)))
             ->when($projectIds !== null, fn ($q) => $q->whereIn('id', $projectIds))
             ->tap($onBoard)
-            ->with('boardStatus', 'boardLabels', 'assignees:id')->orderBy('id')->get();
+            ->with('boardStatus', 'boardLabels', 'assignees:id', 'followers:id')->orderBy('id')->get();
 
         $ids = $byProject->keys()->merge($empty->pluck('id'));
         $comments = $this->comments($ids, $user);
         $this->fieldValues = $this->loadFieldValues($ids);
+        $this->tags = app(ChecklistStatuses::class)->idsFor($subtasks->flatMap->checklists->pluck('id'));
+        // who last wrote each remark (the "หมายเหตุ" tab of the project window)
+        $this->remarkBy = Remarks::authors([
+            't' => $subtasks->map->cabinetTask->filter(fn ($t) => filled($t->remark))->pluck('id')->all(),
+            's' => $subtasks->filter(fn ($s) => filled($s->remark))->pluck('id')->all(),
+            'k' => $subtasks->flatMap->checklists->filter(fn ($c) => filled($c->remark))->pluck('id')->all(),
+        ]);
         $this->deptStatuses = $ids->isEmpty() ? collect() : ProjectDepartmentStatus::whereIn('project_id', $ids)->with('boardStatus')->get()
             ->groupBy('project_id')->map(fn (Collection $g) => $g->mapWithKeys(fn ($r) => [$r->department_id => $r->boardStatus?->pageId()])->filter());
         // PMO: sub tasks nobody was given yet (e.g. straight from a template), so they can be handed out from the page
@@ -191,6 +200,7 @@ class PlanningBoard
         'departments' => 'id', 'department_fields' => 'id', 'department_field_options' => 'id', 'project_field_values' => 'id',
         'project_department_statuses' => 'id', 'department_links' => 'id', 'users' => 'id',
         // pivots: no id / timestamps - a swap (detach one, attach another) still changes the sum
+        'checklist_statuses' => 'id', 'cabinet_checklist_status' => 'id',
         'project_user' => 'project_id * 100003 + user_id', 'board_label_project' => 'project_id * 100003 + board_label_id',
     ];
 
@@ -322,6 +332,12 @@ class PlanningBoard
     /** @var Collection<int, Collection> project id => department id => page id of the status Admin / PM set for it (filled per tasks() call) */
     private Collection $deptStatuses;
 
+    /** 't|s|k' + id => who last wrote the remark and when (Remarks::authors) */
+    private array $remarkBy = [];
+
+    /** checklist item id => its status ids (ChecklistStatuses::idsFor) */
+    private array $tags = [];
+
     /** @var Collection<int, Collection> project id => department id => [field key => value] (filled per tasks() call) */
     private Collection $fieldValues;
 
@@ -348,10 +364,11 @@ class PlanningBoard
     public function mineProjectIds(User $user): array
     {
         $ids = Project::where('project_manager_id', $user->id)->pluck('id')
-            ->merge(Project::whereHas('assignees', fn ($q) => $q->whereKey($user->id))->pluck('id'));
+            ->merge(Project::whereHas('assignees', fn ($q) => $q->whereKey($user->id))->pluck('id'))
+            ->merge(Project::whereHas('followers', fn ($q) => $q->whereKey($user->id))->pluck('id'));   // ones I follow
 
-        if ($user->department_id) {
-            $ids = $ids->merge(CabinetSubtask::where('department_id', $user->department_id)
+        if ($user->departmentIds()) {
+            $ids = $ids->merge(CabinetSubtask::whereIn('department_id', $user->departmentIds())
                 ->whereIn('assignment_status', [CabinetSubtask::ASSIGNMENT_ASSIGNED, CabinetSubtask::ASSIGNMENT_ACCEPTED, CabinetSubtask::ASSIGNMENT_IN_PROGRESS])
                 ->with('cabinetTask.cabinet:id,project_id')->get()->map(fn ($s) => $s->cabinetTask?->cabinet?->project_id));
         }
@@ -398,6 +415,7 @@ class PlanningBoard
             // the people in charge are the departments that hold work on the project
             'assignees' => $stages->keys()->map(fn ($id) => self::deptKey((int) $id))->values()->all(),
             'owners' => $project->assignees->pluck('id')->values()->all(),
+            'followers' => $project->followers->pluck('id')->values()->all(),   // "ติดตามโครงการ" (ProjectFollowers)
             // the project's own record (shown / edited in "ข้อมูลโครงการ"; editing it is for Admin / PM)
             'info' => [
                 // money and the customer's phone only for whom Settings > สิทธิ์การใช้งาน allows - left out of the JSON, not just hidden
@@ -430,7 +448,7 @@ class PlanningBoard
                 'start' => $d->map(fn ($s) => self::ymd($s, 'start_date'))->filter()->min(),
                 'end' => $d->map(fn ($s) => self::ymd($s, 'due_date'))->filter()->max(),
                 'undated' => $d->filter(fn ($s) => ! self::ymd($s, 'due_date') && ! $s->isDone())->count(),
-                'fields' => (object) ($user->allows('data.other_fields') || (int) $deptId === (int) $user->department_id ? ($this->fieldValues->get($project->id)?->get((int) $deptId) ?? []) : []),
+                'fields' => (object) ($user->allows('data.other_fields') || $user->inDepartment((int) $deptId) ? ($this->fieldValues->get($project->id)?->get((int) $deptId) ?? []) : []),
                 'pmo' => $this->workflow($d, (int) $deptId, $user),
             ])->values()->all(),
             'comments' => $comments->get($project->id, collect())->values()->all(),
@@ -468,6 +486,10 @@ class PlanningBoard
             'deptDates' => $deptDates ?: new \stdClass,
             'deptRanges' => $deptRanges ?: new \stdClass,
             'ownDue' => $cabinet->due_date?->format('Y-m-d'),
+            'remark' => (string) $cabinet->remark,
+            // the remarks of its Tasks (the Sub Tasks' and items' ride on them below)
+            'taskRemarks' => $rows->map->cabinetTask->unique('id')->filter(fn ($t) => filled($t->remark))
+                ->map(fn ($t) => ['id' => 't'.$t->id, 'task' => (string) $t->name, 'text' => (string) $t->remark, 'by' => $this->remarkBy['t'.$t->id]['by'] ?? ''])->values()->all(),
             'linked' => $this->linked->get($cabinet->id, []),   // from the departments passing work to mine (read only)   // the cabinet's own due date (its record), not its work's
             'free' => ($this->free->get($cabinet->id) ?? collect())->map(fn ($s) => ['id' => 's'.$s->id, 'name' => $s->name, 'task' => $s->cabinetTask->name, 'checklists' => $s->checklists_count,
                 'usual' => ($u = $this->usual['t'.$s->cabinet_subtask_template_id] ?? $this->usual['n'.$s->name] ?? null) ? self::deptKey($u) : '',
@@ -480,7 +502,7 @@ class PlanningBoard
                 // for "เลือกรับ…" (picking which waiting work to accept): its due date, since when it waits, how many items
                 'due' => self::ymd($s, 'due_date'), 'since' => ($a = $s->getAttributes()['assigned_at'] ?? null) ? substr((string) $a, 0, 10) : null,
                 'items' => $s->checklists->count(),
-            ])->all(),
+            ] + (filled($s->remark) ? ['remark' => (string) $s->remark, 'remarkBy' => $this->remarkBy['s'.$s->id]['by'] ?? ''] : []))->all(),   // its remark, under it in the checklist window
             // every item of the cabinet (the biggest part of the page): read from the rows as they are, no cast per field
             'checklist' => $rows->flatMap(function ($s) {
                 [$deptId, $subId] = [self::deptKey((int) $s->department_id), 's'.$s->id];
@@ -494,7 +516,8 @@ class PlanningBoard
                     'deptId' => $deptId,
                     'subId' => $subId,
                     'from' => ($a['source_checklist_id'] ?? null) ? 'k'.$a['source_checklist_id'] : null,   // a copy of the item of the Sub Task it compares with
-                ]);
+                ] + (($a['remark'] ?? '') !== '' ? ['remarkBy' => $this->remarkBy['k'.$a['id']]['by'] ?? ''] : [])
+                  + (isset($this->tags[$a['id']]) ? ['tags' => $this->tags[$a['id']]] : []));   // Settings > สีสถานะ Checklist (status ids)
             })->values()->all(),
         ];
     }
@@ -505,7 +528,7 @@ class PlanningBoard
         $counts = $rows->countBy('assignment_status');   // once, not a pass per question below
         $n = fn (string $status) => (int) ($counts[$status] ?? 0);
         // the workflow actions belong to the department's own members (or Admin / PM, when Settings > กฎการทำงาน lets them act for it)
-        $mine = $user->department_id === $deptId || ($user->canDispatchWork() && \App\Models\AppSetting::get('pmo_acts_for_departments'));
+        $mine = ! $user->isViewOnly() && ($user->inDepartment($deptId) || ($user->canDispatchWork() && \App\Models\AppSetting::get('pmo_acts_for_departments')));
 
         return [
             'waiting' => $n(CabinetSubtask::ASSIGNMENT_ASSIGNED),
@@ -576,7 +599,7 @@ class PlanningBoard
                     'alert' => empty($l->changes['alert_department_id']) ? null : [
                         'deptId' => self::deptKey((int) $l->changes['alert_department_id']),
                         'acks' => collect($l->changes['acks'] ?? [])->map(fn ($a) => ['name' => $a['name'] ?? '', 'at' => $a['at'] ?? null])->values()->all(),
-                        'forMe' => (int) $l->changes['alert_department_id'] === (int) $user->department_id,
+                        'forMe' => $user->inDepartment((int) $l->changes['alert_department_id']),
                         'acked' => collect($l->changes['acks'] ?? [])->contains('user_id', $user->id),
                     ],
                     'receipt' => $receipt($l),

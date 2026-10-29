@@ -42,16 +42,16 @@ class DepartmentSchedule
         }
 
         abort_unless($user->department_id, 403, 'บัญชีของคุณยังไม่ได้ผูกกับแผนก กรุณาติดต่อผู้ดูแลระบบ');
-        abort_if($requested && ((int) $requested !== $user->department_id), 403, 'คุณไม่มีสิทธิ์ดูงานของแผนกอื่น');
+        abort_if($requested && ! $user->inDepartment((int) $requested), 403, 'คุณไม่มีสิทธิ์ดูงานของแผนกอื่น');
 
-        return $user->department;
+        return $requested ? Department::findOrFail((int) $requested) : $user->department;   // one they look after too, when asked
     }
 
     /** You can only open (or star) a Sub Task that is dispatched to a department you may look at. */
     public function canViewSubtask(User $user, CabinetSubtask $subtask): bool
     {
         return $subtask->department_id !== null
-            && ($user->canViewOtherDepartments() || $user->department_id === $subtask->department_id);
+            && ($user->canViewOtherDepartments() || $user->inDepartment($subtask->department_id));
     }
 
     /**

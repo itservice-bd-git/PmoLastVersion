@@ -10,7 +10,8 @@ export default (cfg) => ({
     editable: !!cfg.editable,
     tickable: !!(cfg.editable || cfg.tickable),   // may tick (a department's work still waiting: the tick accepts it)
     dateLabel: cfg.dateLabel || null,
-    linked: cfg.linked || [],     // the Sub Tasks this one compares with (template pairs), read only
+    linked: (cfg.linked || []).filter((l) => !l.watch),     // the Sub Tasks this one compares with (template pairs), read only
+    watched: (cfg.linked || []).filter((l) => l.watch),     // the ones it only follows ("ดูอย่างเดียว"): their list, dates, who received
     receivers: cfg.receivers || [],   // the Sub Tasks comparing with this one
     today: (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })(),
     busy: false,
@@ -25,10 +26,22 @@ export default (cfg) => ({
     bulkDate: '',
     dragId: null,
     pendingLive: null,      // a fresh list from the page (checklists-live) that came while this one was being edited
+    // Settings > สีสถานะ Checklist (a cabinet's lists only): the statuses (the page sets window.pmoChecklistStatuses once)
+    statuses: cfg.kind === 'subtask' ? (window.pmoChecklistStatuses || []) : [],
+    deptId: cfg.deptId || null,   // the Sub Task's department: a status may be for some departments only
+    picking: null,          // the item whose status panel is open
+    tagFilter: [],          // "สีนี้คืออะไร": a colour picked there shows only the items carrying it
 
     // the cabinet page keeps every list current (another department's change, a shared list): take it, unless mid-edit
     init() {
         if (this.kind !== 'subtask') return;
+        // the cabinet page's "สถานะในตู้นี้" and Task headers add up every list's statuses (Alpine.store('checklistTags'))
+        this.publishTags();
+        this.$watch('items', () => this.publishTags());
+        window.addEventListener('checklist-tag-filter', (e) => {   // "สถานะในตู้นี้": only the lists that have it filter
+            const id = e.detail.id;
+            this.tagFilter = id && this.items.some((i) => (i.tags || []).includes(id)) ? [id] : [];
+        });
         window.addEventListener('checklists-live', (e) => {
             const l = e.detail.lists && e.detail.lists[this.ownerId];
             if (!l) return;
@@ -42,10 +55,46 @@ export default (cfg) => ({
         const l = this.pendingLive;
         this.pendingLive = null;
         this.items = l.items;
-        this.linked = l.linked || [];
+        this.linked = (l.linked || []).filter((x) => !x.watch);
+        this.watched = (l.linked || []).filter((x) => x.watch);
         this.selected = this.selected.filter((id) => this.items.some((i) => i.id === id));
     },
     changed() { window.dispatchEvent(new CustomEvent('checklist-changed')); },
+
+    // ---- statuses (Settings > สีสถานะ Checklist): coloured tags, several per item; a group's ones replace each other ----
+    get tagOn() { return this.statuses.length > 0; },
+    publishTags() { if (window.Alpine) window.Alpine.store('checklistTags').lists[this.ownerId] = this.items.map((i) => ({ id: i.id, done: i.done, tags: i.tags || [] })); },
+    st(id) { return this.statuses.find((s) => s.id === id); },
+    tagsOf(item) { return (item.tags || []).map((id) => this.st(id)).filter(Boolean); },
+    chipStyle(s) { return 'background:' + s.bg + ';color:' + s.fg + (s.active ? '' : ';opacity:.7'); },
+    // the rows show colour dots only ("สีนี้คืออะไร" above the list says what each is); a tap on the dots or the toolbar's tag
+    // button opens a panel under the row: each status by name with ×, and "+ เพิ่ม" a colour, every change saved at once.
+    // "+ เพิ่ม" offers what the item may still get (active, for this department); one of a group replaces the item's other.
+    addable(item) {
+        const has = item.tags || [];
+        return this.statuses.filter((s) => !has.includes(s.id) && s.active && (!s.depts.length || !this.deptId || s.depts.includes(this.deptId)));
+    },
+    rivalOf(item, s) { return s.group ? this.tagsOf(item).find((x) => x.group === s.group) : null; },
+    openPick(item) { if (this.tagOn) this.picking = this.picking === item.id ? null : item.id; },
+    addTag(item, id) {
+        const s = this.st(Number(id));
+        if (!s) return;
+        const rival = this.rivalOf(item, s);
+        this.saveTags(item, [...(item.tags || []).filter((t) => !rival || t !== rival.id), s.id]);
+    },
+    removeTag(item, id) { this.saveTags(item, (item.tags || []).filter((t) => t !== id)); },
+    async saveTags(item, tags) {
+        const before = item.tags || [];
+        item.tags = this.statuses.map((s) => s.id).filter((id) => tags.includes(id));   // at once; the answer confirms it
+        if (!(await this.send({ type: 'tags', id: item.id, tags }, { quiet: true, offerUndo: false }))) item.tags = before;
+    },
+    // "แสดงเฉพาะ": the statuses this list has, with how many items carry each
+    get tagLegend() {
+        return this.statuses.map((s) => ({ ...s, n: this.items.filter((i) => (i.tags || []).includes(s.id)).length })).filter((s) => s.n > 0);
+    },
+    shown(item) { return !this.tagFilter.length || (item.tags || []).some((t) => this.tagFilter.includes(t)); },
+    toggleTagFilter(id) { this.tagFilter = this.tagFilter.includes(id) ? this.tagFilter.filter((x) => x !== id) : [...this.tagFilter, id]; },
+    get shownCount() { return this.items.filter((i) => this.shown(i)).length; },
 
     get doneCount() { return this.items.filter((i) => i.done).length; },
     get allSelected() { return this.items.length > 0 && this.selected.length === this.items.length; },

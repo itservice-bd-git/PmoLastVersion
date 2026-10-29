@@ -109,7 +109,7 @@ class MyDepartmentController extends Controller
         }
 
         $notified = $alertTo ? $notifications->projectAlert($project, $alertTo, $user, $data['note'], $log) : 0;
-        $notifications->commented($project, $user, $log, $alertTo ? \App\Models\User::where('department_id', $alertTo->id)->pluck('id')->all() : []);
+        $notifications->commented($project, $user, $log, $alertTo ? \App\Models\User::ofDepartment($alertTo->id)->pluck('id')->all() : []);
 
         return response()->json([
             'activity' => $this->modal->activityItem($log->load('user', 'attachments')),

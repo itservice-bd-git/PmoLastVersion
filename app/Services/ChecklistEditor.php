@@ -75,6 +75,7 @@ class ChecklistEditor
 
         // the Sub Tasks comparing with this one (template pairs): has each dealt with each item yet
         $receipts = app(HandoffService::class)->receiptsFor($owner->setRelation('checklists', $list));
+        $tags = app(ChecklistStatuses::class)->idsFor($list->pluck('id'));   // Settings > สีสถานะ Checklist
 
         return $list
             ->map(fn (CabinetChecklist $c) => [
@@ -82,6 +83,7 @@ class ChecklistEditor
                 'done' => (bool) $c->is_completed, 'doneBy' => $c->completedBy?->name, 'doneAt' => $c->completed_at?->thaiDateTime(),
                 'toggleUrl' => route('checklists.toggle', $c), 'handoff' => $receipts[$c->id] ?? [],
                 'from' => $c->source_checklist_id ? 'k'.$c->source_checklist_id : null,   // a copy of the item of the Sub Task it compares with
+                'tags' => $tags[$c->id] ?? [],
             ])->all();
     }
 
@@ -162,6 +164,7 @@ class ChecklistEditor
             'move' => $this->move($kind, $owner, $user, $op['ids'] ?? [], $op['to'] ?? null),
             'copy' => $this->copy($kind, $owner, $user, $op['ids'] ?? [], $op['to'] ?? []),
             'copyFrom' => $this->copyFrom($kind, $owner, $op['from'] ?? null),
+            'tags' => $this->tags($kind, $owner, $user, $op),
             default => throw new PlanningRejected('ไม่รู้จักคำสั่งนี้'),
         }));
 
@@ -360,6 +363,19 @@ class ChecklistEditor
 
         return ['message' => "เพิ่ม {$new->count()} รายการจาก \"{$source->name}\"", 'undo' => ['type' => 'delete', 'ids' => $new->pluck('id')->all()],
             'log' => "คัดลอก Checklist {$new->count()} รายการจาก \"{$source->name}\" มาที่ \"{$owner->name}\""];
+    }
+
+    /** Settings > สีสถานะ Checklist: one item's statuses, all at once (the menu's "บันทึก"). Logs its own line. */
+    private function tags(string $kind, Model $owner, User $user, array $op): array
+    {
+        if ($kind !== 'subtask') {
+            throw new PlanningRejected('รายการของเทมเพลตติดสถานะไม่ได้');
+        }
+        $item = $this->query($kind, $owner)->find((int) ($op['id'] ?? 0)) ?? throw new PlanningRejected('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว)');
+        $item->setRelation('subtask', $owner);
+        $line = app(ChecklistStatuses::class)->set($item, (array) ($op['tags'] ?? []), $user);
+
+        return ['message' => $line ? 'บันทึกสถานะแล้ว' : null];
     }
 
     // ======================================================================= helpers

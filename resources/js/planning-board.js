@@ -8,6 +8,8 @@
 import Alpine from 'alpinejs';
 
 export default function registerPlanningBoard() {
+    // a project's remarks, worked out once per copy of its cabinets (a new copy arrives with every save / poll)
+    let remarkMemo = new WeakMap();
     const MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
     const WEEKDAYS = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.']; // Monday first
     const PRIORITIES = {
@@ -52,6 +54,8 @@ export default function registerPlanningBoard() {
             statuses: board.statuses,
             pmoStatusList: board.pmoStatusList || [],
             labels: board.labels || [],
+            ckStatuses: board.checklistStatuses || [],   // Settings > สีสถานะ Checklist
+            ckPick: null, ckFilter: [],     // the item whose status panel is open, the colours "สีนี้คืออะไร" filters to
             boards: config.boards || [],
             boardNo: config.boardNo ?? null,
             mine: config.mine || [], mineOnly: false,
@@ -77,6 +81,8 @@ export default function registerPlanningBoard() {
             canEdit: config.canEdit,
             isPmo: config.isPmo,
             myDept: config.myDept,
+            myDepts: config.myDepts || (config.myDept ? [config.myDept] : []),   // my department and the ones I look after too
+            readOnly: !!config.readOnly,   // "ดูได้อย่างเดียว": the page only shows
             urls: config.urls,
             priorities: PRIORITIES,
 
@@ -104,6 +110,7 @@ export default function registerPlanningBoard() {
             mentionOpen: false, mentionQuery: '', mentionIdx: 0,
             // project modal size: 'normal' | 'wide' | 'full' (remembered in this browser only)
             feedTab: 'activity',
+            remarkDept: '', remarkCab: '',   // the "หมายเหตุ" tab's filters
             // CSV of the month on screen (the department filter, or every department for PMO roles with none chosen)
             exportUrl() {
                 const p = (n) => String(n).padStart(2, '0'), last = new Date(this.year, this.month + 1, 0).getDate();
@@ -300,14 +307,10 @@ export default function registerPlanningBoard() {
                     const late = !this.stageDone(s) && s.end < this.today, from = s.start && s.start <= s.end ? s.start : s.end, to = late ? this.today : s.end;
                     if (to < b.cs || from > b.ce) return null;
                     const a = diffDays(from < b.cs ? b.cs : from, b.cs), e = diffDays(to > b.ce ? b.ce : to, b.cs) + 1;
-                    return { id: s.deptId, left: (a / days) * 100, width: ((e - a) / days) * 100, color: late ? this.lateColor() : this.deptOf(s.deptId).color, mine: s.deptId === this.myDept, name: this.deptOf(s.deptId).name };
+                    return { id: s.deptId, left: (a / days) * 100, width: ((e - a) / days) * 100, color: late ? this.lateColor() : this.deptOf(s.deptId).color, mine: this.myDepts.includes(s.deptId), name: this.deptOf(s.deptId).name };
                 }).filter(Boolean);
             },
             // how much is going on that day (unfinished entries running through it) and whether any of it is late - the badge on the day
-            dayLoad(date) {
-                const live = this.calEntries().filter((e) => !e.done && e.from <= date && date <= e.to);
-                return { n: live.length, late: live.some((e) => e.late && e.end < date) };
-            },
             weekBars(week) {
                 const ws = week[0].date, we = week[week.length - 1].date;
                 const entries = this.calEntries().filter((e) => e.from <= we && e.to >= ws)
@@ -569,6 +572,7 @@ export default function registerPlanningBoard() {
                 this.statuses = b.statuses;
                 this.pmoStatusList = b.pmoStatusList || [];
                 this.labels = b.labels || [];   // names / colours may have been changed in Settings since this page loaded
+                this.ckStatuses = b.checklistStatuses || [];
                 if (this.modalId && !this.taskById(this.modalId)) this.closeModal();
             },
             async refresh(force) {
@@ -603,11 +607,21 @@ export default function registerPlanningBoard() {
                 this.send([{ type: 'cabinet_due', taskId: t.id, cabinetId: c.id, due: iso }]);
             },
             tick(t, c, item) {
+                if (this.readOnly) return;
                 item.done = !item.done;
                 this.send([{ type: 'checklist', taskId: t.id, cabinetId: c.id, itemId: item.id, done: item.done }]);
             },
+            // the box on a Sub Task in the checklist window: tick all its items, or untick all once every one is ticked
+            clTickAll(w) {
+                if (this.readOnly) return;
+                const done = w.done < w.items.length;
+                const todo = w.items.filter((i) => !!i.done !== done);
+                if (!todo.length || !confirm((done ? 'ติ๊กทั้งหมด ' : 'เอาเครื่องหมายออกทั้งหมด ') + todo.length + ' รายการใน "' + w.name + '"?')) return;
+                todo.forEach((i) => { i.done = done; });
+                this.send(todo.map((i) => ({ type: 'checklist', taskId: this.clTask.id, cabinetId: this.clCab.id, itemId: i.id, done })));
+            },
             // extra fields per department (Settings > ฟิลด์เพิ่มเติม): the value is kept on the department's stage of the project
-            canEditStage(deptId) { return this.isPmo || deptId === this.myDept; },
+            canEditStage(deptId) { return !this.readOnly && (this.isPmo || this.myDepts.includes(deptId)); },
             fieldValue(t, deptId, f) { const s = this.stageOf(t, deptId); return (s && s.fields && s.fields[f.id]) || ''; },
             fieldOptions(f) { return (f.groups || []).flatMap((g) => (g.options || []).map((o) => ({ id: o.id, text: (g.name ? g.name + ' · ' : '') + o.label }))); },
             setField(t, deptId, f, value) {
@@ -878,6 +892,7 @@ export default function registerPlanningBoard() {
                 const remark = prompt('หมายเหตุของรายการนี้', item.remark || '');
                 if (remark === null) return;
                 item.remark = remark.trim();
+                remarkMemo = new WeakMap();
                 this.send([{ type: 'checklist_remark', taskId: this.cl.taskId, itemId: item.id, remark: item.remark }]);
             },
             clMove(item, dir) { this.send([{ type: 'checklist_move', taskId: this.cl.taskId, itemId: item.id, dir }]); },
@@ -935,7 +950,7 @@ export default function registerPlanningBoard() {
                 el.value = this.fmtMoney(n);
                 this.send([{ type: 'project', taskId: t.id, fields: { [key]: n === null ? '' : String(n) } }]);
             },
-            staffFor(deptId) { return this.staff.filter((p) => !deptId || p.deptId === deptId || p.pmo); },
+            staffFor(deptId) { return this.staff.filter((p) => !deptId || p.deptId === deptId || (p.deptIds || []).includes(deptId) || p.pmo); },
             // ---- an expanded cabinet: its record + every sub task (dates, the person doing it, remark), loaded when opened ----
             async toggleCab(t, c) {
                 if (this.cabOpen[c.id]) { const o = { ...this.cabOpen }; delete o[c.id]; this.cabOpen = o; return; }
@@ -1010,7 +1025,67 @@ export default function registerPlanningBoard() {
                     if (u.href !== location.href) history.replaceState(history.state, '', u);
                 } catch (e) { /* old browser: just not remembered */ }
             },
-            openModal(id) { this.projectInUrl(id); this.modalId = id; this.replyTo = null; this.cabOpen = {}; this.feedTab = 'activity'; this.logTree.id = null; this.stageDept = null; this.cl = null; this.comment = ''; this.alertDept = ''; this.scrollFeed(); },
+            // ---- "หมายเหตุ": every remark of the project in one list - the cabinets', Tasks', Sub Tasks' and checklist items' ----
+            // (only what this user was sent: PlanningBoard already keeps other departments' work out)
+            remarkRows(t) {
+                const subs = t && t.subtasks;
+                if (!subs) return [];
+                if (remarkMemo.has(subs)) return remarkMemo.get(subs);
+                const rows = [];
+                subs.forEach((c) => {
+                    const cab = { cabId: c.id, cabLabel: [c.mo, c.text].filter(Boolean).join(' · ') };
+                    if (c.remark) rows.push({ ...cab, key: c.id, level: 'ตู้', deptId: '', path: 'ข้อมูลตู้', text: c.remark, by: '' });
+                    (c.taskRemarks || []).forEach((r) => rows.push({ ...cab, key: c.id + r.id, level: 'Task', deptId: '', path: r.task, text: r.text, by: r.by, task: r.task }));
+                    (c.works || []).forEach((w) => {
+                        if (w.remark) rows.push({ ...cab, key: c.id + w.id, level: 'Sub Task', deptId: w.deptId, path: w.task + ' › ' + w.name, text: w.remark, by: w.remarkBy || '', subId: w.id });
+                        c.checklist.forEach((i) => {
+                            if (i.subId === w.id && i.remark) rows.push({ ...cab, key: c.id + i.id, level: 'Checklist', deptId: w.deptId, path: w.task + ' › ' + w.name + ' › ' + i.text, text: i.remark, by: i.remarkBy || '', subId: w.id, itemId: i.id });
+                        });
+                    });
+                });
+                remarkMemo.set(subs, rows);
+                return rows;
+            },
+            remarkCount(t) { return this.remarkRows(t).length; },
+            remarkChip(on) { return 'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold ' + (on ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'); },
+            cabRemarkCount(t, c) { return this.remarkRows(t).filter((r) => r.cabId === c.id).length; },
+            remarkDepts(t) { return [...new Set(this.remarkRows(t).map((r) => r.deptId).filter(Boolean))]; },
+            remarkGroups(t) {
+                const groups = [];
+                this.remarkRows(t).filter((r) => (!this.remarkDept || r.deptId === this.remarkDept) && (!this.remarkCab || r.cabId === this.remarkCab)).forEach((r) => {
+                    let g = groups[groups.length - 1];
+                    if (!g || g.cabId !== r.cabId) { g = { cabId: r.cabId, label: r.cabLabel, rows: [] }; groups.push(g); }
+                    g.rows.push(r);
+                });
+                return groups;
+            },
+            openRemarks(taskId, cabId = '') {
+                if (this.modalId !== taskId) this.openModal(taskId);
+                this.cl = null;
+                this.remarkCab = cabId;
+                this.feedTab = 'remarks';
+            },
+            // "ไปที่รายการ": the cabinet's checklist window, scrolled to the Sub Task / item and flashed; a cabinet's own remark opens its record
+            goRemark(t, r, ev) {
+                const c = t.subtasks.find((x) => x.id === r.cabId);
+                if (!c) return;
+                if (r.level === 'ตู้') {
+                    if (!this.cabOpen[c.id]) this.toggleCab(t, c);
+                    return;
+                }
+                this.cl = null;
+                this.openChecklist(t.id, c.id, ev);
+                const key = r.itemId || r.subId;
+                if (!key) return;
+                setTimeout(() => {
+                    const el = document.querySelector('[data-cl-key="' + key + '"]');
+                    if (!el) return;
+                    el.scrollIntoView({ block: 'center' });
+                    el.classList.add('ring-2', 'ring-amber-400');
+                    setTimeout(() => el.classList.remove('ring-2', 'ring-amber-400'), 2000);
+                }, 60);
+            },
+            openModal(id) { this.projectInUrl(id); this.modalId = id; this.replyTo = null; this.cabOpen = {}; this.feedTab = 'activity'; this.remarkDept = this.dept || ''; this.remarkCab = ''; this.logTree.id = null; this.stageDept = null; this.cl = null; this.comment = ''; this.alertDept = ''; this.scrollFeed(); },
             setModalSize(size) { this.modalSize = size; try { localStorage.setItem('planning.modalSize', size); } catch (e) { /* storage blocked: it just won't be remembered */ } },
             closeModal() { this.modalId = null; this.stageDept = null; this.cl = null; this.projectInUrl(null); },
             onEscape() { if (this.dispatch) { this.dispatch = null; return; } if (this.cabDialog) { this.cabDialog = null; return; } if (this.viewer) { this.viewer = null; return; } if (this.statusPop) { this.statusPop = null; return; } if (this.newProject) { this.newProject = null; return; } if (this.drawer) { this.drawer = null; return; } if (this.cl) this.closeChecklist(); else if (this.stageDept) this.stageDept = null; else if (this.modalId) this.closeModal();  },
@@ -1093,7 +1168,7 @@ export default function registerPlanningBoard() {
             openChecklist(taskId, cabId, ev) {
                 if (this.cl && this.cl.cabId === cabId && this.cl.taskId === taskId) { this.closeChecklist(); return; }
                 const r = ev.currentTarget.getBoundingClientRect();
-                this.stageDept = null; this.clDraft = '';
+                this.stageDept = null; this.clDraft = ''; this.ckPick = null; this.ckFilter = [];
                 let big = false;
                 try { big = localStorage.getItem('planning.clBig') === '1'; } catch (e) { /* not remembered */ }
                 this.cl = { taskId, cabId, adding: null, big, anchor: { top: r.top, bottom: r.bottom, left: r.left, width: r.width } };
@@ -1103,7 +1178,7 @@ export default function registerPlanningBoard() {
             // one, so the two lists sit side by side); big = most of the screen (notebook / iPad); always on screen
             clPlace() {
                 const W = window.innerWidth, H = window.innerHeight, a = this.cl.anchor;
-                const linked = ((this.clCab && this.clCab.linked) || []).length > 0;
+                const linked = ((this.clCab && this.clCab.linked) || []).some((l) => !l.watch);
                 const w = this.cl.big ? Math.min(1000, W - 16) : Math.min(linked ? 960 : 560, W - 16);
                 const h = this.cl.big ? H - 24 : Math.min(720, H - 24);
                 const top = this.cl.big ? 12 : Math.max(8, Math.min(a.bottom + 6, H - h - 12));
@@ -1111,13 +1186,43 @@ export default function registerPlanningBoard() {
                 this.cl = { ...this.cl, w, h, top, left };
             },
             // Settings > การส่งต่องาน: this department's list and the one passing work to it, next to each other to compare
-            clSide() { return !!(this.cl && this.cl.w >= 640 && this.clCab && (this.clCab.linked || []).length); },
+            clSide() { return !!(this.cl && this.cl.w >= 640 && this.clCab && (this.clCab.linked || []).some((l) => !l.watch)); },
             clToggleBig() {
                 this.cl = { ...this.cl, big: !this.cl.big };
                 try { localStorage.setItem('planning.clBig', this.cl.big ? '1' : ''); } catch (e) { /* not remembered */ }
                 this.clPlace();
             },
             closeChecklist() { this.cl = null; this.clDraft = ''; },
+            // ---- checklist statuses (Settings > สีสถานะ Checklist): coloured tags, several per item; a group's ones replace each other ----
+            ckTags(i) { return (i.tags || []).map((id) => this.ckStatuses.find((s) => s.id === id)).filter(Boolean); },
+            ckChip(s) { return 'background:' + s.bg + ';color:' + s.fg + (s.active ? '' : ';opacity:.7'); },
+            // how many items of a cabinet (the department in view) carry each status: the cabinet row's chips, the window's filter
+            ckTally(c) {
+                const n = {};
+                (c ? c.checklist : []).filter((i) => !this.dept || i.deptId === this.dept).forEach((i) => (i.tags || []).forEach((t) => { n[t] = (n[t] || 0) + 1; }));
+                return this.ckStatuses.filter((s) => n[s.id]).map((s) => ({ ...s, n: n[s.id] }));
+            },
+            ckShown(i) { return !this.ckFilter.length || (i.tags || []).some((t) => this.ckFilter.includes(t)); },
+            ckToggleFilter(id) { this.ckFilter = this.ckFilter.includes(id) ? this.ckFilter.filter((x) => x !== id) : [...this.ckFilter, id]; },
+            openChecklistTag(t, c, id, ev) { this.openChecklist(t.id, c.id, ev); if (this.cl) this.ckFilter = [id]; },
+            // items show colour dots only ("สีนี้คืออะไร" says what each is); the dots or the toolbar's tag button open a panel under
+            // the item: each status by name with ×, "+ เพิ่ม" what it may still get (active, for its department); saved at once
+            ckAddable(i) {
+                const has = i.tags || [], dept = Number(String(i.deptId || '').replace(/\D/g, '')) || 0;
+                return this.ckStatuses.filter((s) => !has.includes(s.id) && s.active && (!s.depts.length || !dept || s.depts.includes(dept)));
+            },
+            ckRival(i, s) { return s.group ? this.ckTags(i).find((x) => x.group === s.group) : null; },
+            ckOpen(i) { this.ckPick = this.ckPick === i.id ? null : i.id; },
+            ckAdd(i, id) {
+                const s = this.ckStatuses.find((x) => x.id === Number(id));
+                if (!s) return;
+                const rival = this.ckRival(i, s);
+                this.ckSet(i, [...(i.tags || []).filter((t) => !rival || t !== rival.id), s.id]);
+            },
+            ckSet(i, tags) {
+                i.tags = this.ckStatuses.map((s) => s.id).filter((id) => tags.includes(id));
+                this.send([{ type: 'checklist_tags', taskId: this.cl.taskId, itemId: i.id, tags: i.tags }]);
+            },
             clScope() { return this.dept || null; },
             clProgress() { return this.clCab ? this.cabProgress(this.clCab, this.clScope()) : { done: 0, total: 0, pct: 0 }; },
             clTitle() { return this.dept ? 'Checklist · ' + this.deptOf(this.dept).name : 'Checklist (ทุกแผนก)'; },
@@ -1158,7 +1263,9 @@ export default function registerPlanningBoard() {
             },
             // pairs: the lists a Sub Task of mine compares with; one list - a copy of mine (i.from) beside the item it was made
             // from, an own item of the same name beside that one
-            clLinkedOf(subId) { return ((this.clCab && this.clCab.linked) || []).filter((l) => l.forId === subId); },
+            clLinkedOf(subId) { return ((this.clCab && this.clCab.linked) || []).filter((l) => l.forId === subId && !l.watch); },
+            // "ดูอย่างเดียว": lists a Sub Task of mine only follows - their date and who received each item, beneath its own list
+            clWatchedOf(subId) { return ((this.clCab && this.clCab.linked) || []).filter((l) => l.forId === subId && l.watch); },
             clNorm(s) { return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase(); },
             clTaken(subId) { return new Set(((this.clCab && this.clCab.checklist) || []).filter((i) => i.subId === subId && i.from).map((i) => i.from)); },
             clMatches(subId, item) {
@@ -1170,6 +1277,9 @@ export default function registerPlanningBoard() {
                 const taken = this.clTaken(w.id), mine = new Set(w.items.filter((i) => !i.from).map((i) => this.clNorm(i.text)));
                 return this.clLinkedOf(w.id).flatMap((l) => l.items.filter((x) => !taken.has(x.id) && !mine.has(this.clNorm(x.text))).map((x) => ({ ...x, l })));
             },
+            // a receiving department's "รับแล้ว" (or a watched list's own "ติ๊กแล้ว") on a linked item
+            rcptText(h) { const v = h.verb || 'รับ'; return h.received ? '✓ ' + h.dept + ' ' + v + 'แล้ว' + (h.at ? ' ' + this.fmtBE(h.at) : '') : 'รอ' + h.dept + v; },
+            rcptClass(h) { return h.received ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'; },
             linkedLate(i) { return !!i.expected && !i.received && i.expected < this.today; },
             stateWord(state) { return { ASSIGNED: 'รอรับ', ACCEPTED: 'รับแล้ว', IN_PROGRESS: 'กำลังทำ', COMPLETED: 'เสร็จ' }[state] || ''; },
             clAdd(subId) { this.cl = { ...this.cl, adding: subId }; this.clDraft = ''; this.$nextTick(() => { const el = document.getElementById('cl-draft-' + subId); if (el) el.focus(); }); },
@@ -1185,6 +1295,17 @@ export default function registerPlanningBoard() {
                 this.cl = { ...this.cl, adding: null };
                 lines.forEach((text, i) => c.checklist.push({ id: 'tmp' + Date.now() + i, text, done: false, deptId, subId }));
                 this.send(lines.slice(0, 200).map((text) => ({ type: 'checklist_add', taskId: t.id, cabinetId: c.id, deptId, subtaskId: subId, text })));
+            },
+            // "ติดตามโครงการ": its news comes to me too (anyone who sees it, view-only people as well)
+            isFollowing(t) { return !!t && (t.followers || []).includes(this.me.id); },
+            async toggleFollow(t) {
+                try {
+                    const r = await fetch((config.urlsFollow || '').replace('__ID__', String(t.id).replace(/^p/, '')), { method: 'POST', headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrf() } });
+                    const d = await r.json();
+                    if (!r.ok) throw new Error(d.message || 'บันทึกไม่สำเร็จ');
+                    t.followers = d.followers;
+                    window.showToast(d.message);
+                } catch (e) { window.showToast(e.message, 'error'); }
             },
             cabinetPage(c, subId) { return (config.urlsCabinetPage || '').replace('__ID__', String(c.id).replace(/^c/, '')) + (subId ? '#subtask-' + String(subId).replace(/^s/, '') : ''); },
             clCommit() {

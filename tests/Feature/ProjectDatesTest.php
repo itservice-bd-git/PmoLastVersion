@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\ActivityLog;
 use App\Models\Cabinet;
+use App\Models\CabinetSubtask;
+use App\Models\CabinetTask;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\ProjectDateChange;
@@ -177,5 +179,46 @@ class ProjectDatesTest extends TestCase
         $this->actingAs($this->follower)->delete(route('settings.date-reasons.destroy', $used));
         $this->assertFalse($used->fresh()->is_active);
         $this->assertSame('ลูกค้าขอเลื่อน', ProjectDateChange::first()->reason_name);
+    }
+
+    public function test_everyone_in_a_department_with_work_hears_a_round_of_the_project_or_of_its_cabinet(): void
+    {
+        $qc = Department::create(['name' => 'QC', 'code' => 'QC', 'is_active' => true]);
+        $paint = Department::create(['name' => 'พ่นสี', 'code' => 'PT', 'is_active' => true]);
+        $qcMan = User::forceCreate(['name' => 'ตรวจ', 'email' => 'dates-qc', 'password' => 'secret-pass', 'role' => 'member', 'department_id' => $qc->id, 'is_active' => true]);
+        $painter = User::forceCreate(['name' => 'สี', 'email' => 'dates-pt', 'password' => 'secret-pass', 'role' => 'member', 'department_id' => $paint->id, 'is_active' => true]);
+        $helper = User::forceCreate(['name' => 'ช่วย', 'email' => 'dates-help', 'password' => 'secret-pass', 'role' => 'member', 'department_id' => $paint->id, 'is_active' => true]);
+        $helper->extraDepartments()->attach($qc->id);   // looks after QC too
+        $work = function (string $mo, Department $d, string $status) {
+            $cab = Cabinet::firstOrCreate(['project_id' => $this->project->id, 'mo_no' => $mo], ['cabinet_name' => $mo, 'quantity' => 1, 'status' => 'not_started', 'progress' => 0, 'due_date' => '2026-10-10']);
+            $t = CabinetTask::forceCreate(['cabinet_id' => $cab->id, 'name' => 'งาน', 'status' => 'not_started', 'progress' => 0, 'sequence' => 1]);
+            CabinetSubtask::forceCreate(['cabinet_task_id' => $t->id, 'name' => $d->name, 'department_id' => $d->id, 'assignment_status' => $status, 'progress' => 0, 'status' => 'not_started', 'sequence' => 1]);
+
+            return $cab;
+        };
+        $cab1 = $work('MO-1', Department::where('code', 'EL')->first(), CabinetSubtask::ASSIGNMENT_ACCEPTED);
+        $work('MO-2', $qc, CabinetSubtask::ASSIGNMENT_ASSIGNED);
+        $work('MO-2', $paint, CabinetSubtask::ASSIGNMENT_UNASSIGNED);   // not sent to พ่นสี yet: not theirs
+
+        $this->actingAs($this->pm)->get(route('projects.dates.form', $this->project))->assertSee('และทุกคนในแผนกที่มีงาน (QC, ไฟฟ้า)');
+        $this->actingAs($this->pm)->post(route('projects.dates.store', $this->project), ['kind' => 'postpone', 'due_date' => '2026-10-30', 'reason_id' => $this->reason()->id, 'note' => 'x', 'notify' => 1])
+            ->assertSessionHasNoErrors();
+        foreach ([$this->member, $qcMan, $helper] as $u) {
+            $n = $u->notifications()->first();
+            $this->assertNotNull($n, $u->name.' hears it');
+            $this->assertStringEndsWith('วันส่งงานของแผนกยังเป็นวันเดิม', $n->data['latest']);
+            $this->assertSame(route('planning.board', ['project' => $this->project->id]), $n->data['url']);
+        }
+        $this->assertSame(0, $painter->notifications()->count());
+        $this->assertSame(1, $this->follower->notifications()->count());
+        $this->assertStringEndsWith('— x', $this->follower->notifications()->first()->data['latest']);
+
+        // a cabinet: only the departments with work in it; without "แจ้ง", nobody
+        $this->actingAs($this->pm)->get(route('cabinets.show', $cab1))->assertSee('และทุกคนในแผนกที่มีงานในตู้นี้ (ไฟฟ้า)');
+        $this->actingAs($this->pm)->post(route('cabinets.dates.store', $cab1), ['kind' => 'postpone', 'due_date' => '2026-10-20', 'reason_id' => $this->reason()->id, 'note' => 'y', 'notify' => 1]);
+        $this->assertStringStartsWith('เลื่อนวันตู้ MO-1', $this->member->notifications()->first()->data['latest']);
+        $this->assertStringStartsWith('เลื่อนวันโครงการ', $qcMan->notifications()->first()->data['latest']);
+        $this->actingAs($this->pm)->post(route('projects.dates.store', $this->project), ['kind' => 'postpone', 'due_date' => '2026-11-06', 'reason_id' => $this->reason()->id, 'note' => 'z']);
+        $this->assertStringStartsWith('เลื่อนวันโครงการ SO-1 ครั้งที่ 1', $qcMan->notifications()->first()->data['latest']);
     }
 }

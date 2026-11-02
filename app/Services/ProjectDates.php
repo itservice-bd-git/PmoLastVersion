@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\ActivityLog;
 use App\Models\Cabinet;
+use App\Models\CabinetSubtask;
+use App\Models\Department;
 use App\Models\Project;
 use App\Models\ProjectDateChange;
 use App\Models\ProjectDateReason;
@@ -138,6 +140,22 @@ class ProjectDates
             'old_due_date' => $oldDue, 'new_due_date' => $oldDue?->copy()->addDays($days),
             'reason_name' => 'ไม่ระบุ (เลื่อนทั้งโครงการจาก Planning)', 'changed_by' => $actor->id,
         ]);
+    }
+
+    /**
+     * The departments with work in the project, or in the cabinet (a Sub Task sent to them, as WorkScope: work not yet sent
+     * is not theirs to see): who hears of a postponement besides the project's own people
+     * (NotificationService::projectRescheduled), named on the form's "แจ้ง" box.
+     *
+     * @return \Illuminate\Support\Collection<int, Department>
+     */
+    public static function departments(Project|Cabinet $subject): \Illuminate\Support\Collection
+    {
+        $ids = CabinetSubtask::whereNotNull('department_id')->whereIn('assignment_status', WorkScope::ACTIVE_STATUSES)
+            ->whereHas('cabinetTask.cabinet', fn ($q) => $subject instanceof Cabinet ? $q->whereKey($subject->id) : $q->where('project_id', $subject->id))
+            ->distinct()->pluck('department_id');
+
+        return Department::whereIn('id', $ids)->orderBy('name')->get(['id', 'name']);
     }
 
     private function projectOf(Project|Cabinet $subject): Project

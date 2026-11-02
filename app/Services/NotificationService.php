@@ -396,24 +396,27 @@ class NotificationService
         ));
     }
 
-    /** A project's or a cabinet's due date was moved (ProjectDates, a round): the project's people in charge and its followers hear when and why. */
+    /**
+     * A project's or a cabinet's due date was moved (ProjectDates, a round): the project's people in charge, its followers and
+     * everyone in a department with work in it (in the cabinet, for a cabinet) hear when and why. The departments are told
+     * their own dates stayed, and open the project on Planning.
+     */
     public function projectRescheduled(Project $project, User $actor, \App\Models\ProjectDateChange $change, int $round, ?\App\Models\Cabinet $cabinet = null): int
     {
-        $ids = $this->peopleInCharge($project, $actor)->pluck('id')->merge($project->followers()->pluck('users.id'))->unique()->reject(fn ($id) => $id === $actor->id);
-        $people = User::whereIn('id', $ids)->where('is_active', true)->get()->filter(fn (User $u) => \App\Services\WorkScope::canSeeProject($project, $u));
-        $days = $change->dueDays();
+        $canSee = fn (Collection $ids) => User::whereIn('id', $ids)->where('is_active', true)->get()->filter(fn (User $u) => \App\Services\WorkScope::canSeeProject($project, $u));
+        $people = $canSee($this->peopleInCharge($project, $actor)->pluck('id')->merge($project->followers()->pluck('users.id'))->unique()->reject(fn ($id) => $id === $actor->id));
+        $deptIds = \App\Services\ProjectDates::departments($cabinet ?? $project)->pluck('id')->all();
+        $deptPeople = $deptIds ? $canSee(User::ofDepartment($deptIds)->where('id', '!=', $actor->id)->pluck('id')->diff($people->pluck('id'))) : collect();
 
-        return $this->send($people, new PmoNotice(
-            'project_rescheduled',
-            $cabinet ? 'เลื่อนวันตู้ '.($cabinet->mo_no ?: $cabinet->cabinet_name)." ({$project->project_no}) ครั้งที่ {$round}" : "เลื่อนวันโครงการ {$project->project_no} ครั้งที่ {$round}",
-            ($cabinet ? 'กำหนดเสร็จ ' : 'ครบกำหนด ').($change->old_due_date?->thaiDate() ?? '-').' → '.($change->new_due_date?->thaiDate() ?? '-').($days ? ' ('.($days > 0 ? '+' : '').$days.' วัน)' : '')
-                .($change->reason_name ? ' · '.$change->reason_name : '').($change->note ? ' — '.mb_strimwidth($change->note, 0, 120, '…') : ''),
-            $cabinet ? route('cabinets.show', $cabinet) : route('projects.show', $project),
-            projectId: $project->id,
-            group: "project:{$project->id}",
-            parts: ['rescheduled' => 1],
-            projectLabel: "{$project->project_no} · {$project->project_name}",
-        ));
+        $days = $change->dueDays();
+        $title = $cabinet ? 'เลื่อนวันตู้ '.($cabinet->mo_no ?: $cabinet->cabinet_name)." ({$project->project_no}) ครั้งที่ {$round}" : "เลื่อนวันโครงการ {$project->project_no} ครั้งที่ {$round}";
+        $body = ($cabinet ? 'กำหนดเสร็จ ' : 'ครบกำหนด ').($change->old_due_date?->thaiDate() ?? '-').' → '.($change->new_due_date?->thaiDate() ?? '-').($days ? ' ('.($days > 0 ? '+' : '').$days.' วัน)' : '')
+            .($change->reason_name ? ' · '.$change->reason_name : '').($change->note ? ' — '.mb_strimwidth($change->note, 0, 120, '…') : '');
+        $notice = fn (string $body, string $url) => new PmoNotice('project_rescheduled', $title, $body, $url,
+            projectId: $project->id, group: "project:{$project->id}", parts: ['rescheduled' => 1], projectLabel: "{$project->project_no} · {$project->project_name}");
+
+        return $this->send($people, $notice($body, $cabinet ? route('cabinets.show', $cabinet) : route('projects.show', $project)))
+            + $this->send($deptPeople, $notice($body.' · วันส่งงานของแผนกยังเป็นวันเดิม', route('planning.board', ['project' => $project->id])));
     }
 
     /**

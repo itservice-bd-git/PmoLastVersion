@@ -143,7 +143,8 @@
 
                 <label x-show="f.kind === 'postpone'" class="flex min-h-[2.25rem] items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
                     <input type="checkbox" name="notify" value="1" x-model="f.notify" class="h-4 w-4 rounded border-slate-300">
-                    แจ้ง PM ผู้รับผิดชอบ และผู้ติดตามโครงการ
+                    @php $notifyDepts = \App\Services\ProjectDates::departments($subject)->pluck('name'); @endphp
+                    <span>แจ้ง PM ผู้รับผิดชอบ ผู้ติดตามโครงการ{{ $notifyDepts->isNotEmpty() ? ' และทุกคนในแผนกที่มีงาน'.($isCabinet ? 'ในตู้นี้' : '').' ('.$notifyDepts->implode(', ').')' : '' }}</span>
                 </label>
                 <p class="text-xs text-slate-600">{{ $isCabinet ? 'วันของงานย่อยในตู้ไม่เปลี่ยนตาม — เลื่อนเองที่ Sub Task หรือ Planning' : 'วันของงานย่อยและตู้ไม่เปลี่ยนตาม — เลื่อนเองที่หน้าตู้หรือ Planning' }}</p>
 

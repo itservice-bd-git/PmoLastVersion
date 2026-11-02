@@ -76,6 +76,7 @@ class ChecklistEditor
         // the Sub Tasks comparing with this one (template pairs): has each dealt with each item yet
         $receipts = app(HandoffService::class)->receiptsFor($owner->setRelation('checklists', $list));
         $tags = app(ChecklistStatuses::class)->idsFor($list->pluck('id'));   // Settings > สีสถานะ Checklist
+        $peers = app(ChecklistStatuses::class)->peersFor($list);   // the other side of a pair: read-only
 
         return $list
             ->map(fn (CabinetChecklist $c) => [
@@ -84,6 +85,7 @@ class ChecklistEditor
                 'toggleUrl' => route('checklists.toggle', $c), 'handoff' => $receipts[$c->id] ?? [],
                 'from' => $c->source_checklist_id ? 'k'.$c->source_checklist_id : null,   // a copy of the item of the Sub Task it compares with
                 'tags' => $tags[$c->id] ?? [],
+                'peerTags' => $peers[$c->id] ?? [],
             ])->all();
     }
 

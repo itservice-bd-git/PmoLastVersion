@@ -28,14 +28,20 @@
                         <x-input-label value="ขนาดตู้" />
                         <x-text-input name="size" class="mt-1 block w-full" placeholder="เช่น 600x800x2000 มม." :value="old('size', $cabinet->size)" />
                     </div>
-                    <div>
-                        <x-input-label value="Start Date" />
-                        <x-text-input type="date" name="start_date" class="mt-1 block w-full" :value="old('start_date', $cabinet->start_date?->format('Y-m-d'))" />
-                    </div>
-                    <div>
-                        <x-input-label value="Due Date" />
-                        <x-text-input type="date" name="due_date" class="mt-1 block w-full" :value="old('due_date', $cabinet->due_date?->format('Y-m-d'))" />
-                    </div>
+                    {{-- once the cabinet has a date it moves only through หน้าตู้ › "เลื่อน / แก้วัน" (with a reason; App\Services\ProjectDates) --}}
+                    @foreach (['start_date' => 'Start Date', 'due_date' => 'Due Date'] as $field => $label)
+                        <div>
+                            <x-input-label :value="$label" />
+                            @if ($cabinet->{$field})
+                                <p class="mt-1 flex h-[2.625rem] items-center justify-between gap-2 rounded-lg bg-slate-100 px-3 text-sm">
+                                    <span class="tabular-nums text-slate-800">{{ $cabinet->{$field}->thaiDate() }}</span>
+                                    <a href="{{ route('cabinets.show', $cabinet) }}" class="text-xs font-semibold text-blue-700 hover:underline">เลื่อน / แก้วัน →</a>
+                                </p>
+                            @else
+                                <x-text-input type="date" :name="$field" class="mt-1 block w-full" :value="old($field)" />
+                            @endif
+                        </div>
+                    @endforeach
                     <div>
                         <x-input-label value="วันคาดว่าจะเสร็จ" />
                         <x-text-input type="date" name="expected_completion_date" class="mt-1 block w-full" :value="old('expected_completion_date', $cabinet->expected_completion_date?->format('Y-m-d'))" />

@@ -66,6 +66,15 @@ export default (cfg) => ({
     publishTags() { if (window.Alpine) window.Alpine.store('checklistTags').lists[this.ownerId] = this.items.map((i) => ({ id: i.id, done: i.done, tags: i.tags || [] })); },
     st(id) { return this.statuses.find((s) => s.id === id); },
     tagsOf(item) { return (item.tags || []).map((id) => this.st(id)).filter(Boolean); },
+    tagsOfIds(ids) { return (ids || []).map((id) => this.st(id)).filter(Boolean); },
+    // the other departments of the linked list (ChecklistStatuses::peersFor): a list shown beside this one (compared /
+    // watched) carries its own statuses there; the rest (further along: คลัง → Production) only in the item's panel
+    peersOf(item) {
+        const beside = new Set([...this.linked, ...this.watched].map((l) => l.id));
+        return (item.peerTags || []).filter((p) => !beside.has(p.sub)).map((p) => this.st(p.id) && { ...this.st(p.id), dept: p.dept }).filter(Boolean);
+    },
+    peerDepts(item) { return [...new Set(this.peersOf(item).map((s) => s.dept))]; },
+    tagTitle(item) { return this.tagsOf(item).map((s) => s.name).join(' · '); },
     chipStyle(s) { return 'background:' + s.bg + ';color:' + s.fg + (s.active ? '' : ';opacity:.7'); },
     // the rows show colour dots only ("สีนี้คืออะไร" above the list says what each is); a tap on the dots or the toolbar's tag
     // button opens a panel under the row: each status by name with ×, and "+ เพิ่ม" a colour, every change saved at once.

@@ -21,6 +21,9 @@
         $pairOptions = $canPair ? $cabinet->tasks->flatMap(fn ($t) => $t->subtasks->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'task' => $t->name, 'dept' => (string) $s->department?->name]))->values() : collect();
         $tagCatalog = app(\App\Services\ChecklistStatuses::class)->catalog();   // Settings > สีสถานะ Checklist
         $expectedLate = $cabinet->expected_completion_date && $cabinet->due_date && $cabinet->expected_completion_date->gt($cabinet->due_date);
+        // เลื่อน / แก้วัน of this cabinet (App\Services\ProjectDates; windows: projects.partials._dates)
+        $dates = app(\App\Services\ProjectDates::class)->summary($cabinet);
+        $canDates = $canPair;
     @endphp
 
     {{-- every checklist editor and the status summaries below draw their chips from this --}}
@@ -109,7 +112,26 @@
                         <x-progress-bar :value="$cabinet->progress" id="cabinet-{{ $cabinet->id }}" />
                     </div>
                     <dl class="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-2 gap-y-1.5 border-b border-slate-100 p-4 text-sm">
-                        <dt class="text-slate-500">กำหนดเสร็จ</dt><dd class="font-semibold text-slate-800">{{ optional($cabinet->due_date)->thaiDate() ?? '-' }}</dd>
+                        <dt class="text-slate-500">กำหนดเสร็จ</dt>
+                        <dd class="min-w-0 font-semibold text-slate-800" x-data>
+                            {{ optional($cabinet->due_date)->thaiDate() ?? '-' }}
+                            {{-- the narrow side card: chip and button on their own line, wrapping inside it --}}
+                            @if ($dates['changes']->isNotEmpty() || ($canDates && $cabinet->due_date))
+                                <span class="mt-1 flex flex-wrap gap-1">
+                                    @if ($dates['rounds'])
+                                        <button type="button" @click="$dispatch('open-modal', 'project-date-history')" class="max-w-full rounded-full bg-orange-100 px-2 py-0.5 text-left text-xs font-bold text-orange-800 hover:bg-orange-200"><span class="whitespace-nowrap">เลื่อน {{ $dates['rounds'] }} ครั้ง</span>@if ($dates['days']) <span class="whitespace-nowrap">{{ ($dates['days'] > 0 ? '+' : '').$dates['days'] }} วัน ›</span>@else ›@endif</button>
+                                    @elseif ($dates['changes']->isNotEmpty())
+                                        <button type="button" @click="$dispatch('open-modal', 'project-date-history')" class="text-xs font-semibold text-blue-700 hover:underline">ประวัติ ›</button>
+                                    @endif
+                                    @if ($canDates && $cabinet->due_date)
+                                        <button type="button" @click="$dispatch('open-modal', 'project-dates')" class="rounded-lg border border-slate-300 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">เลื่อน / แก้วัน</button>
+                                    @endif
+                                </span>
+                            @endif
+                        </dd>
+                        @if ($dates['rounds'] && $dates['firstDue'])
+                            <dt class="text-slate-500">กำหนดเสร็จตอนแรก</dt><dd class="tabular-nums text-slate-500 line-through">{{ $dates['firstDue']->thaiDate() }}</dd>
+                        @endif
                         <dt class="text-slate-500">คาดว่าจะเสร็จ</dt>
                         <dd class="font-semibold {{ $expectedLate ? 'text-red-700' : 'text-slate-800' }}">{{ optional($cabinet->expected_completion_date)->thaiDate() ?? '-' }}@if ($expectedLate) (+{{ $cabinet->due_date->diffInDays($cabinet->expected_completion_date) }} วัน)@endif</dd>
                         <dt class="text-slate-500">วันเริ่ม</dt><dd class="text-slate-800">{{ optional($cabinet->start_date)->thaiDate() ?? '-' }}</dd>
@@ -232,7 +254,7 @@
                                     <details class="pl-12 pr-5 py-3 border-l-2 border-slate-100 ml-5 scroll-mt-20" id="subtask-{{ $subtask->id }}"
                                              x-data="linkedSubtask({{ $subtask->id }})">
                                         <summary class="list-none cursor-pointer flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 sm:min-w-[22rem] flex-1">
+                                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 sm:min-w-[22rem] flex-1" data-status-menu>
                                                 {{-- the one a link from สรุปงาน came to: marked for a few seconds --}}
                                                 <span x-show="marked" x-cloak x-transition.opacity.duration.500ms class="relative inline-flex h-6 w-6 shrink-0 items-center justify-center" title="หัวข้อที่ลิงก์มา">
                                                     <span class="absolute inset-0 rounded-full bg-blue-600 opacity-75 motion-safe:animate-ping"></span>
@@ -242,8 +264,14 @@
                                                     <span class="sr-only">หัวข้อที่ลิงก์มา</span>
                                                 </span>
                                                 <span class="text-sm font-medium text-slate-800 min-w-[10rem] max-w-xs">{{ $subtask->name }}</span>
-                                                <x-status-badge :status="$subtask->status" id="subtask-{{ $subtask->id }}" />
-                                                <div class="flex flex-wrap items-center gap-2" data-assignment="{{ $subtask->id }}" data-no-step-bar @click.stop>
+                                                {{-- the status badge opens the work-status menu (in _assignment: data-status-menu-panel); เริ่มงาน / เสร็จงาน live there instead of as buttons --}}
+                                                <button type="button" class="inline-flex items-center gap-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                                        data-status-menu-toggle aria-haspopup="menu" aria-expanded="false" title="อัปเดตสถานะงาน">
+                                                    <x-status-badge :status="$subtask->status" id="subtask-{{ $subtask->id }}" />
+                                                    <span class="text-xs text-slate-500" aria-hidden="true">▾</span>
+                                                </button>
+                                                {{-- a click here must not fold the Sub Task, but must still reach the page's handler (รับงาน / เริ่มงาน, _assignment-scripts): prevent, never stop --}}
+                                                <div class="flex flex-wrap items-center gap-2" data-assignment="{{ $subtask->id }}" data-no-step-bar @click="$event.preventDefault()">
                                                     @include('cabinets.partials._assignment', ['subtask' => $subtask, 'departments' => $departments, 'stepBar' => false])
                                                 </div>
                                                 @if ($subtask->start_date)
@@ -319,7 +347,7 @@
                                 @if ($canBuild)
                                     <div class="ml-5 py-3 pl-12 pr-5" x-data="{ open: false }">
                                         <button type="button" x-show="!open" @click="open = true; $nextTick(() => $refs.name.focus())" class="rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">+ เพิ่ม Sub Task</button>
-                                        <form x-show="open" x-cloak method="POST" action="{{ route('cabinet-subtasks.store', $task) }}" class="flex flex-wrap items-end gap-2">
+                                        <form x-show="open" x-cloak method="POST" action="{{ route('cabinet-subtasks.store', $task) }}" data-add-inline="subtask" class="flex flex-wrap items-end gap-2">
                                             @csrf
                                             <div class="min-w-[14rem] flex-1">
                                                 <x-input-label value="ชื่อ Sub Task" class="text-xs" />
@@ -346,7 +374,7 @@
                 @if ($canBuild)
                     <div x-data="{ open: false }">
                         <button type="button" x-show="!open" @click="open = true; $nextTick(() => $refs.name.focus())" class="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50">+ เพิ่ม Task</button>
-                        <form x-show="open" x-cloak method="POST" action="{{ route('cabinet-tasks.store', $cabinet) }}" class="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <form x-show="open" x-cloak method="POST" action="{{ route('cabinet-tasks.store', $cabinet) }}" data-add-inline="task" class="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                             @csrf
                             <div class="min-w-[14rem] flex-1">
                                 <x-input-label value="ชื่อ Task" class="text-xs" />
@@ -363,6 +391,7 @@
     </div>
 
     @foreach ($cabinet->tasks as $task)
+        <div data-edit-modal="task-{{ $task->id }}">
         <x-modal :name="'edit-task-'.$task->id" :show="old('task_id') == $task->id">
             <form method="POST" action="{{ route('cabinet-tasks.update', $task) }}" class="p-6">
                 @csrf @method('PUT')
@@ -412,8 +441,10 @@
             </form>
             @endeditplan
         </x-modal>
+        </div>
 
         @foreach ($task->subtasks as $subtask)
+            <div data-edit-modal="subtask-{{ $subtask->id }}">
             <x-modal :name="'edit-subtask-'.$subtask->id" :show="old('subtask_id') == $subtask->id">
                 <form method="POST" action="{{ route('cabinet-subtasks.update', $subtask) }}" class="p-6">
                     @csrf @method('PUT')
@@ -504,10 +535,16 @@
                 </form>
                 @endeditplan
             </x-modal>
+            </div>
         @endforeach
     @endforeach
 
+    {{-- เลื่อน / แก้วัน of this cabinet: its history and (Admin / PM) the form --}}
+    @include('projects.partials._dates', ['subject' => $cabinet])
+
     @push('scripts')
+    {{-- เริ่มงาน / เสร็จงาน are in the status badge's menu on this page, so the row keeps only รับงาน / ไม่รับงาน --}}
+    <style>[data-status-menu] .assignment-step-button { display: none; }</style>
     @include('cabinets.partials._assignment-scripts')
     <script>
         // every list kept current without a reload: asked every 15 s while the tab is shown, and right after a change here
@@ -549,6 +586,15 @@
                 marked: false,
                 init() {
                     const el = this.$el;
+                    if (id === @js(session('new_subtask'))) {   // just added: stay on it (not the top of the page), ready to type its first item
+                        el.open = true;
+                        setTimeout(() => {
+                            el.scrollIntoView({ block: 'center' });
+                            const draft = el.querySelector('input[x-ref="draft"]');
+                            if (draft && draft.offsetParent) draft.focus({ preventScroll: true });
+                        }, 300);
+                        return;
+                    }
                     if (location.hash === '#subtask-' + id) { el.open = true; return; }
                     if (location.hash !== '#goto-subtask-' + id) return;
                     el.open = true;
@@ -560,6 +606,63 @@
                 },
             };
         }
+
+        // "+ เพิ่ม Task / Sub Task": saved without leaving the page. The new one is taken from the page as the server now
+        // draws it and put just above its "+ เพิ่ม" (Alpine starts it by itself), with its edit window and the bars above it.
+        document.addEventListener('submit', async (e) => {
+            const form = e.target.closest('form[data-add-inline]');
+            if (!form) return;
+            e.preventDefault();
+            const kind = form.dataset.addInline;   // task | subtask
+            const send = form.querySelector('button:not([type=button])');
+            send.disabled = true;
+            try {
+                const res = await fetch(form.action, { method: 'POST', body: new FormData(form),
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.message || 'บันทึกไม่สำเร็จ กรุณาลองใหม่');
+                const doc = new DOMParser().parseFromString(await (await fetch(location.pathname + location.search)).text(), 'text/html');
+                const fresh = doc.getElementById((kind === 'task' ? 'task-card-' : 'subtask-') + data.id);
+                if (!fresh) { location.reload(); return; }
+                const box = form.closest('[x-data]');
+                if (kind === 'subtask') box.parentElement.querySelector(':scope > p.text-slate-400')?.remove();   // "ยังไม่มี Sub Task"
+                box.before(fresh);
+                doc.querySelectorAll('[data-edit-modal="' + kind + '-' + data.id + '"]').forEach((m) => document.body.append(m));
+                const taskId = kind === 'task' ? data.id : fresh.closest('[id^="task-card-"]').id.replace('task-card-', '');
+                ['task-' + taskId, 'cabinet-{{ $cabinet->id }}'].forEach((k) => ['progress-value-', 'progress-fill-', 'status-badge-', 'checklist-count-'].forEach((pre) => {
+                    const now = document.getElementById(pre + k), next = doc.getElementById(pre + k);
+                    if (now && next && !fresh.contains(now)) now.replaceWith(next);
+                }));
+                form.reset();
+                Alpine.$data(box).open = false;
+                window.showToast(data.message);
+                // ready for the next step: a new Task opens its "+ เพิ่ม Sub Task", a new Sub Task its checklist
+                setTimeout(() => {
+                    if (kind === 'task') {
+                        [...fresh.querySelectorAll('button')].find((b) => b.textContent.trim() === '+ เพิ่ม Sub Task')?.click();
+                        setTimeout(() => fresh.querySelector('form[data-add-inline] input[name="name"]')?.focus({ preventScroll: true }), 50);
+                    } else {
+                        fresh.open = true;
+                        const draft = fresh.querySelector('input[x-ref="draft"]');
+                        if (draft && draft.offsetParent) draft.focus({ preventScroll: true });
+                    }
+                }, 50);
+            } catch (err) {
+                window.showToast(err.message, 'error');
+            } finally {
+                send.disabled = false;
+            }
+        });
+
+        // a Task just added: stay on it (not the top of the page), its "+ เพิ่ม Sub Task" open and ready to type
+        @if (session('new_task'))
+        document.addEventListener('alpine:initialized', () => setTimeout(() => {
+            const card = document.getElementById('task-card-' + @js(session('new_task')));
+            if (!card) return;
+            card.scrollIntoView({ block: 'center' });
+            [...card.querySelectorAll('button')].find((b) => b.textContent.trim() === '+ เพิ่ม Sub Task')?.click();
+        }, 300));
+        @endif
 
         // the checklist editor (x-checklist-editor) reports every change: the Sub Task / Task / cabinet bars follow
         window.addEventListener('checklist-progress', (e) => {
@@ -595,6 +698,37 @@
             completed: ['bg-emerald-100 text-emerald-700', 'Completed'],
             on_hold: ['bg-amber-100 text-amber-700', 'On Hold'],
         };
+
+        // the Sub Task status badge's menu: open / close (a click in a <summary> would otherwise fold the Sub Task)
+        function closeStatusMenus(except) {
+            document.querySelectorAll('[data-status-menu]').forEach((box) => {
+                if (box === except) return;
+                box.querySelector('[data-status-menu-panel]')?.classList.add('hidden');
+                box.querySelector('[data-status-menu-toggle]')?.setAttribute('aria-expanded', 'false');
+            });
+        }
+        document.addEventListener('click', (e) => {
+            const toggle = e.target.closest('[data-status-menu-toggle]');
+            if (!toggle) {
+                if (!e.target.closest('[data-status-menu-panel]') || e.target.closest('.assignment-action')) closeStatusMenus();
+                return;
+            }
+            e.preventDefault();
+            const box = toggle.closest('[data-status-menu]');
+            const panel = box.querySelector('[data-status-menu-panel]');
+            closeStatusMenus(box);
+            const open = panel.classList.toggle('hidden') === false;
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (open) {   // fixed, just under the badge (the row wraps, so it can't hang off a parent)
+                const r = toggle.getBoundingClientRect();
+                panel.style.position = 'fixed';
+                panel.style.top = (r.bottom + 4) + 'px';
+                panel.style.left = Math.min(r.left, innerWidth - panel.offsetWidth - 16) + 'px';
+            }
+            if (open) panel.querySelector('button')?.focus();
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeStatusMenus(); });
+        addEventListener('scroll', () => closeStatusMenus(), { passive: true });
 
         function updateStatusBadge(id, status) {
             const badge = document.getElementById('status-badge-' + id);

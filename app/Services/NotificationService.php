@@ -290,8 +290,8 @@ class NotificationService
             ->whereIn('assignment_status', [CabinetSubtask::ASSIGNMENT_ASSIGNED, CabinetSubtask::ASSIGNMENT_ACCEPTED, CabinetSubtask::ASSIGNMENT_IN_PROGRESS])
             ->exists()) {
             $this->send($this->peopleInCharge($project, $actor)->merge($this->projectFollowers($project, $actor))->unique('id'), new PmoNotice(
-                'project_done', "งานทุกแผนกของ {$project->project_no} เสร็จแล้ว", $project->project_name,
-                route('planning.board', ['project' => $project->id]), "project_done:{$project->id}", projectId: $project->id,
+                'project_done', "งานทุกแผนกของ {$project->project_no} เสร็จแล้ว", $project->project_name.' · ปิดโครงการได้ที่หน้าโครงการ',
+                route('projects.show', $project), "project_done:{$project->id}", projectId: $project->id,
                 group: "project:{$project->id}", parts: ['project_done' => 1], projectLabel: "{$project->project_no} · {$project->project_name}",
             ), dedupe: true);
         }
@@ -392,6 +392,26 @@ class NotificationService
             projectId: $project->id,
             group: "project:{$project->id}",
             parts: ['comment' => 1],
+            projectLabel: "{$project->project_no} · {$project->project_name}",
+        ));
+    }
+
+    /** A project's or a cabinet's due date was moved (ProjectDates, a round): the project's people in charge and its followers hear when and why. */
+    public function projectRescheduled(Project $project, User $actor, \App\Models\ProjectDateChange $change, int $round, ?\App\Models\Cabinet $cabinet = null): int
+    {
+        $ids = $this->peopleInCharge($project, $actor)->pluck('id')->merge($project->followers()->pluck('users.id'))->unique()->reject(fn ($id) => $id === $actor->id);
+        $people = User::whereIn('id', $ids)->where('is_active', true)->get()->filter(fn (User $u) => \App\Services\WorkScope::canSeeProject($project, $u));
+        $days = $change->dueDays();
+
+        return $this->send($people, new PmoNotice(
+            'project_rescheduled',
+            $cabinet ? 'เลื่อนวันตู้ '.($cabinet->mo_no ?: $cabinet->cabinet_name)." ({$project->project_no}) ครั้งที่ {$round}" : "เลื่อนวันโครงการ {$project->project_no} ครั้งที่ {$round}",
+            ($cabinet ? 'กำหนดเสร็จ ' : 'ครบกำหนด ').($change->old_due_date?->thaiDate() ?? '-').' → '.($change->new_due_date?->thaiDate() ?? '-').($days ? ' ('.($days > 0 ? '+' : '').$days.' วัน)' : '')
+                .($change->reason_name ? ' · '.$change->reason_name : '').($change->note ? ' — '.mb_strimwidth($change->note, 0, 120, '…') : ''),
+            $cabinet ? route('cabinets.show', $cabinet) : route('projects.show', $project),
+            projectId: $project->id,
+            group: "project:{$project->id}",
+            parts: ['rescheduled' => 1],
             projectLabel: "{$project->project_no} · {$project->project_name}",
         ));
     }
@@ -636,7 +656,7 @@ class NotificationService
     private const PREFERENCE_FOR_KIND = [
         'accepted' => 'progress', 'started' => 'progress', 'completed' => 'completed',
         'due_soon' => 'reminders', 'overdue' => 'reminders', 'undated' => 'reminders', 'waiting' => 'reminders',
-        'comment' => 'comments', 'due_changed' => 'due_changes', 'project_done' => 'completed',
+        'comment' => 'comments', 'due_changed' => 'due_changes', 'project_rescheduled' => 'due_changes', 'project_done' => 'completed',
         'handoff' => 'progress', 'handoff_due' => 'reminders',
     ];
 

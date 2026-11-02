@@ -28,7 +28,6 @@
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
                         <span x-text="isFollowing(cur) ? 'ติดตามอยู่' : 'ติดตามโครงการ'"></span>
                     </button>
-                    <button type="button" x-show="isPmo" @click="shiftProject(cur)" class="rounded-lg px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100" title="เลื่อนวันของโครงการ ตู้ และงานที่ยังไม่เสร็จพร้อมกัน">⇆ เลื่อนทั้งโครงการ</button>
                     <button type="button" x-show="isPmo" @click="duplicateProject(cur)" class="rounded-lg px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100" title="คัดลอกโครงการนี้ (พร้อมตู้ งาน checklist)">⧉ คัดลอก</button>
                     <button type="button" @click="openProjectDash(cur.id)" class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100" title="แดชบอร์ดของโครงการนี้">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 20V10m6 10V4m6 16v-7m4 7H2"/></svg>แดชบอร์ด
@@ -76,6 +75,27 @@
                                 <span class="relative"><input type="text" placeholder="dd/mm/yyyy" x-init="dateField($el, () => cur && cur.startDate, (v) => editProject(cur, { startDate: v }), canEdit, 'w-[8.75rem]')"><svg class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path stroke-linecap="round" d="M3 10h18M8 3v4m8-4v4"/></svg></span>
                                 <span class="text-slate-400">→</span><span class="font-bold text-slate-600">จบ</span>
                                 <span class="relative"><input type="text" placeholder="dd/mm/yyyy" x-init="dateField($el, () => cur && cur.date, (v) => v && editProject(cur, { date: v }), canEdit, 'w-[8.75rem]')"><svg class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path stroke-linecap="round" d="M3 10h18M8 3v4m8-4v4"/></svg></span>
+                            </div>
+                            {{-- เลื่อนมาแล้วกี่ครั้ง (ProjectDates): click for each round; "เลื่อน / แก้วัน" opens หน้าโครงการ's own window (openDates) --}}
+                            <div x-show="cur.reschedule || canMoveDates(cur)" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                <template x-if="cur.reschedule">
+                                    <span class="contents">
+                                        <button type="button" @click.stop="showRes($event, cur.reschedule, true)" class="res-chip res-chip-lg" x-text="resChip(cur.reschedule, true)" aria-haspopup="dialog"></button>
+                                        <span class="text-slate-500">ครบกำหนดตอนแรก <s x-text="fmtBE(cur.reschedule.firstDue)"></s></span>
+                                    </span>
+                                </template>
+                                <button type="button" x-show="canMoveDates(cur)" @click="openDates(cur)" class="res-btn" aria-haspopup="dialog">เลื่อน / แก้วัน</button>
+                            </div>
+                            {{-- the latest FAT round; "ลง / แก้วัน FAT" opens หน้าโครงการ's own FAT window (openFat) --}}
+                            <div x-show="cur.fat || canFat(cur)" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                <template x-if="cur.fat">
+                                    <span class="contents">
+                                        <span :class="fatTag(cur)">FAT</span>
+                                        <span class="font-semibold tabular-nums text-slate-700" x-text="fatRange(cur.fat) + (cur.fat.time ? ' · ' + cur.fat.time : '')"></span>
+                                        <span class="rounded-full px-2 font-bold" :class="fatPill(cur)" x-text="(cur.fat.round > 1 ? 'รอบที่ ' + cur.fat.round + ' · ' : '') + fatStatus(cur)"></span>
+                                    </span>
+                                </template>
+                                <button type="button" x-show="canFat(cur)" @click="openFat(cur)" class="res-btn" aria-haspopup="dialog">ลง / แก้วัน FAT</button>
                             </div>
                         </div>
                         <div class="hidden border-slate-200 sm:block sm:border-l sm:border-t"></div>
@@ -250,6 +270,7 @@
                                             <button type="button" @click.stop="renameCabinet(cur, c)" class="px-1 text-slate-400 hover:text-blue-600" title="แก้ชื่อ / เลข MO" aria-label="แก้ชื่อตู้">✎</button>
                                             <button type="button" @click.stop="deleteCabinet(cur, c)" class="px-1 text-slate-400 hover:text-red-600" title="ลบตู้" aria-label="ลบตู้">🗑</button>
                                         </span>
+                                        <button type="button" x-show="c.reschedule" @click.stop="showRes($event, c.reschedule, true)" class="hover:bg-orange-100 res-chip" :title="c.reschedule ? resChip(c.reschedule, true) : ''" x-text="c.reschedule ? resChip(c.reschedule) : ''"></button>
                                         <template x-if="canEdit">
                                             <span class="relative shrink-0" title="กำหนดส่งของตู้นี้ (ไม่ใส่ = ตามวันโปรเจค)">
                                                 <input type="text" placeholder="dd/mm/yyyy" x-init="dateField($el, () => c.date, (v) => setCabinetDue(cur, c, v), true)">

@@ -93,6 +93,7 @@ class ProjectOverviewTest extends TestCase
         $this->assertStringEndsWith('#subtask-'.$late->tasks()->first()->subtasks()->first()->id, $alerts['late']['items'][0]['url'], 'opens the cabinet at that sub task');
         $this->assertSame(1, $alerts['soon']['count'], 'the other drawing is due in 2 days');
         $this->assertSame(['เขียนแบบ', 2], [$alerts['waiting']['departments'][0]['name'], $alerts['waiting']['departments'][0]['count']]);
+        $this->assertSame(count($alerts['waiting']['departments']), $alerts['waiting']['count'], 'the chip counts departments, not Sub Tasks');
         $this->assertSame(2, $alerts['unassigned']['count']);
     }
 

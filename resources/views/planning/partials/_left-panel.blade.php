@@ -51,6 +51,10 @@
             <div class="h-[5px] overflow-hidden rounded bg-slate-100"><div class="h-full rounded bg-blue-600 transition-all" :style="'width:' + focusCounts().pct + '%'"></div></div>
         </div>
 
+        {{-- วัน FAT on the chosen day --}}
+        <div x-show="fatOn(focusDate).length" class="flex flex-col gap-1 px-0.5 pt-2">
+            <template x-for="t in fatOn(focusDate)" :key="'lf' + t.id"><button type="button" @click="openModal(t.id)" :class="fatChip(t)" class="!h-8" :title="fatTitle(t)"><span :class="fatTag(t)">FAT</span><span class="truncate" x-text="(t.fat.time ? t.fat.time + ' · ' : '') + t.so + ' ' + t.title"></span></button></template>
+        </div>
         <div class="pb-2 pt-1">
             <template x-for="sec in focusSections()" :key="sec.key">
                 <div x-show="sec.groups.length > 0">

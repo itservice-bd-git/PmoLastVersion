@@ -110,6 +110,21 @@
     </div>
 </template>
 
+{{-- "เลื่อน n" history (a chip on a bar / row: on hover; in the project window: on click, with the link to move the date) --}}
+<template x-if="resPop">
+    <div class="fixed inset-0 z-[70]" :class="resPop.pinned || 'pointer-events-none'" @click="resPop = null">
+        <div class="res-pop" :style="'top:' + resPop.top + 'px;left:' + resPop.left + 'px'" @click.stop role="dialog" aria-label="ประวัติการเลื่อนวัน">
+            <p x-text="resLines(resPop.res)[0]"></p>
+            <p x-text="resLines(resPop.res)[1]"></p>
+            <template x-for="r in resPop.res.list" :key="r.n"><p><b x-text="'ครั้งที่ ' + r.n"></b><span x-text="resRound(r)"></span></p></template>
+            <a x-show="resPop.pinned" :href="resPop.res.url" target="_blank" rel="noopener" x-text="resLines(resPop.res)[2]"></a>
+        </div>
+    </div>
+</template>
+
+{{-- "เลื่อน / แก้วัน": หน้าโครงการ's windows, fetched in by openDates() --}}
+<div id="pb-dates" class="relative z-[80]"></div>
+
 {{-- new cabinet: MO + name, the template it starts from, and which department gets each of the template's sub tasks --}}
 <template x-if="cabDialog">
     <div class="fixed inset-0 z-[55] flex items-start justify-center p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="เพิ่มตู้">

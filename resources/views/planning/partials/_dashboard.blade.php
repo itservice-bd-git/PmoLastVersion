@@ -135,7 +135,7 @@
                 <div class="mt-2 overflow-x-auto rounded-xl border border-slate-200">
                     <table class="min-w-full text-sm">
                         <thead class="bg-slate-50 text-xs text-slate-500"><tr>
-                            <th class="px-4 py-2 text-left font-semibold">โปรเจค</th><th class="px-4 py-2 text-left font-semibold">วันครบกำหนด</th><th class="px-4 py-2 text-left font-semibold">สถานะ</th>
+                            <th class="px-4 py-2 text-left font-semibold">โปรเจค</th><th class="px-4 py-2 text-left font-semibold">วันครบกำหนด</th><th class="px-4 py-2 text-left font-semibold">FAT</th><th class="px-4 py-2 text-left font-semibold">สถานะ</th>
                             <th class="px-4 py-2 text-left font-semibold">แผนก</th><th class="px-4 py-2 text-left font-semibold">เช็คลิสต์</th><th class="px-4 py-2 text-right font-semibold">ตู้</th>
                         </tr></thead>
                         <tbody class="divide-y divide-slate-100">
@@ -145,13 +145,17 @@
                                         <button type="button" @click.stop="dashProject = t.id; window.scrollTo({ top: 0, behavior: 'smooth' })" class="ml-1.5 rounded border border-slate-200 px-1.5 text-[12px] text-slate-500 hover:border-blue-400 hover:text-blue-600" title="แดชบอร์ดของโครงการนี้">📊</button>
                                         <p class="text-xs text-slate-500" x-text="t.title"></p></td>
                                     <td class="px-4 py-2.5 whitespace-nowrap"><span x-text="fmtBE(dueFor(t))"></span><p x-show="overdueFor(t)" class="text-[12px] font-semibold text-red-600" x-text="'เลย ' + Math.abs(daysFromToday(dueFor(t))) + ' วัน'"></p></td>
-                                    <td class="px-4 py-2.5"><span class="rounded-full px-2.5 py-0.5 text-xs font-semibold" :style="'background-color:' + statusColor(t) + '26;color:' + statusColor(t)" x-text="statusOf(t).name"></span></td>
+                                    {{-- วัน FAT: the latest round, as หน้าโครงการ › รายการโครงการ --}}
+                                    <td class="px-4 py-2.5 whitespace-nowrap"><span x-show="!t.fat" class="text-slate-400">-</span><template x-if="t.fat"><div>
+                                        <span x-text="fmtBE(t.fat.date)"></span><p class="text-[12px]"><span class="rounded-full px-2 py-0.5 font-semibold" :class="fatPill(t)" x-text="fatStatus(t)"></span> <span class="text-slate-500" x-text="[t.fat.time, t.fat.round > 1 ? 'รอบ ' + t.fat.round : ''].filter(Boolean).join(' · ')"></span></p>
+                                        <p x-show="fatLate(t)" class="text-[12px] font-semibold text-amber-700">หลังวันครบกำหนด</p></div></template></td>
+                                    <td class="px-4 py-2.5 whitespace-nowrap"><span class="rounded-full px-2.5 py-0.5 text-xs font-semibold" :style="'background-color:' + statusColor(t) + '26;color:' + statusColor(t)" x-text="statusOf(t).name"></span></td>
                                     <td class="px-4 py-2.5 text-xs text-slate-600"><template x-for="s in t.deptStages" :key="s.deptId"><span class="inline-flex items-center gap-1 mr-2"><span class="w-2 h-2 rounded-full" :style="'background-color:' + deptOf(s.deptId).color"></span><span :class="s.done ? 'line-through text-slate-400' : ''" x-text="deptOf(s.deptId).name"></span></span></template></td>
                                     <td class="px-4 py-2.5 whitespace-nowrap"><div class="flex items-center gap-2 w-32"><div class="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden"><div class="h-1.5 rounded-full bg-emerald-500" :style="'width:' + progress(t, dept || null).pct + '%'"></div></div><span class="text-xs text-slate-500 tabular-nums" x-text="progress(t, dept || null).pct + '%'"></span></div></td>
                                     <td class="px-4 py-2.5 text-right font-semibold tabular-nums" x-text="t.subtasks.length"></td>
                                 </tr>
                             </template>
-                            <tr x-show="d.rows.length === 0"><td colspan="6" class="px-4 py-8 text-center text-slate-400">ยังไม่มีโปรเจคตามเงื่อนไขที่เลือก</td></tr>
+                            <tr x-show="d.rows.length === 0"><td colspan="7" class="px-4 py-8 text-center text-slate-400">ยังไม่มีโปรเจคตามเงื่อนไขที่เลือก</td></tr>
                         </tbody>
                     </table>
                 </div>

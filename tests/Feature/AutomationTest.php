@@ -112,7 +112,7 @@ class AutomationTest extends TestCase
         $this->assertSame('ACCEPTED', $other->fresh()->assignment_status);
     }
 
-    public function test_unticking_never_reverts_and_a_pm_outside_the_department_cannot_trigger_a_move(): void
+    public function test_unticking_done_work_reopens_it_and_a_pm_outside_the_department_cannot_trigger_a_move(): void
     {
         $this->rule('checklist_all_done', 'complete');
         $s = $this->subtask($this->qc);
@@ -126,12 +126,22 @@ class AutomationTest extends TestCase
         $this->assertSame('ACCEPTED', $s->fresh()->assignment_status);
         $this->assertTrue($a->fresh()->is_completed);
 
-        // the department user unticks and reticks: completes; a later untick leaves it COMPLETED
+        // the department user unticks and reticks: completes
         $this->tick($dept, $a, false);
         $this->tick($dept, $a, true);
         $this->assertSame('COMPLETED', $s->fresh()->assignment_status);
-        $this->tick($dept, $a, false)->assertStatus(403);   // completed work is no longer checklist-editable at all
+
+        // done work stays editable: an untick takes it back to IN_PROGRESS (logged, the page told), ticking again completes it
+        $this->tick($dept, $a, false)->assertOk()->assertJsonPath('assignment.assignment_status', 'IN_PROGRESS');
+        $this->assertSame('IN_PROGRESS', $s->fresh()->assignment_status);
+        $this->assertNull($s->fresh()->completed_at);
+        $this->assertDatabaseHas('activity_logs', ['action' => 'reopened']);
+        $this->tick($dept, $a, true);
         $this->assertSame('COMPLETED', $s->fresh()->assignment_status);
+
+        // an item added to done work reopens it too
+        $this->actingAs($dept)->post(route('checklists.store', $s), ['names' => 'เพิ่มทีหลัง']);
+        $this->assertSame('IN_PROGRESS', $s->fresh()->assignment_status);
     }
 
     public function test_date_limit_blocks_a_later_due_date_but_not_unrelated_edits(): void

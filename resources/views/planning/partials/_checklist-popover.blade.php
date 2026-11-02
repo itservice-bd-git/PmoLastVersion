@@ -74,7 +74,7 @@
                                     <span class="min-w-0 break-words text-[13px] leading-snug" :class="i.done ? 'line-through text-slate-400' : 'text-slate-800'"
                                           :title="i.text + (i.remark ? ' — ' + i.remark : '') + (i.from ? ' · รายการจากแผนกที่เทียบ (แก้ชื่อ / ลบ ที่ต้นทาง)' : '')"><span x-show="i.from" class="mr-0.5 text-[12px] text-blue-500">🔗</span><span x-text="i.text"></span></span>
                                     {{-- its statuses as colour dots only; a tap opens the panel under the item --}}
-                                    <button type="button" x-show="(i.tags || []).length" @click.prevent="ckOpen(i)" :aria-expanded="ckPick === i.id" :aria-label="'สถานะ: ' + ckTags(i).map((s) => s.name).join(', ')" :title="ckTags(i).map((s) => s.name).join(' · ')"
+                                    <button type="button" x-show="(i.tags || []).length" @click.prevent="ckOpen(i)" :aria-expanded="ckPick === i.id" :aria-label="'สถานะ: ' + ckTitle(i)" :title="ckTitle(i)"
                                             class="inline-flex h-6 items-center gap-1 rounded-full border bg-white px-1.5" :class="ckPick === i.id ? 'border-slate-800' : 'border-slate-200 hover:border-slate-400'">
                                         <template x-for="s in ckTags(i)" :key="s.id"><span class="h-2.5 w-2.5 rounded-full" :style="'background:' + s.dot + (s.active ? '' : ';opacity:.5')"></span></template>
                                     </button>
@@ -100,9 +100,11 @@
                                     </div>
                                     <div x-show="!readOnly && ckAddable(i).length" class="flex flex-wrap items-center gap-1">
                                         <span class="text-[12px] text-slate-600">+ เพิ่ม</span>
-                                        <template x-for="s in ckAddable(i)" :key="s.id"><button type="button" @click="ckAdd(i, s.id)" :title="s.desc || s.name" class="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-slate-400 bg-white px-2 text-[12px] font-semibold text-slate-700 hover:border-slate-600"><span class="h-2 w-2 rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name + (ckRival(i, s) ? ' (แทน ' + ckRival(i, s).name + ')' : '')"></span></button></template>
+                                        <template x-for="s in ckAddable(i)" :key="s.id"><button type="button" @click="ckAdd(i, s.id)" :title="s.desc || s.name" class="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-slate-400 bg-white px-2 text-[12px] font-semibold text-slate-700 hover:border-slate-600"><span class="h-2 w-2 rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name + (ckRival(i, s) ? ' (แทน ' + ckRival(i, s).name + ')' : '')"></span><span x-show="s.ticks && !i.done" class="text-emerald-700" title="ติดแล้วติ๊กรายการให้ด้วย" aria-label="ติ๊กรายการให้ด้วย">✓</span></button></template>
                                     </div>
-                                    <p x-show="!(i.tags || []).length && (readOnly || !ckAddable(i).length)" class="text-[12px] text-slate-600">ยังไม่มีสถานะ</p>
+                                    {{-- the other side of the pair's statuses: shown, not changed here --}}
+                                    <template x-for="d in ckPeerDepts(i)" :key="d"><div class="flex flex-wrap items-center gap-1 border-t border-slate-200 pt-1.5"><span class="text-[12px] text-slate-600" x-text="'ของ ' + d + ':'"></span><template x-for="s in ckPeers(i).filter((x) => x.dept === d)" :key="s.id"><span class="inline-flex h-7 items-center gap-1 rounded-full border-2 bg-white px-2 text-[12px] font-semibold text-slate-700" :style="'border-color:' + s.dot" :title="s.name + ' · ติดโดย' + d + ' (ดูอย่างเดียว)'"><span class="h-2 w-2 rounded-full border-2" :style="'border-color:' + s.dot"></span><span x-text="s.name"></span></span></template><span class="text-[11px] text-slate-500">ดูอย่างเดียว</span></div></template>
+                                    <p x-show="!(i.tags || []).length && !ckPeers(i).length && (readOnly || !ckAddable(i).length)" class="text-[12px] text-slate-600">ยังไม่มีสถานะ</p>
                                 </div>
                                 {{-- Settings > การส่งต่องาน: the date this item is expected (e.g. วันของเข้า), for the department that follows --}}
                                 <template x-if="deptOf(i.deptId).dateLabel && canEditStage(i.deptId)">
@@ -123,6 +125,7 @@
                                               :title="deptOf(m.l.deptId).dateLabel || ''" x-text="'📦 ' + fmtBE(m.expected)"></span>
                                         <template x-for="h in (m.receipts || [])" :key="h.dept"> <span class="shrink-0 rounded-full px-1.5 text-[12px] font-medium" :class="rcptClass(h)" x-text="rcptText(h)"></span>
                                         </template>
+                        <template x-for="s in ckOf(m.tags)" :key="'mt' + s.id"><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-xs font-semibold" :style="ckChip(s)" :title="(s.desc || s.name) + ' · ของ' + ((m.l || l).deptName || 'แผนกที่เทียบ')"><span class="h-1.5 w-1.5 rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name"></span></span></template>
                                     </div>
                                 </template>
                                 <span x-show="!clMatches(w.id, i).length" class="block text-[12px] leading-5 text-slate-400">— ไม่มีในรายการที่เทียบ</span>
@@ -139,6 +142,7 @@
                                         <span x-show="m.expected" class="shrink-0 rounded px-1 text-[12px]" :class="linkedLate(m) ? 'bg-red-50 font-semibold text-red-600' : 'bg-amber-50 text-amber-800'" x-text="'📦 ' + fmtBE(m.expected)"></span>
                                         <template x-for="h in (m.receipts || [])" :key="h.dept"> <span class="shrink-0 rounded-full px-1.5 text-[12px] font-medium" :class="rcptClass(h)" x-text="rcptText(h)"></span>
                                         </template>
+                        <template x-for="s in ckOf(m.tags)" :key="'mt' + s.id"><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-xs font-semibold" :style="ckChip(s)" :title="(s.desc || s.name) + ' · ของ' + ((m.l || l).deptName || 'แผนกที่เทียบ')"><span class="h-1.5 w-1.5 rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name"></span></span></template>
                                     </div>
                                 </div>
                             </template>
@@ -166,6 +170,7 @@
                                                   :title="l.dateLabel" x-text="m.expected ? '📦 ' + fmtBE(m.expected) : 'ยังไม่ลงวัน'"></span>
                                             <template x-for="h in (m.receipts || [])" :key="h.dept"> <span class="shrink-0 rounded-full px-1.5 text-[12px] font-medium" :class="rcptClass(h)" x-text="rcptText(h)"></span>
                                             </template>
+                        <template x-for="s in ckOf(m.tags)" :key="'mt' + s.id"><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-xs font-semibold" :style="ckChip(s)" :title="(s.desc || s.name) + ' · ของ' + ((m.l || l).deptName || 'แผนกที่เทียบ')"><span class="h-1.5 w-1.5 rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name"></span></span></template>
                                             </div>
                                             </div>
                                         </div>

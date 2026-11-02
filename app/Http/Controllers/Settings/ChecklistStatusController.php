@@ -99,6 +99,7 @@ class ChecklistStatusController extends Controller
             'scope' => ['required', Rule::in(['all', 'some'])],
             'department_ids' => ['array', 'required_if:scope,some'],
             'department_ids.*' => ['integer', 'exists:departments,id'],
+            'ticks_item' => ['boolean'],
         ], [
             'name.unique' => 'มีสถานะชื่อนี้แล้ว',
             'department_ids.required_if' => 'เลือกแผนกอย่างน้อย 1 แผนก หรือเลือก "ทุกแผนก"',
@@ -110,6 +111,7 @@ class ChecklistStatusController extends Controller
             'color' => $data['color'],
             'group_name' => trim((string) ($data['group_name'] ?? '')) ?: null,
             'department_ids' => $data['scope'] === 'some' ? array_values(array_map('intval', $data['department_ids'] ?? [])) : null,
+            'ticks_item' => (bool) ($data['ticks_item'] ?? false),
         ];
     }
 }

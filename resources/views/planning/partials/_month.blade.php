@@ -32,14 +32,16 @@
                             <template x-for="st in stripes(b, week)" :key="st.id">
                                 <span class="pointer-events-none absolute bottom-0 rounded-sm" :class="st.mine ? 'h-[5px] ring-1 ring-slate-800/60' : 'h-[3px] opacity-80'" :style="'left:' + st.left + '%;width:' + st.width + '%;background-color:' + st.color" :title="st.name"></span>
                             </template>
-                            <span class="truncate text-xs font-medium leading-tight" :class="b.done ? 'line-through text-slate-500' : 'text-slate-800'"
+                            <template x-if="fatBand(b)"><span :class="fatBand(b).cls" :style="'left:' + fatBand(b).left + '%;width:' + fatBand(b).width + '%'"><span x-text="fatBand(b).label"></span></span></template>
+                            <span class="relative z-[2] truncate text-xs font-medium leading-tight" :class="b.done ? 'line-through text-slate-500' : 'text-slate-800'"
                                   x-text="barLabel(b)"></span>
-                            <span class="mt-0.5 flex items-center gap-1.5">
+                            <span class="relative z-[2] mt-0.5 flex items-center gap-1.5">
                                 <button type="button" x-show="canEdit" @click.stop="openStatusPop($event, b.t)" class="h-3 w-3 shrink-0 rounded-full ring-2 ring-white" :style="'background-color:' + statusColor(b.t)" :title="statusOf(b.t).name + ' — คลิกเพื่อเปลี่ยนสถานะ'" :aria-label="'สถานะ: ' + statusOf(b.t).name"></button>
                                 <span x-show="remarkCount(b.t)" class="shrink-0 text-amber-700" :title="'มีหมายเหตุ ' + remarkCount(b.t) + ' รายการ'"><svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4h16v12H8l-4 4z"/></svg></span>
                                 <span x-show="b.t.alertPending" class="text-[12px] leading-none" title="มีแจ้งเตือนถึงแผนกคุณที่ยังไม่ได้รับทราบ">🔔</span>
                                 <span x-show="isPmo && warningList(b.t).length" class="text-[11.5px] leading-none text-amber-600" :title="'ข้อมูลยังขาด: ' + warningList(b.t).map((w) => w.text).join(' · ')">⚠</span>
                                 <span class="inline-flex min-w-[18px] h-[18px] items-center justify-center rounded px-1 text-[11.5px] font-bold text-white tabular-nums" :style="'background-color:' + statusColor(b.t)" x-text="b.t.subtasks.length"></span>
+                                <span x-show="(b.c || b.t).reschedule" @mouseenter="showRes($event, (b.c || b.t).reschedule)" @mouseleave="hideRes()" class="res-chip" x-text="(b.c || b.t).reschedule ? resChip((b.c || b.t).reschedule) : ''"></span>
                                 <svg x-show="flag(b.t)" :style="'color:' + flag(b.t)" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3v18h2v-7h11l-2-4 2-4H7V3H5z"/></svg>
                                 <template x-for="v in fieldChips(b.t).slice(0, 2)" :key="v"><span class="truncate rounded bg-white/70 px-1 text-[11.5px] text-slate-600" x-text="v"></span></template>
                                 <span x-show="b.after" class="ml-auto text-[11.5px] text-slate-500">►</span>
@@ -47,9 +49,13 @@
                         </div>
                     </template>
                     <template x-for="(d, idx) in week" :key="d.date + '-more'">
-                        <p x-show="hiddenCount(week, d.date) > 0" @click.stop="selectDay(d.date)" :style="'grid-column:' + (idx + 1) + '; grid-row: 5;'"
-                           class="self-start px-2 text-[11.5px] font-medium text-blue-600 hover:underline cursor-pointer" x-text="'+' + hiddenCount(week, d.date) + ' โครงการ'"></p>
+                        {{-- opens the whole week (toggleWeek); "· FAT" when a hidden one has its FAT that day --}}
+                        <button type="button" x-show="hiddenCount(week, d.date) > 0" @click.stop="toggleWeek(week, true)" :style="'grid-column:' + (idx + 1) + '; grid-row: 5;'" aria-expanded="false"
+                                class="self-start justify-self-start px-2 text-left text-[11.5px] font-medium text-blue-600 hover:underline" x-text="'+' + hiddenCount(week, d.date) + ' โครงการ' + (hiddenFat(week, d.date) ? ' · FAT' : '')"></button>
                     </template>
+                </div>
+                <div x-show="openWeeks[week[0].date]" class="relative flex justify-center pb-1.5">
+                    <button type="button" @click="toggleWeek(week, false)" aria-expanded="true" class="rounded px-2 text-[11.5px] font-medium text-blue-600 hover:underline">▲ ย่อกลับ</button>
                 </div>
             </div>
         </div>

@@ -151,9 +151,10 @@ class CabinetTaskDeleteTest extends TestCase
         $pm = $this->user(null, 'project_manager');
 
         $this->actingAs($this->user($this->busbar))->post(route('cabinet-tasks.store', $this->cabinet), ['name' => 'QC'])->assertForbidden();
-        $this->actingAs($pm)->post(route('cabinet-tasks.store', $this->cabinet), ['name' => ' QC '])
-            ->assertRedirect(route('cabinets.show', $this->cabinet))->assertSessionHas('success');
+        $added = $this->actingAs($pm)->post(route('cabinet-tasks.store', $this->cabinet), ['name' => ' QC ']);
         $task = $this->cabinet->tasks()->get()->last();
+        // back to the new Task (the page brings it into view and opens its "+ เพิ่ม Sub Task")
+        $added->assertRedirect(route('cabinets.show', $this->cabinet).'#task-card-'.$task->id)->assertSessionHas('success')->assertSessionHas('new_task', $task->id);
         $this->assertSame(['QC', 3], [$task->name, $task->sequence]);
 
         $this->actingAs($this->user($this->busbar))->post(route('cabinet-subtasks.store', $task), ['name' => 'ตรวจ'])->assertForbidden();

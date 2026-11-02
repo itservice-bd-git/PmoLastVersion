@@ -120,12 +120,16 @@ class ProjectModalTest extends TestCase
         $this->actingAs($pm)->patchJson(route('my-department.project.update', $this->project), ['status' => 'bogus'])->assertUnprocessable();
         $this->actingAs($pm)->patchJson(route('my-department.project.update', $this->project), ['project_name' => ''])->assertUnprocessable();
 
-        // date order is checked against the saved value of the field not sent
-        $this->actingAs($pm)->patchJson(route('my-department.project.update', $this->project), ['due_date' => '2026-09-01'])->assertUnprocessable()->assertJsonValidationErrors('due_date');
-        $this->actingAs($pm)->patchJson(route('my-department.project.update', $this->project), ['start_date' => '2026-11-15'])->assertUnprocessable();
+        // a date the project already has moves only on the project page ("เลื่อน / แก้วัน", with a reason) - said so
+        $due = $this->project->fresh()->due_date?->format('Y-m-d');
+        $this->actingAs($pm)->patchJson(route('my-department.project.update', $this->project), ['due_date' => '2026-12-01'])->assertUnprocessable()
+            ->assertJsonValidationErrors('due_date')->assertJsonPath('errors.due_date.0', 'เปลี่ยนวันครบกำหนดโครงการได้ที่หน้าโครงการ › เลื่อน / แก้วัน (ต้องใส่สาเหตุ)');
+        $this->assertSame($due, $this->project->fresh()->due_date?->format('Y-m-d'));
+        // one it does not have yet is set here as before; date order is still checked
+        $this->project->forceFill(['start_date' => null, 'due_date' => null])->saveQuietly();
+        $this->actingAs($pm)->patchJson(route('my-department.project.update', $this->project), ['start_date' => '2026-11-15', 'due_date' => '2026-09-01'])->assertUnprocessable();
         $this->actingAs($pm)->patchJson(route('my-department.project.update', $this->project), ['start_date' => '2026-10-05', 'due_date' => '2026-12-01'])->assertOk();
         $this->assertSame('2026-12-01', $this->project->fresh()->due_date->format('Y-m-d'));
-        $this->actingAs($pm)->patchJson(route('my-department.project.update', $this->project), ['due_date' => null])->assertOk();
     }
 
     public function test_comments_are_logged_and_only_pm_can_alert_a_department(): void

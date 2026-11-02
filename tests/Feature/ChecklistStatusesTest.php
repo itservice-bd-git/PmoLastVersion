@@ -140,4 +140,76 @@ class ChecklistStatusesTest extends TestCase
         $this->actingAs($this->wiring)->get(route('cabinets.show', $this->el->cabinetTask->cabinet))->assertOk()
             ->assertSee('window.pmoChecklistStatuses', false)->assertSee('สถานะในตู้นี้');
     }
+
+    public function test_each_side_of_a_pair_sees_the_others_statuses_read_only(): void
+    {
+        // โลหะ compares with ไฟฟ้า: it holds a copy of the breaker item
+        $metalSub = CabinetSubtask::forceCreate(['cabinet_task_id' => $this->el->cabinet_task_id, 'name' => 'ประกอบตู้', 'department_id' => $this->metal->id, 'assignment_status' => 'ACCEPTED', 'status' => 'in_progress', 'progress' => 0]);
+        $copy = CabinetChecklist::forceCreate(['cabinet_subtask_id' => $metalSub->id, 'name' => 'Main 400A', 'is_completed' => false, 'sequence' => 1, 'source_checklist_id' => $this->breaker->id]);
+        $this->tag($this->wiring, [$this->wait->id])->assertOk();
+        $copy->statuses()->attach($this->out->id);
+
+        $peers = app(\App\Services\ChecklistStatuses::class)->peersFor([$this->breaker->fresh(), $copy->fresh()]);
+        $this->assertSame([['id' => $this->out->id, 'dept' => 'โลหะ', 'sub' => 's'.$metalSub->id]], $peers[$this->breaker->id]);
+        $this->assertSame([['id' => $this->wait->id, 'dept' => 'ไฟฟ้า', 'sub' => 's'.$this->el->id]], $peers[$copy->id]);
+
+        // the copy keeps its own: the source's are not added to it
+        $this->assertSame([$this->out->id], $copy->statuses()->pluck('checklist_statuses.id')->all());
+
+        $board = app(PlanningBoard::class)->build($this->wiring);
+        $item = collect($board['boards'][PlanningBoard::BOARD_ID]['tasks'][0]['subtasks'][0]['checklist'])->firstWhere('id', 'k'.$this->breaker->id);
+        $this->assertSame([['id' => $this->out->id, 'dept' => 'โลหะ', 'sub' => 's'.$metalSub->id]], $item['peerTags']);
+    }
+
+    public function test_every_department_along_a_linked_list_sees_the_others(): void
+    {
+        // จัดซื้อ's item → คลัง's copy → Production's copy of that copy, and QC's second copy of the source
+        [$buy, $store, $prod, $qc] = collect(['จัดซื้อ', 'คลัง', 'Production', 'QC'])->map(fn ($n, $i) => CabinetSubtask::forceCreate(['cabinet_task_id' => $this->el->cabinet_task_id, 'name' => $n, 'department_id' => Department::create(['name' => $n, 'code' => 'D'.$i, 'is_active' => true])->id, 'assignment_status' => 'ACCEPTED', 'status' => 'in_progress', 'progress' => 0]))->all();
+        $item = fn ($sub, $src = null) => CabinetChecklist::forceCreate(['cabinet_subtask_id' => $sub->id, 'name' => 'Main 400A', 'is_completed' => false, 'sequence' => 1, 'source_checklist_id' => $src?->id]);
+        $a = $item($buy);
+        $b = $item($store, $a);
+        $c = $item($prod, $b);
+        $d = $item($qc, $a);
+        $a->statuses()->attach($this->wait->id);
+        $c->statuses()->attach($this->out->id);
+
+        $peers = app(\App\Services\ChecklistStatuses::class)->peersFor([$b->fresh(), $d->fresh()]);
+        $this->assertEqualsCanonicalizing([['id' => $this->wait->id, 'dept' => 'จัดซื้อ', 'sub' => 's'.$buy->id], ['id' => $this->out->id, 'dept' => 'Production', 'sub' => 's'.$prod->id]], $peers[$b->id]);
+        $this->assertEqualsCanonicalizing([['id' => $this->wait->id, 'dept' => 'จัดซื้อ', 'sub' => 's'.$buy->id], ['id' => $this->out->id, 'dept' => 'Production', 'sub' => 's'.$prod->id]], $peers[$d->id]);
+        $this->assertSame([['id' => $this->wait->id, 'dept' => 'จัดซื้อ', 'sub' => 's'.$buy->id]], app(\App\Services\ChecklistStatuses::class)->peersFor([$c->fresh()])[$c->id]);
+    }
+
+    public function test_a_status_set_to_tick_ticks_the_item_and_taking_it_off_keeps_the_tick(): void
+    {
+        $this->actingAs($this->admin)->put(route('settings.checklist-statuses.update', $this->in), ['name' => 'ของเข้าแล้ว', 'color' => 'teal', 'group_name' => 'การรับของ', 'scope' => 'all', 'ticks_item' => '1'])->assertSessionHasNoErrors();
+        $this->assertTrue($this->in->fresh()->ticks_item);
+
+        // an ordinary status does not tick
+        $this->tag($this->wiring, [$this->wait->id])->assertOk();
+        $this->assertFalse($this->breaker->fresh()->is_completed);
+
+        // "รอของ" → "ของเข้าแล้ว": ticked as a hand would, and said so in the log
+        $res = $this->tag($this->wiring, [$this->in->id])->assertOk();
+        $this->assertTrue($this->breaker->fresh()->is_completed);
+        $this->assertSame($this->wiring->id, $this->breaker->fresh()->completed_by);
+        $this->assertTrue(collect($res->json('items'))->firstWhere('id', $this->breaker->id)['done']);
+        $this->assertSame(100, $this->el->fresh()->progress);
+        $this->assertStringContainsString('ติ๊กรายการให้', ActivityLog::where('action', 'checklist_status')->latest('id')->value('description'));
+        $this->assertSame(1, ActivityLog::where('action', 'checked')->count());
+
+        // off again: the tick stays
+        $this->tag($this->wiring, [])->assertOk();
+        $this->assertTrue($this->breaker->fresh()->is_completed);
+    }
+
+    public function test_a_compared_list_carries_its_items_statuses(): void
+    {
+        $metalSub = CabinetSubtask::forceCreate(['cabinet_task_id' => $this->el->cabinet_task_id, 'name' => 'ประกอบตู้', 'department_id' => $this->metal->id, 'assignment_status' => 'ACCEPTED', 'status' => 'in_progress', 'progress' => 0]);
+        \Illuminate\Support\Facades\DB::table('cabinet_subtask_pairs')->insert(['cabinet_subtask_id' => $metalSub->id, 'source_subtask_id' => $this->el->id, 'view_only' => true, 'own_ticks' => false, 'created_at' => now(), 'updated_at' => now()]);
+        $this->tag($this->wiring, [$this->out->id])->assertOk();
+
+        $watched = app(\App\Services\HandoffService::class)->linkedForSubtask($metalSub->fresh());
+        $this->assertTrue($watched[0]['watch']);
+        $this->assertSame([$this->out->id], collect($watched[0]['items'])->firstWhere('id', 'k'.$this->breaker->id)['tags']);
+    }
 }

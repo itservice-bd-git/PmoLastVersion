@@ -65,6 +65,12 @@ class Cabinet extends Model
         return $this->belongsTo(Project::class);
     }
 
+    /** Its start / due date changes, oldest first (App\Services\ProjectDates). */
+    public function dateChanges()
+    {
+        return $this->hasMany(ProjectDateChange::class)->orderBy('id');
+    }
+
     public function cabinetTemplate()
     {
         return $this->belongsTo(CabinetTemplate::class);

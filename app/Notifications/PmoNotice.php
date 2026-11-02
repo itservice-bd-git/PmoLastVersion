@@ -97,9 +97,9 @@ class PmoNotice extends Notification
     public static function summary(array $parts, ?string $lastComment = null): string
     {
         $out = [];
-        foreach (['owner', 'follow', 'assigned', 'due_changed'] as $k) {
+        foreach (['owner', 'follow', 'assigned', 'rescheduled', 'due_changed'] as $k) {
             if (! empty($parts[$k])) {
-                $out[] = ['owner' => 'คุณเป็นผู้รับผิดชอบ', 'follow' => 'คุณติดตามโครงการนี้', 'assigned' => "งานใหม่ {$parts[$k]} งาน", 'due_changed' => "เลื่อนวันส่ง {$parts[$k]} ครั้ง"][$k];
+                $out[] = ['owner' => 'คุณเป็นผู้รับผิดชอบ', 'follow' => 'คุณติดตามโครงการนี้', 'assigned' => "งานใหม่ {$parts[$k]} งาน", 'rescheduled' => "เลื่อนวัน {$parts[$k]} ครั้ง", 'due_changed' => "เลื่อนวันส่ง {$parts[$k]} ครั้ง"][$k];
             }
         }
         foreach ($parts as $k => $n) {   // "ไม่รับงาน" first: it needs someone to act

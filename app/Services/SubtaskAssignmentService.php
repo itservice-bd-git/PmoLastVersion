@@ -7,6 +7,7 @@ use App\Models\ActivityLog;
 use App\Models\AppSetting;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
+use App\Models\Project;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -214,6 +215,21 @@ class SubtaskAssignmentService
     }
 
     /**
+     * Work whose checklist is all ticked but whose workflow never moved (ticked by someone the tick did not accept it for):
+     * walked through รับงาน → เริ่มงาน → เสร็จงาน for its department, each step logged as usual ("ทำแทนโดย" for Admin / PM).
+     */
+    public function finishTicked(CabinetSubtask $subtask, User $actor): CabinetSubtask
+    {
+        foreach (['ASSIGNED' => 'accept', 'ACCEPTED' => 'start', 'IN_PROGRESS' => 'complete'] as $from => $step) {
+            if ($subtask->fresh()->assignment_status === $from) {
+                $this->{$step}($subtask->fresh(), $actor);
+            }
+        }
+
+        return $subtask->fresh();
+    }
+
+    /**
      * Which workflow buttons this user may currently use on the sub task.
      */
     public function actionsFor(CabinetSubtask $subtask, ?User $user): array
@@ -275,11 +291,59 @@ class SubtaskAssignmentService
             // Admin / PM doing it for the department (Settings > กฎการทำงาน): said so in the log
             $this->log($locked, $actor, $action, $describe($locked).($this->isInAssignedDepartment($locked, $actor) ? '' : " (ทำแทนโดย {$actor->name})"));
             $this->notifications->progressed($locked, $actor, $action);
+            if (in_array($to, [CabinetSubtask::ASSIGNMENT_ACCEPTED, CabinetSubtask::ASSIGNMENT_IN_PROGRESS], true)) {
+                $this->startProject($locked, $actor);
+            }
 
             $this->syncInstance($subtask, $locked);
 
             return $subtask;
         });
+    }
+
+    /**
+     * Work marked เสร็จงาน whose checklist is no longer all ticked (an item unticked or added afterwards): back to
+     * กำลังดำเนินงาน, so the status always matches the list. It follows an edit the caller was already allowed to make,
+     * so there is no actor check here; ticking everything again completes it again (Settings > Automation).
+     */
+    public function reopenIfUnfinished(CabinetSubtask $subtask, ?User $actor): bool
+    {
+        if ($subtask->assignment_status !== CabinetSubtask::ASSIGNMENT_COMPLETED) {
+            return false;
+        }
+
+        return DB::transaction(function () use ($subtask, $actor) {
+            $locked = CabinetSubtask::whereKey($subtask->id)->lockForUpdate()->first();
+            $total = $locked?->checklists()->count() ?? 0;
+            $done = $total ? $locked->checklists()->where('is_completed', true)->count() : 0;
+            if (! $locked || $locked->assignment_status !== CabinetSubtask::ASSIGNMENT_COMPLETED || $total === 0 || $done === $total) {
+                return false;
+            }
+
+            $locked->forceFill(['assignment_status' => CabinetSubtask::ASSIGNMENT_IN_PROGRESS, 'completed_by' => null, 'completed_at' => null])->saveQuietly();
+            $locked->load('department', 'cabinetTask.cabinet');
+            ActivityLog::record($locked->cabinetTask->cabinet->project_id, $actor?->id, $locked, 'reopened',
+                "งาน {$this->label($locked)} กลับเป็นกำลังดำเนินงาน — Checklist ไม่ครบแล้ว ({$done}/{$total})");
+            PlanningBoard::touch();
+            $this->syncInstance($subtask, $locked);
+
+            return true;
+        });
+    }
+
+    /** The first department taking work: a project still Draft / Planning becomes In Progress (logged; closing stays the PM's call). */
+    private function startProject(CabinetSubtask $subtask, User $actor): void
+    {
+        $project = $subtask->cabinetTask->cabinet->project()->first();
+        if (! $project || ! in_array($project->status, [Project::STATUS_DRAFT, Project::STATUS_PLANNING], true)) {
+            return;
+        }
+        $old = Project::$statuses[$project->status];
+        Project::withoutEvents(fn () => $project->forceFill(['status' => Project::STATUS_IN_PROGRESS])->save());
+        ActivityLog::record($project->id, $actor->id, $project, 'updated',
+            "สถานะโครงการ {$old} → In Progress อัตโนมัติ (แผนก {$subtask->department?->name} รับงานแรก)",
+            ['status' => ['label' => 'สถานะ', 'old' => $old, 'new' => 'In Progress']]);
+        PlanningBoard::touch();
     }
 
     /** The department's own members - or Admin / PM when Settings > กฎการทำงาน lets them act for departments. */

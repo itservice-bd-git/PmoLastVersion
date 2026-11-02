@@ -50,6 +50,43 @@ class ProjectOverview
             'groups' => $this->groups($rows),
             'cabinetCount' => $cabinets->count(),
             'canDispatch' => $user->canDispatchWork() && ! $project->isLocked(),
+            'readyToClose' => $user->canDispatchWork() && ! $project->isLocked() ? $this->readyToClose($project, $cabinets) : null,
+            'ticked' => $user->canDispatchWork() && ! $project->isLocked() ? self::tickedNotClosed($project)->map(fn (CabinetSubtask $s) => [
+                'name' => $s->name, 'mo' => $s->cabinetTask->cabinet->mo_no, 'dept' => (string) $s->department?->name,
+                'state' => $s->assignment_status_label,
+            ])->all() : [],
+        ];
+    }
+
+    /** A department's work with every checklist item ticked that is still waiting / accepted / in progress (ProjectController::finishTicked). */
+    public static function tickedNotClosed(Project $project): Collection
+    {
+        return CabinetSubtask::query()
+            ->whereHas('cabinetTask.cabinet', fn ($q) => $q->where('project_id', $project->id))
+            ->whereNotNull('department_id')
+            ->whereIn('assignment_status', [CabinetSubtask::ASSIGNMENT_ASSIGNED, CabinetSubtask::ASSIGNMENT_ACCEPTED, CabinetSubtask::ASSIGNMENT_IN_PROGRESS])
+            ->whereHas('checklists')->whereDoesntHave('checklists', fn ($q) => $q->where('is_completed', false))
+            ->with('department:id,name', 'cabinetTask.cabinet:id,mo_no')->orderBy('id')->get();
+    }
+
+    /**
+     * Every department's work done (none waiting, accepted or in progress, at least one finished): the PM is asked to close
+     * the project (Completed locks it, so it is never done for them). Notes what may still hold it: work never handed out,
+     * a FAT not passed yet.
+     */
+    private function readyToClose(Project $project, Collection $cabinets): ?array
+    {
+        $all = $cabinets->flatMap->tasks->flatMap->subtasks;
+        $open = [CabinetSubtask::ASSIGNMENT_ASSIGNED, CabinetSubtask::ASSIGNMENT_ACCEPTED, CabinetSubtask::ASSIGNMENT_IN_PROGRESS];
+        if ($all->whereIn('assignment_status', $open)->isNotEmpty() || $all->where('assignment_status', CabinetSubtask::ASSIGNMENT_COMPLETED)->isEmpty()) {
+            return null;
+        }
+        $fat = $project->latestFat()->first();
+
+        return [
+            'done' => $all->where('assignment_status', CabinetSubtask::ASSIGNMENT_COMPLETED)->count(),
+            'unassigned' => $all->where('assignment_status', CabinetSubtask::ASSIGNMENT_UNASSIGNED)->count(),
+            'fat' => $fat && $fat->status !== \App\Models\ProjectFat::PASSED ? "FAT รอบที่ {$fat->round} ยัง{$fat->statusLabel()}" : null,
         ];
     }
 
@@ -165,7 +202,8 @@ class ProjectOverview
                 'items' => $soon->take(self::ALERT_LIMIT)->map(fn ($s) => $subtaskItem($s, $s->due_date->isSameDay($today) ? 'วันนี้' : 'อีก '.(int) $today->diffInDays($s->due_date).' วัน'))->all(),
             ],
             [
-                'key' => 'waiting', 'tone' => 'blue', 'icon' => 'inbox', 'title' => 'รอแผนกรับงาน', 'count' => $waiting->count(),
+                // counted in departments (the chip says how many to chase); each line below says how many of its Sub Tasks wait
+                'key' => 'waiting', 'tone' => 'blue', 'icon' => 'inbox', 'title' => 'แผนกรอรับงาน', 'count' => $waiting->pluck('department_id')->unique()->count(),
                 'filter' => null,
                 // one line per department, with "ทวงถาม" for Admin / PM
                 'departments' => $waiting->groupBy('department_id')->map(fn ($list, $dept) => [

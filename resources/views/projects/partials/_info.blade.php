@@ -12,6 +12,15 @@
     $canContact = auth()->user()->allows('data.contact');   // Settings > สิทธิ์การใช้งาน
     $canFinance = auth()->user()->allows('data.finance');
     $daysLeft = $project->isLocked() ? null : $project->days_remaining;
+    // เลื่อน / แก้วัน (App\Services\ProjectDates): how many rounds, beside the due date, and the button for Admin / PM (windows: _dates)
+    $dates = app(\App\Services\ProjectDates::class)->summary($project);
+    $canDates = auth()->user()->canDispatchWork() && ! $project->isLocked();
+    $open = fn (string $modal) => 'x-on:click="$dispatch(\'open-modal\', \''.$modal.'\')"';
+    $dateTools = ($dates['rounds']
+            ? ' <button type="button" '.$open('project-date-history').' class="ml-1 mt-1 inline-block max-w-full rounded-full bg-orange-100 text-left px-2 py-0.5 text-xs font-bold text-orange-800 hover:bg-orange-200">เลื่อนแล้ว '
+                .$dates['rounds'].' ครั้ง'.($dates['days'] ? ' · '.($dates['days'] > 0 ? '+' : '').$dates['days'].' วัน' : '').' ›</button>'
+            : ($dates['changes']->isNotEmpty() ? ' <button type="button" '.$open('project-date-history').' class="ml-1 text-xs font-semibold text-blue-700 hover:underline">ประวัติ ›</button>' : ''))
+        .($canDates && $project->due_date ? ' <button type="button" '.$open('project-dates').' class="ml-1 mt-1 inline-block rounded-lg border border-slate-300 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">เลื่อน / แก้วัน</button>' : '');
 
     // [label, value (null = not filled in yet), extra dd classes]; the form's fields, grouped. Legacy fields the form no
     // longer asks for (ใบสั่งขาย, เจ้าของโครงการ) appear only when an older project still has a value.
@@ -24,13 +33,14 @@
             ['ประเภทงาน', $project->jobType ? e($project->jobType->name) : null, ''],
             ['คำอธิบาย', $project->description ? nl2br(e($project->description)) : null, 'whitespace-normal'],
         ],
-        'กำหนดการ' => [
+        'กำหนดการ' => array_values(array_filter([
             ['วันเริ่ม', $project->start_date?->thaiDate(), 'tabular-nums'],
             ['วันครบกำหนด', $project->due_date ? $project->due_date->thaiDate().($daysLeft !== null
                 ? ' <span class="ml-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold '.($daysLeft < 0 ? 'bg-red-100 text-red-700' : ($daysLeft <= 7 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600')).'">'
-                    .($daysLeft < 0 ? 'เลยกำหนด '.abs($daysLeft).' วัน' : ($daysLeft === 0 ? 'ครบกำหนดวันนี้' : 'เหลือ '.$daysLeft.' วัน')).'</span>' : '') : null, 'tabular-nums'],
+                    .($daysLeft < 0 ? 'เลยกำหนด '.abs($daysLeft).' วัน' : ($daysLeft === 0 ? 'ครบกำหนดวันนี้' : 'เหลือ '.$daysLeft.' วัน')).'</span>' : '').$dateTools : null, 'tabular-nums'],
+            $dates['rounds'] && $dates['firstDue'] ? ['วันครบกำหนดตอนแรก', '<span class="text-slate-500 line-through">'.$dates['firstDue']->thaiDate().'</span>', 'tabular-nums'] : null,
             ['วันทำงานคงเหลือ', $s['workingDaysLeft'] !== null ? $s['workingDaysLeft'].' วัน (จ.–ศ.)' : '-', ''],   // worked out from the due date, never typed in
-        ],
+        ])),
         'ทีมและการติดต่อ' => array_values(array_filter([
             ['ผู้จัดการโครงการ (PM)', $project->projectManager ? e($project->projectManager->name) : null, ''],
             ['พนักงานขาย', $project->sales_person ? e($project->sales_person) : null, ''],
@@ -143,6 +153,48 @@
             </div>
         </div>
     </section>
+
+    {{-- work whose checklist is all ticked but never closed (ticked for the department): closed in one go, then the project can close --}}
+    @if ($overview['ticked'])
+        <section aria-label="Checklist ครบแต่ยังไม่ได้ปิดงาน" class="flex flex-wrap items-start gap-x-4 gap-y-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <div class="min-w-0 flex-1">
+                <p class="font-bold text-amber-900">Checklist ครบแล้ว {{ count($overview['ticked']) }} งาน แต่ยังไม่ได้ปิดงาน</p>
+                <p class="text-sm text-amber-800">แผนกยังไม่ได้กดรับงาน / เสร็จงาน (เช่น มีคนติ๊กแทน) · ปิดงานเหล่านี้แล้วจึงปิดโครงการได้</p>
+                <ul class="mt-1.5 flex flex-wrap gap-1.5 text-[13px]">
+                    @foreach (array_slice($overview['ticked'], 0, 8) as $t)
+                        <li class="rounded-full bg-white px-2 py-0.5 text-amber-900 ring-1 ring-amber-200">{{ $t['mo'] }} · {{ $t['name'] }} · {{ $t['dept'] }} <span class="text-amber-700">({{ $t['state'] }})</span></li>
+                    @endforeach
+                    @if (count($overview['ticked']) > 8)<li class="px-1 py-0.5 text-amber-800">และอีก {{ count($overview['ticked']) - 8 }} งาน</li>@endif
+                </ul>
+            </div>
+            <form method="POST" action="{{ route('projects.finish-ticked', $project) }}" onsubmit="return confirm('ปิดงาน {{ count($overview['ticked']) }} งานที่ติ๊กครบแล้ว แทนแผนก?\n(รับงาน → เริ่มงาน → เสร็จงาน บันทึกว่าทำแทนโดยคุณ)')">
+                @csrf
+                <button class="inline-flex h-10 items-center rounded-lg bg-amber-600 px-4 text-sm font-semibold text-white hover:bg-amber-700">ปิดงานเหล่านี้ (ทำแทนแผนก)</button>
+            </form>
+        </section>
+    @endif
+
+    {{-- every department's work is done: Admin / PM are asked to close the project (Completed locks it, so never automatic) --}}
+    @if ($ready = $overview['readyToClose'])
+        <section aria-label="งานครบทุกแผนกแล้ว" class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white" aria-hidden="true">✓</span>
+            <div class="min-w-0 flex-1">
+                <p class="font-bold text-emerald-900">งานครบทุกแผนกแล้ว ({{ $ready['done'] }} งาน) · ปิดโครงการเป็น Completed ได้</p>
+                <p class="text-sm text-emerald-800">ปิดแล้วจะแก้งานและ Checklist ไม่ได้ จนกว่าจะเปลี่ยนสถานะกลับ
+                    @if ($ready['unassigned'])<span class="font-semibold"> · ยังมีงานที่ไม่ได้จ่าย {{ $ready['unassigned'] }} งาน</span>@endif
+                    @if ($ready['fat'])<span class="font-semibold"> · {{ $ready['fat'] }}</span>@endif
+                </p>
+            </div>
+            <form method="POST" action="{{ route('projects.complete', $project) }}" onsubmit="return confirm('ปิดโครงการ {{ $project->project_no }} เป็น Completed?\nหลังปิดจะแก้งานและ Checklist ไม่ได้ จนกว่าจะเปลี่ยนสถานะกลับ')">
+                @csrf
+                <button class="inline-flex h-10 items-center rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800">ปิดโครงการ</button>
+            </form>
+        </section>
+    @endif
+
+    {{-- วัน FAT: the latest round, its history, and (Admin / PM) the form --}}
+    @include('projects.partials._dates', ['subject' => $project])
+    @include('projects.partials._fat')
 
     {{-- ===== 2. what needs following up: worded chips, each opening a short list; the empty ones are listed quietly ===== --}}
     <section aria-label="เรื่องที่ต้องตาม" class="flex flex-wrap items-center gap-2" @click.outside="alert = null">

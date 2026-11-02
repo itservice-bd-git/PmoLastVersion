@@ -75,6 +75,7 @@
                             <span class="shrink-0 rounded-full px-1.5 text-xs font-medium" :class="h.received ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'"
                                   x-text="h.received ? '✓ ' + h.dept + ' ' + (h.verb || 'รับ') + 'แล้ว' + (h.at ? ' ' + fmtDate(h.at) : '') : 'รอ' + h.dept + (h.verb || 'รับ')"></span>
                         </template>
+                        <template x-for="s in tagsOfIds(m.tags)" :key="'mt' + s.id"><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-xs font-semibold" :style="chipStyle(s)" :title="(s.desc || s.name) + ' · ของ' + ((m.l || l).deptName || 'แผนกที่เทียบ')"><span class="h-1.5 w-1.5 rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name"></span></span></template>
                         </div>
                         </div>
                     </li>
@@ -130,7 +131,7 @@
                           :title="item.from ? 'รายการจาก ' + fromOf(item) + ' — แก้ชื่อ / ลบ ได้ที่ต้นทาง' : ''"><span x-show="item.from" class="mr-1 text-xs text-blue-500" aria-label="รายการจากแผนกที่เทียบ">🔗</span><span x-text="item.name"></span></span>
                     {{-- its statuses as colour dots only (the bar above says what each colour is); a tap opens the panel below --}}
                     <button type="button" x-show="tagOn && (item.tags || []).length" @click="openPick(item)" :aria-expanded="picking === item.id"
-                            :aria-label="'สถานะ: ' + tagsOf(item).map((s) => s.name).join(', ')" :title="tagsOf(item).map((s) => s.name).join(' · ')"
+                            :aria-label="'สถานะ: ' + tagTitle(item)" :title="tagTitle(item)"
                             class="inline-flex h-7 items-center gap-1 rounded-full border bg-white px-1.5" :class="picking === item.id ? 'border-slate-800' : 'border-slate-200 hover:border-slate-400'">
                         <template x-for="s in tagsOf(item)" :key="s.id"><span class="h-[11px] w-[11px] rounded-full" :style="'background:' + s.dot + (s.active ? '' : ';opacity:.5')"></span></template>
                     </button>
@@ -172,10 +173,21 @@
                             <template x-for="s in addable(item)" :key="s.id">
                                 <button type="button" @click="addTag(item, s.id)" :title="s.desc || s.name"
                                         class="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-dashed border-slate-400 bg-white px-2.5 text-[13px] font-semibold text-slate-700 hover:border-slate-600 hover:bg-slate-50">
-                                    <span class="h-[9px] w-[9px] rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name + (rivalOf(item, s) ? ' (แทน ' + rivalOf(item, s).name + ')' : '')"></span></button>
+                                    <span class="h-[9px] w-[9px] rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name + (rivalOf(item, s) ? ' (แทน ' + rivalOf(item, s).name + ')' : '')"></span><span x-show="s.ticks && !item.done" class="text-emerald-700" title="ติดแล้วติ๊กรายการให้ด้วย" aria-label="ติ๊กรายการให้ด้วย">✓</span></button>
                             </template>
                         </div>
-                        <p x-show="!(item.tags || []).length && !(editable && addable(item).length)" class="text-[13px] text-slate-600">ยังไม่มีสถานะ</p>
+                        {{-- the other side of the pair's statuses: shown, not changed here --}}
+                        <template x-for="d in peerDepts(item)" :key="d">
+                            <div class="flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-2">
+                                <span class="text-[13px] text-slate-600" x-text="'ของ ' + d + ':'"></span>
+                                <template x-for="s in peersOf(item).filter((x) => x.dept === d)" :key="s.id">
+                                    <span class="inline-flex h-[30px] items-center gap-1.5 rounded-full border-2 bg-white px-2.5 text-[13px] font-semibold text-slate-700" :style="'border-color:' + s.dot" :title="s.name + ' · ติดโดย' + d + ' (ดูอย่างเดียว)'">
+                                        <span class="h-[9px] w-[9px] rounded-full border-2" :style="'border-color:' + s.dot"></span><span x-text="s.name"></span></span>
+                                </template>
+                                <span class="text-[12px] text-slate-500">ดูอย่างเดียว</span>
+                            </div>
+                        </template>
+                        <p x-show="!(item.tags || []).length && !peersOf(item).length && !(editable && addable(item).length)" class="text-[13px] text-slate-600">ยังไม่มีสถานะ</p>
                     </div>
                 </div>
                 {{-- statuses: always on the row's right, as the dots after the name (the same panel) --}}
@@ -208,6 +220,7 @@
                                 <span class="shrink-0 rounded-full px-1.5 text-xs font-medium" :class="h.received ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'"
                                       x-text="h.received ? '✓ ' + h.dept + ' ' + (h.verb || 'รับ') + 'แล้ว' + (h.at ? ' ' + fmtDate(h.at) : '') : 'รอ' + h.dept + (h.verb || 'รับ')"></span>
                             </template>
+                        <template x-for="s in tagsOfIds(m.tags)" :key="'mt' + s.id"><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-xs font-semibold" :style="chipStyle(s)" :title="(s.desc || s.name) + ' · ของ' + ((m.l || l).deptName || 'แผนกที่เทียบ')"><span class="h-1.5 w-1.5 rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name"></span></span></template>
                         </div>
                     </template>
                     <span x-show="!matchesOf(item).length" class="block text-xs leading-6 text-slate-400"
@@ -237,6 +250,7 @@
                                 <span class="shrink-0 rounded-full px-1.5 text-xs font-medium" :class="h.received ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'"
                                       x-text="h.received ? '✓ ' + h.dept + ' ' + (h.verb || 'รับ') + 'แล้ว' + (h.at ? ' ' + fmtDate(h.at) : '') : 'รอ' + h.dept + (h.verb || 'รับ')"></span>
                             </template>
+                        <template x-for="s in tagsOfIds(m.tags)" :key="'mt' + s.id"><span class="inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-xs font-semibold" :style="chipStyle(s)" :title="(s.desc || s.name) + ' · ของ' + ((m.l || l).deptName || 'แผนกที่เทียบ')"><span class="h-1.5 w-1.5 rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name"></span></span></template>
                 </div>
             </li>
         </template>

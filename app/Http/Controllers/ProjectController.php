@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\AssignmentException;
 use App\Models\ActivityLog;
+use App\Models\AppSetting;
 use App\Models\JobType;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\CommentAttachmentUploader;
 use App\Services\ProjectFollowers;
+use App\Services\ProjectOverview;
+use App\Services\SubtaskAssignmentService;
 use App\Support\Csv;
 use Illuminate\Http\Request;
 
@@ -25,6 +29,7 @@ class ProjectController extends Controller
             ->orderByRaw('CASE WHEN due_date IS NULL THEN 1 ELSE 0 END')
             ->orderBy('due_date')
             ->latest()
+            ->with('latestFat')   // วัน FAT column (the latest round)
             ->paginate(15)
             ->withQueryString();
 
@@ -137,6 +142,39 @@ class ProjectController extends Controller
         return redirect()->route('projects.show', $project)->with('success', 'สร้างโครงการเรียบร้อยแล้ว');
     }
 
+    /** The project page's "งานครบทุกแผนกแล้ว" banner: close it as Completed (the model's rules - กฎการทำงาน, the log - apply). */
+    public function complete(Project $project)
+    {
+        if ($project->isLocked()) {
+            return back();
+        }
+        $project->update(['status' => Project::STATUS_COMPLETED]);
+
+        return back()->with('success', "ปิดโครงการ {$project->project_no} เป็น Completed แล้ว");
+    }
+
+    /** "ปิดงานเหล่านี้": work ticked through but never closed, closed for its departments (needs "Admin / PM ทำแทนแผนกได้"). */
+    public function finishTicked(Request $request, Project $project, SubtaskAssignmentService $assignments)
+    {
+        $done = 0;
+        $failed = [];
+        foreach (ProjectOverview::tickedNotClosed($project) as $s) {
+            try {
+                $assignments->finishTicked($s, $request->user());
+                $done++;
+            } catch (AssignmentException $e) {
+                $failed[] = $s->name.': '.$e->getMessage();
+            }
+        }
+        $back = back();
+        if ($done) {
+            $back = $back->with('success', "ปิดงาน {$done} งานแล้ว (ทำแทนแผนก)");
+        }
+
+        return $failed ? $back->with('error', 'ปิดงานไม่ได้ '.count($failed).' งาน — '.implode(' · ', array_slice($failed, 0, 3))
+            .(AppSetting::get('pmo_acts_for_departments') ? '' : ' (เปิด "Admin / PM ทำแทนแผนกได้" ที่ ตั้งค่า › กฎการทำงาน ก่อน)')) : $back;
+    }
+
     public function show(Project $project)
     {
         $project->load([
@@ -186,6 +224,11 @@ class ProjectController extends Controller
     public function update(Request $request, Project $project, ProjectFollowers $followers)
     {
         $data = $this->validateData($request, $project);
+        foreach (['start_date', 'due_date'] as $f) {   // set ones move only through "เลื่อน / แก้วัน" (ProjectDates, with a reason)
+            if ($project->{$f}) {
+                unset($data[$f]);
+            }
+        }
 
         $project->update($data);
         $followers->setSales($project, $request->input('sales_ids', []), $request->user());

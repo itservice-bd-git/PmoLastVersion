@@ -4,9 +4,11 @@ import Sortable from 'sortablejs';
 import checklistEditor from './checklist-editor';
 import registerPlanningBoard from './planning-board';
 import { registerWorkDays } from './work-days';
+import pmoProjectDates from './project-dates';
 
 window.Alpine = Alpine;
 window.Sortable = Sortable;
+window.pmoProjectDates = pmoProjectDates;   // x-data of "เลื่อน / แก้วัน" (projects/partials/_dates), also fetched into Planning
 window.flatpickr = flatpickr; // for date fields created after page load (e.g. the project modal on My Department)
 
 Alpine.data('checklistEditor', checklistEditor);   // x-checklist-editor (cabinet + template pages)
@@ -66,6 +68,11 @@ function enhanceDate(el) {
     const fp = flatpickr(el, { dateFormat: 'Y-m-d', altInput: true, altFormat: 'd/m/Y', formatDate: thaiFormat, parseDate: thaiParse, altInputClass: el.className, allowInput: true });
     const alt = fp.altInput;
     if (!alt) return;
+    // a <label for> of the original (now hidden) input points at the field people see and type in
+    if (el.id) {
+        alt.id = el.id + '-shown';
+        document.querySelectorAll('label[for="' + CSS.escape(el.id) + '"]').forEach((l) => { l.htmlFor = alt.id; });
+    }
     let syncing = false;
     // a value set from code (x-model, :value, el.value = …) shows in the visible field too
     Object.defineProperty(el, 'value', {

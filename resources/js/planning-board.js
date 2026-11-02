@@ -73,6 +73,8 @@ export default function registerPlanningBoard() {
             drawer: null,                     // 'trash' | 'stars' side drawer
             newProject: null,                 // the "new project" window's form
             viewer: null,                     // { url, name, kind: 'image' | 'pdf' } photo / PDF shown over the page
+            openWeeks: {},                    // the month's weeks opened by "+n โครงการ" (first day => true): every bar shows
+            resPop: null,                     // { res, top, left, pinned } "เลื่อน n" history box from a chip (hover; pinned = clicked, has a link)
             statusPop: null,                  // { taskId, cabId?, top, left } quick status picker opened from a bar / cabinet
             replyTo: null,                    // the comment being answered
             multiDepts: [],
@@ -290,13 +292,21 @@ export default function registerPlanningBoard() {
                 const out = [];
                 for (const t of this.visible()) {
                     if (this.byCabinet && t.subtasks.length) {
-                        t.subtasks.forEach((c) => { const r = this.rangeOf(t, c); if (r) out.push({ t, c, key: t.id + c.id, ...r }); });
+                        t.subtasks.forEach((c) => { const r = this.withFat(t, c, this.rangeOf(t, c)); if (r) out.push({ t, c, key: t.id + c.id, ...r }); });
                     } else {
-                        const r = this.rangeOf(t, null);
+                        const r = this.withFat(t, null, this.rangeOf(t, null));
                         if (r) out.push({ t, c: null, key: t.id, ...r });
                     }
                 }
                 return out;
+            },
+            // a bar runs over its FAT days too (a FAT after the due date / before the start), so the FAT band always sits on its own
+            // project; the due date (end) stays, only the drawn range grows
+            withFat(t, c, r) {
+                const f = t.fat;
+                if (!r || !f || (c && f.cabinets && !f.cabinets.includes(c.id))) return r;
+                const fe = f.end || f.date;
+                return { ...r, from: f.date < r.from ? f.date : r.from, to: fe > r.to ? fe : r.to };
             },
             setByCabinet(on) { this.byCabinet = on; try { localStorage.setItem('planning.byCabinet', on ? '1' : ''); } catch (e) { /* not remembered */ } },
             // the "ทุกแผนก" bar of a project: each department's own range as a coloured stripe along its bottom (mine stands out)
@@ -326,8 +336,113 @@ export default function registerPlanningBoard() {
                 }
                 return bars;
             },
-            shownBars(week) { return this.weekBars(week).filter((b) => b.lane < MAX_LANES); },
-            hiddenCount(week, date) { return this.weekBars(week).filter((b) => b.lane >= MAX_LANES && b.cs <= date && date <= b.ce).length; },
+            shownBars(week) { return this.openWeeks[week[0].date] ? this.weekBars(week) : this.weekBars(week).filter((b) => b.lane < MAX_LANES); },
+            // ---- วัน FAT (the latest round of a project, set on the project page): a "FAT" tag on its day ----
+            fatOn(date) { return this.visible().filter((t) => t.fat && t.fat.date <= date && date <= (t.fat.end || t.fat.date)); },
+            fatLate(t) { return t.fat.status !== 'passed' && !!t.date && (t.fat.end || t.fat.date) > t.date; },
+            fatTag(t) { return 'shrink-0 rounded px-1 text-[11px] font-extrabold tracking-wide text-white ' + (this.fatLate(t) ? 'bg-orange-600' : { passed: 'bg-emerald-600', failed: 'bg-slate-400' }[t.fat.status] || 'bg-fuchsia-700'); },
+            fatStatus(t) { return { scheduled: 'นัดแล้ว', passed: 'ผ่าน', failed: 'ไม่ผ่าน' }[t.fat.status] || ''; },
+            fatPill(t) { return { passed: 'bg-emerald-50 text-emerald-800', failed: 'bg-red-50 text-red-800' }[t.fat.status] || 'bg-fuchsia-50 text-fuchsia-800'; },
+            fatChip(t) { return 'flex h-6 w-full min-w-0 items-center gap-1 rounded-md border pl-0.5 pr-1.5 text-left text-[12px] font-semibold ' + ({ passed: 'border-emerald-200 bg-emerald-50 text-emerald-900', failed: 'border-slate-200 bg-white text-slate-500 line-through' }[t.fat.status] || 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-900'); },
+            // "29/10", "29–31/10", "30/10–02/11"
+            fatRange(f) {
+                const [, m1, d1] = f.date.split('-'), [, m2, d2] = (f.end || f.date).split('-');
+                return f.end && f.end !== f.date ? (m1 === m2 ? d1 + '–' + d2 + '/' + m2 : d1 + '/' + m1 + '–' + d2 + '/' + m2) : d1 + '/' + m1;
+            },
+            // the tab on every FAT line (month and timeline alike): the line sits on its days, so how many and the time
+            fatLabel(f) { return 'FAT' + (f.end && f.end !== f.date ? ' ' + (diffDays(f.end, f.date) + 1) + ' วัน' : '') + (f.time ? ' · ' + f.time : ''); },
+            fatBandCls(t) { return 'fat-band' + (this.fatLate(t) ? ' fat-late' : { passed: ' fat-passed', failed: ' fat-failed' }[t.fat.status] || ''); },
+            // the FAT days as a striped band over a bar of the month (a cabinet's bar only when that cabinet is in the round)
+            fatBand(b) {
+                const f = b.t.fat;
+                if (!f || (b.c && f.cabinets && !f.cabinets.includes(b.c.id))) return null;
+                const from = f.date > b.cs ? f.date : b.cs, to = (f.end || f.date) < b.ce ? (f.end || f.date) : b.ce;
+                if (from > to) return null;
+                const days = diffDays(b.ce, b.cs) + 1, a = diffDays(from, b.cs), e = diffDays(to, b.cs) + 1;
+                return { left: (a / days) * 100, width: ((e - a) / days) * 100, cls: this.fatBandCls(b.t), label: this.fatLabel(f) };
+            },
+            // "+n โครงการ": does a project hidden that day have its FAT on it
+            hiddenFat(week, date) { return this.weekBars(week).some((b) => b.lane >= MAX_LANES && b.cs <= date && date <= b.ce && this.fatBand({ ...b, cs: date, ce: date })); },
+            // "เลื่อน n": a project / cabinet postponed n times (ProjectDates via PlanningBoard; null = never)
+            resChip(res, long) { return long ? 'เลื่อน ' + res.rounds + ' ครั้ง' + (res.days ? ' · ' + (res.days > 0 ? '+' : '') + res.days + ' วัน' : '') + ' ›' : 'เลื่อน ' + res.rounds; },
+            resDays(n) { return n ? ' (' + (n > 0 ? '+' : '') + n + ')' : ''; },
+            fmtShort(s) { if (!s) return '-'; const [, m, d] = s.split('-'); return d + '/' + m; },
+            showRes(ev, res, pinned = false) {
+                if (!res) return;
+                const r = ev.currentTarget.getBoundingClientRect();
+                this.resPop = { res, pinned, top: Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 90 - 22 * res.list.length)), left: Math.max(8, Math.min(r.left, window.innerWidth - 348)) };
+            },
+            resLines(res) {
+                return ['เลื่อนแล้ว ' + res.rounds + ' ครั้ง' + (res.days ? ' · รวม ' + (res.days > 0 ? '+' : '') + res.days + ' วัน' : ''), 'ครบกำหนดตอนแรก ' + this.fmtBE(res.firstDue),
+                    'ดูรายละเอียด / เลื่อนวัน ที่หน้า' + (res.url.includes('/cabinets/') ? 'ตู้' : 'โครงการ') + ' ↗'];
+            },
+            resRound(r) { return ' · ' + (r.reason || 'ไม่ระบุสาเหตุ') + ' · ' + this.fmtShort(r.from) + ' → ' + this.fmtShort(r.to) + this.resDays(r.days); },
+            // "เลื่อน / แก้วัน" and "ลง / แก้วัน FAT": หน้าโครงการ's own windows (ProjectDateController@form, ProjectFatController@form)
+            // fetched into the page; they save as JSON, no reload
+            canMoveDates(t) { return this.isPmo && !(t.warnings || {}).noDue; },   // as หน้าโครงการ: Admin / PM, once the project has a due date
+            canFat(t) { return this.isPmo && !['completed', 'cancelled'].includes(t.pmoStatus); },   // Admin / PM, an open project
+            openDates(t) { return this.openPmoWindow(t.pmoUrl + '/dates', 'project-dates', 'เลื่อนวัน'); },
+            openFat(t) { return this.openPmoWindow(t.pmoUrl + '/fat', 'project-fat', 'วัน FAT'); },
+            async openPmoWindow(url, modal, what) {
+                const host = document.getElementById('pb-dates');
+                try {
+                    const res = await fetch(url, { headers: { 'Accept': 'text/html' } });
+                    if (!res.ok) throw new Error(res.status);
+                    host.innerHTML = await res.text();
+                } catch (e) { window.showToast('เปิดหน้าต่าง' + what + 'ไม่สำเร็จ', 'error'); return; }
+                this.pmoModal = modal;
+                host.onsubmit = (e) => this.savePmoWindow(e);
+                if (!this.datesEsc) {   // Esc closes that window only, not the project window under it (onEscape)
+                    this.datesEsc = true;
+                    window.addEventListener('keydown', (e) => {
+                        if (e.key === 'Escape' && [...document.querySelectorAll('#pb-dates > div > div')].some((m) => m.style.display !== 'none')) this.escHeld = true;
+                    }, true);
+                }
+                setTimeout(() => window.dispatchEvent(new CustomEvent('open-modal', { detail: modal })), 0);
+            },
+            async savePmoWindow(e) {
+                e.preventDefault();
+                const form = e.target, btn = form.querySelector('[type=submit]') || e.submitter;
+                if (btn) btn.disabled = true;
+                try {
+                    const res = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'Accept': 'application/json' } });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                        const msg = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'บันทึกไม่สำเร็จ');
+                        if (form.classList.contains('hidden')) { window.showToast(msg, 'error'); return; }   // the FAT window's delete form
+                        let p = form.querySelector('[role=alert]');
+                        if (!p) { p = document.createElement('p'); p.setAttribute('role', 'alert'); p.className = 'rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800'; (form.querySelector(':scope > h3') || form.children[1]).after(p); }
+                        p.textContent = msg;
+                        return;
+                    }
+                    window.dispatchEvent(new CustomEvent('close-modal', { detail: this.pmoModal }));
+                    window.showToast(data.message);
+                    await this.refresh(true);
+                    this.$nextTick(() => this.syncDateFields());
+                } catch (err) {
+                    window.showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
+                } finally { if (btn) btn.disabled = false; }
+            },
+            // the date fields are set once (dateField); after "เลื่อน / แก้วัน" saved, show the dates the page now holds
+            syncDateFields() {
+                document.querySelectorAll('input.flatpickr-input').forEach((el) => { if (el._pbGet && el._flatpickr) el._flatpickr.setDate(el._pbGet() || null, false); });
+            },
+            hideRes() { if (this.resPop && !this.resPop.pinned) this.resPop = null; },
+            fatTitle(t) {
+                const f = t.fat;
+                return 'FAT' + (f.round > 1 ? ' รอบที่ ' + f.round : '') + ' · ' + t.so + ' ' + t.title + ' · ' + this.fmtBE(f.date) + (f.end && f.end !== f.date ? ' – ' + this.fmtBE(f.end) : '') + (f.time ? ' ' + f.time + ' น.' : '')
+                    + ' · ' + ({ scheduled: 'นัดแล้ว', passed: 'ผ่าน', failed: 'ไม่ผ่าน' }[f.status] || '') + (this.fatLate(t) ? ' · หลังวันครบกำหนด' : '') + (f.note ? ' · ' + f.note : '');
+            },
+            // the timeline: the day column of a row's FAT (a cabinet row only when that cabinet is in the round), else 0
+            tlFat(r) {
+                const f = r.t.fat, days = this.tlDays();
+                if (!f || (r.c && f.cabinets && !f.cabinets.includes(r.c.id))) return null;
+                const a = days.findIndex((d) => d.date >= f.date), z = days.findLastIndex((d) => d.date <= (f.end || f.date));
+                return a < 0 || z < a ? null : { col: a + 1, span: z - a + 1, label: this.fatLabel(f) };
+            },
+            hiddenCount(week, date) { return this.openWeeks[week[0].date] ? 0 : this.weekBars(week).filter((b) => b.lane >= MAX_LANES && b.cs <= date && date <= b.ce).length; },
+            // "+n โครงการ" opens the whole week (every bar, its FAT band too); "▲ ย่อกลับ" closes it
+            toggleWeek(week, open) { this.openWeeks = { ...this.openWeeks, [week[0].date]: open }; },
             barStyle(b) {
                 const color = this.statusColor(b.t);   // the bar is always the PROJECT's status colour; late shows as "เลย n วัน"
                 return 'grid-column:' + b.col + ' / span ' + b.span + ';grid-row:' + (b.lane + 1) + ';' + this.chipStyle(color, b.done);
@@ -994,12 +1109,6 @@ export default function registerPlanningBoard() {
                 if (w.noDue) out.push({ text: 'โครงการยังไม่มีวันครบกำหนด', act: '' });
                 return out;
             },
-            shiftProject(t) {
-                const n = parseInt(prompt('เลื่อนทั้งโครงการกี่วัน? (บวก = เลื่อนออก, ลบ = เลื่อนเข้า) — โครงการ ตู้ และงานที่ยังไม่เสร็จจะเลื่อนพร้อมกัน') || '', 10);
-                if (!n) return;
-                this.cabOpen = {};
-                this.send([{ type: 'project_shift', taskId: t.id, days: n }]);
-            },
             // ---- printing a work order: the department in view, the day in the left panel ----
             printWorkOrder() {
                 const dept = this.dept || this.me.deptId;
@@ -1088,7 +1197,7 @@ export default function registerPlanningBoard() {
             openModal(id) { this.projectInUrl(id); this.modalId = id; this.replyTo = null; this.cabOpen = {}; this.feedTab = 'activity'; this.remarkDept = this.dept || ''; this.remarkCab = ''; this.logTree.id = null; this.stageDept = null; this.cl = null; this.comment = ''; this.alertDept = ''; this.scrollFeed(); },
             setModalSize(size) { this.modalSize = size; try { localStorage.setItem('planning.modalSize', size); } catch (e) { /* storage blocked: it just won't be remembered */ } },
             closeModal() { this.modalId = null; this.stageDept = null; this.cl = null; this.projectInUrl(null); },
-            onEscape() { if (this.dispatch) { this.dispatch = null; return; } if (this.cabDialog) { this.cabDialog = null; return; } if (this.viewer) { this.viewer = null; return; } if (this.statusPop) { this.statusPop = null; return; } if (this.newProject) { this.newProject = null; return; } if (this.drawer) { this.drawer = null; return; } if (this.cl) this.closeChecklist(); else if (this.stageDept) this.stageDept = null; else if (this.modalId) this.closeModal();  },
+            onEscape() { if (this.escHeld) { this.escHeld = false; return; } if (this.dispatch) { this.dispatch = null; return; } if (this.cabDialog) { this.cabDialog = null; return; } if (this.viewer) { this.viewer = null; return; } if (this.statusPop) { this.statusPop = null; return; } if (this.resPop) { this.resPop = null; return; } if (this.newProject) { this.newProject = null; return; } if (this.drawer) { this.drawer = null; return; } if (this.cl) this.closeChecklist(); else if (this.stageDept) this.stageDept = null; else if (this.modalId) this.closeModal();  },
             // ---- รอรับงาน: work this user may accept (their department's - or any, for Admin / PM allowed to act for departments) ----
             waitingList() {
                 return this.tasks.flatMap((t) => (t.deptStages || []).filter((s) => s.pmo && s.pmo.canAccept && (!this.dept || s.deptId === this.dept))
@@ -1195,6 +1304,15 @@ export default function registerPlanningBoard() {
             closeChecklist() { this.cl = null; this.clDraft = ''; },
             // ---- checklist statuses (Settings > สีสถานะ Checklist): coloured tags, several per item; a group's ones replace each other ----
             ckTags(i) { return (i.tags || []).map((id) => this.ckStatuses.find((s) => s.id === id)).filter(Boolean); },
+            // the other departments of the linked list (ChecklistStatuses::peersFor), read only:
+            // a list shown beside this one (compared / watched) carries its own statuses there; the rest only in the item's panel
+            ckPeers(i) {
+                const beside = new Set([...this.clLinkedOf(i.subId), ...this.clWatchedOf(i.subId)].map((l) => l.id));
+                return (i.peerTags || []).filter((p) => !beside.has(p.sub)).map((p) => { const s = this.ckStatuses.find((x) => x.id === p.id); return s && { ...s, dept: p.dept }; }).filter(Boolean);
+            },
+            ckPeerDepts(i) { return [...new Set(this.ckPeers(i).map((s) => s.dept))]; },
+            ckOf(ids) { return (ids || []).map((id) => this.ckStatuses.find((s) => s.id === id)).filter(Boolean); },
+            ckTitle(i) { return this.ckTags(i).map((s) => s.name).join(' · '); },
             ckChip(s) { return 'background:' + s.bg + ';color:' + s.fg + (s.active ? '' : ';opacity:.7'); },
             // how many items of a cabinet (the department in view) carry each status: the cabinet row's chips, the window's filter
             ckTally(c) {
@@ -1220,6 +1338,8 @@ export default function registerPlanningBoard() {
                 this.ckSet(i, [...(i.tags || []).filter((t) => !rival || t !== rival.id), s.id]);
             },
             ckSet(i, tags) {
+                // a status set to tick the item ticks it on the server too (ChecklistStatuses::set): show it at once
+                if (!i.done && tags.some((id) => !(i.tags || []).includes(id) && (this.ckStatuses.find((s) => s.id === id) || {}).ticks)) i.done = true;
                 i.tags = this.ckStatuses.map((s) => s.id).filter((id) => tags.includes(id));
                 this.send([{ type: 'checklist_tags', taskId: this.cl.taskId, itemId: i.id, tags: i.tags }]);
             },
@@ -1336,6 +1456,7 @@ export default function registerPlanningBoard() {
                     defaultDate: get() || null,
                     onChange: (d, str) => { if (enabled && str !== (get() || '')) set(str || null); },
                 });
+                el._pbGet = get;   // syncDateFields() reads it again after a change made outside the field
                 if (!enabled && el._flatpickr && el._flatpickr.altInput) el._flatpickr.altInput.disabled = true;
             },
         };

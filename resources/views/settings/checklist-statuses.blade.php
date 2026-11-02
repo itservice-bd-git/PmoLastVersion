@@ -5,7 +5,7 @@
     $deptNames = $departments->pluck('name', 'id');
     $rows = $statuses->map(fn ($s) => [
         'id' => $s->id, 'name' => $s->name, 'description' => (string) $s->description, 'color' => $s->color, 'group_name' => (string) $s->group_name,
-        'scope' => $s->department_ids ? 'some' : 'all', 'department_ids' => array_map('intval', $s->department_ids ?? []),
+        'scope' => $s->department_ids ? 'some' : 'all', 'department_ids' => array_map('intval', $s->department_ids ?? []), 'ticks_item' => (bool) $s->ticks_item,
         'url' => route('settings.checklist-statuses.update', $s),
     ])->keyBy('id');
     $old = session()->getOldInput();
@@ -18,7 +18,7 @@
     <div x-data="{
             palette: @js($palette), rows: @js($rows), storeUrl: @js(route('settings.checklist-statuses.store')),
             f: null,
-            blank() { return { id: null, name: '', description: '', color: 'red', group_name: '', scope: 'all', department_ids: [], url: this.storeUrl }; },
+            blank() { return { id: null, name: '', description: '', color: 'red', group_name: '', scope: 'all', department_ids: [], ticks_item: false, url: this.storeUrl }; },
             open(id) { this.f = id ? JSON.parse(JSON.stringify(this.rows[id])) : this.blank(); this.$dispatch('open-modal', 'checklist-status'); this.$nextTick(() => this.$refs.name && this.$refs.name.focus()); },
             sw(key) { return this.palette.find((p) => p.key === key) || this.palette[0]; },
          }"
@@ -83,6 +83,7 @@
                                         <div class="flex flex-wrap items-center gap-2">
                                             <span class="inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold {{ $s->is_active ? '' : 'opacity-60' }}" style="background: {{ $bg }}; color: {{ $fg }}"><span class="h-2 w-2 rounded-full" style="background: {{ $dot }}"></span>{{ $s->name }}</span>
                                             @if (session('status_new') === $s->id)<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[12px] font-semibold text-blue-800">เพิ่งเพิ่ม</span>@endif
+                                            @if ($s->ticks_item)<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[12px] font-semibold text-emerald-700">✓ ติ๊กให้ด้วย</span>@endif
                                             @unless ($s->is_active)<span class="rounded-full bg-slate-100 px-2 py-0.5 text-[12px] font-semibold text-slate-600">ปิดใช้อยู่</span>@endunless
                                         </div>
                                         @if ($s->description)<p class="mt-1 text-[13px] text-slate-600">{{ $s->description }}</p>@endif
@@ -163,6 +164,12 @@
                         <input type="text" name="group_name" x-model="f.group_name" maxlength="40" list="status-groups" class="mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal" placeholder="ไม่อยู่ในกลุ่ม · เช่น การรับของ">
                         <datalist id="status-groups">@foreach ($groups as $g)<option value="{{ $g }}">@endforeach</datalist>
                         <span class="mt-1 block text-[13px] font-normal text-slate-500">สถานะในกลุ่มเดียวกันติดพร้อมกันไม่ได้ เช่น "รอของ" กับ "ของเข้าแล้ว" · ติดอันใหม่ อันเดิมในกลุ่มจะถูกแทน</span>
+                    </label>
+                    <label class="flex items-start gap-2.5 rounded-lg border border-slate-200 p-3 text-sm font-semibold text-slate-800">
+                        <input type="hidden" name="ticks_item" value="0">
+                        <input type="checkbox" name="ticks_item" value="1" x-model="f.ticks_item" class="mt-0.5 h-5 w-5 rounded border-slate-300 text-emerald-600">
+                        <span>ติดป้ายนี้แล้วติ๊ก Checklist ให้ด้วย
+                            <span class="mt-0.5 block text-[13px] font-normal text-slate-500">เช่น "ของเข้าแล้ว" · ติ๊กให้เหมือนกดเอง (% งาน, คู่เทียบ, Automation, แจ้งเตือน) · เอาป้ายออกแล้วรายการยังติ๊กอยู่</span></span>
                     </label>
                 </div>
 

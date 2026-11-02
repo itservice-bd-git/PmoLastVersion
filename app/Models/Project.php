@@ -155,6 +155,24 @@ class Project extends Model
     }
 
     /** People following it for its news (ProjectFollowers): its พนักงานขาย and whoever pressed "ติดตามโครงการ". */
+    /** วัน FAT, every round (ProjectFat) */
+    public function fats()
+    {
+        return $this->hasMany(ProjectFat::class)->orderBy('round');
+    }
+
+    /** Its own start / due date changes (not its cabinets'), oldest first (App\Services\ProjectDates). */
+    public function dateChanges()
+    {
+        return $this->hasMany(ProjectDateChange::class)->whereNull('cabinet_id')->orderBy('id');
+    }
+
+    /** the round that counts now (the calendar shows only this one) */
+    public function latestFat()
+    {
+        return $this->hasOne(ProjectFat::class)->ofMany('round', 'max');
+    }
+
     public function followers()
     {
         return $this->belongsToMany(User::class, 'project_followers')->withPivot('source')->withTimestamps();

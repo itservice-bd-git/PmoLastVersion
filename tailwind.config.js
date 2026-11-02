@@ -34,7 +34,8 @@ export default {
         './vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php',
         './storage/framework/views/*.php',
         './resources/views/**/*.blade.php',
-        './resources/js/**/*.js',   // classes picked in JS (e.g. the file manager's file-type colours)
+        './resources/js/**/*.js',
+        './app/Models/ProjectDateReason.php',   // the reason chips' colours   // classes picked in JS (e.g. the file manager's file-type colours)
     ],
 
     theme: {

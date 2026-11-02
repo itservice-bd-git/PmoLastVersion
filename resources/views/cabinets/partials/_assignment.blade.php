@@ -72,10 +72,44 @@
             data-url="{{ route('cabinet-subtasks.reject', $subtask) }}" data-reason="{{ $subtask->name }} · {{ $subtask->cabinetTask?->cabinet?->mo_no }}">ไม่รับงาน</button>
 @endif
 @if ($actions['can_start'])
-    <button type="button" class="assignment-action px-2 py-1 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"
+    <button type="button" class="assignment-action assignment-step-button px-2 py-1 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"
             data-url="{{ route('cabinet-subtasks.start', $subtask) }}">เริ่มงาน</button>
 @endif
 @if ($actions['can_complete'])
-    <button type="button" class="assignment-action px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700"
+    <button type="button" class="assignment-action assignment-step-button px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700"
             data-url="{{ route('cabinet-subtasks.complete', $subtask) }}">เสร็จงาน</button>
 @endif
+
+@php
+    // the cabinet page's status menu (opened from the Sub Task's status badge): every step, the next one clickable
+    $at = ['UNASSIGNED' => 0, 'ASSIGNED' => 1, 'ACCEPTED' => 2, 'IN_PROGRESS' => 3, 'COMPLETED' => 4][$subtask->assignment_status] ?? 0;
+    $only = 'เฉพาะแผนก '.($subtask->department?->name ?? '-');
+    $menu = [
+        ['รับงาน', 'cabinet-subtasks.accept', 2, $actions['can_accept'], $subtask->accepted_at ? 'โดย '.($subtask->acceptedBy?->name ?? '-').' '.$subtask->accepted_at->thaiDateTime() : null,
+            $at === 0 ? 'ยังไม่จ่ายงาน' : $only, 'ยืนยันรับงาน? หลังรับงานแล้วจะไม่สามารถเปลี่ยนแผนกได้'],
+        ['เริ่มงาน', 'cabinet-subtasks.start', 3, $actions['can_start'], $subtask->started_at ? 'โดย '.($subtask->startedBy?->name ?? '-').' '.$subtask->started_at->thaiDateTime() : null,
+            $at < 2 ? 'ต้องรับงานก่อน' : $only, null],
+        ['เสร็จงาน', 'cabinet-subtasks.complete', 4, $actions['can_complete'], $subtask->completed_at ? 'โดย '.($subtask->completedBy?->name ?? '-').' '.$subtask->completed_at->thaiDateTime() : null,
+            $at < 3 ? 'ต้องเริ่มงานก่อน' : $only, null],
+    ];
+@endphp
+<div class="absolute left-0 top-full z-30 mt-1 hidden w-64 rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-lg" data-status-menu-panel role="menu" aria-label="อัปเดตสถานะงาน">
+    <p class="px-2 pb-1 pt-0.5 text-[11px] font-semibold text-slate-500">สถานะงาน · {{ $subtask->assignment_status_label }}</p>
+    @foreach ($menu as [$label, $route, $reach, $can, $by, $why, $confirm])
+        @if ($at >= $reach)
+            <div class="flex items-start gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700" role="menuitem" aria-disabled="true">
+                <span class="mt-0.5 text-emerald-600" aria-hidden="true">✓</span>
+                <span class="min-w-0"><span class="font-medium">{{ $label }}แล้ว</span>@if ($by)<span class="block text-xs text-slate-500">{{ $by }}</span>@endif</span>
+            </div>
+        @elseif ($can)
+            <button type="button" role="menuitem" class="assignment-action flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
+                    data-url="{{ route($route, $subtask) }}" @if ($confirm) data-confirm="{{ $confirm }}" @endif>
+                <span aria-hidden="true">▶</span>{{ $label }}
+            </button>
+        @else
+            <div class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-400" role="menuitem" aria-disabled="true">
+                <span aria-hidden="true">○</span>{{ $label }} <span class="ml-auto text-xs">({{ $why }})</span>
+            </div>
+        @endif
+    @endforeach
+</div>

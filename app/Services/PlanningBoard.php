@@ -12,6 +12,7 @@ use App\Models\ProjectFieldValue;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
 use App\Models\Project;
+use App\Models\ProjectDateChange;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -147,7 +148,7 @@ class PlanningBoard
             ->whereHas('cabinetTask.cabinet', fn ($c) => $c
                 ->when($projectIds !== null, fn ($c) => $c->whereIn('project_id', $projectIds))
                 ->whereHas('project', $onBoard))
-            ->with('cabinetTask.cabinet.project.boardStatus', 'cabinetTask.cabinet.project.boardLabels', 'cabinetTask.cabinet.project.assignees:id', 'cabinetTask.cabinet.project.followers:id', 'cabinetTask.cabinet.boardStatus', 'checklists')
+            ->with('cabinetTask.cabinet.project.boardStatus', 'cabinetTask.cabinet.project.boardLabels', 'cabinetTask.cabinet.project.assignees:id', 'cabinetTask.cabinet.project.followers:id', 'cabinetTask.cabinet.project.latestFat', 'cabinetTask.cabinet.boardStatus', 'checklists')
             ->orderBy('id')
             ->get();
 
@@ -162,12 +163,13 @@ class PlanningBoard
             ->when(! $builder, fn ($q) => $q->whereHas('assignees', fn ($a) => $a->whereKey($user->id)))
             ->when($projectIds !== null, fn ($q) => $q->whereIn('id', $projectIds))
             ->tap($onBoard)
-            ->with('boardStatus', 'boardLabels', 'assignees:id', 'followers:id')->orderBy('id')->get();
+            ->with('boardStatus', 'boardLabels', 'assignees:id', 'followers:id', 'latestFat')->orderBy('id')->get();
 
         $ids = $byProject->keys()->merge($empty->pluck('id'));
         $comments = $this->comments($ids, $user);
         $this->fieldValues = $this->loadFieldValues($ids);
         $this->tags = app(ChecklistStatuses::class)->idsFor($subtasks->flatMap->checklists->pluck('id'));
+        $this->peerTags = app(ChecklistStatuses::class)->peersFor($subtasks->flatMap->checklists);
         // who last wrote each remark (the "หมายเหตุ" tab of the project window)
         $this->remarkBy = Remarks::authors([
             't' => $subtasks->map->cabinetTask->filter(fn ($t) => filled($t->remark))->pluck('id')->all(),
@@ -185,6 +187,9 @@ class PlanningBoard
         $this->usual = $this->usualDepartments($this->free->flatten());
         // template pairs: the lists this user's department's Sub Tasks compare with, per cabinet (read only)
         $this->linked = app(HandoffService::class)->linkedFor($user, $byProject->flatten(1)->map(fn ($s) => $s->cabinetTask->cabinet_id)->unique()->values());
+        // เลื่อน / แก้วัน (ProjectDates): each project's and cabinet's changes, for the "เลื่อน n" chips
+        $this->dateChanges = $ids->isEmpty() ? collect() : ProjectDateChange::whereIn('project_id', $ids)->orderBy('id')->get()
+            ->groupBy(fn ($c) => $c->cabinet_id ? 'c'.$c->cabinet_id : 'p'.$c->project_id);
         $cabinets = $builder ? Cabinet::with('boardStatus')->whereIn('project_id', $ids)->orderBy('sequence')->orderBy('id')->get()->groupBy('project_id') : null;
 
         $tasks = $byProject->map(fn (Collection $rows) => $this->task($rows->first()->cabinetTask->cabinet->project, $rows, $comments, $today, $user, $cabinets))
@@ -200,7 +205,7 @@ class PlanningBoard
         'departments' => 'id', 'department_fields' => 'id', 'department_field_options' => 'id', 'project_field_values' => 'id',
         'project_department_statuses' => 'id', 'department_links' => 'id', 'users' => 'id',
         // pivots: no id / timestamps - a swap (detach one, attach another) still changes the sum
-        'checklist_statuses' => 'id', 'cabinet_checklist_status' => 'id',
+        'checklist_statuses' => 'id', 'cabinet_checklist_status' => 'id', 'project_fats' => 'id', 'project_date_changes' => 'id',
         'project_user' => 'project_id * 100003 + user_id', 'board_label_project' => 'project_id * 100003 + board_label_id',
     ];
 
@@ -329,6 +334,9 @@ class PlanningBoard
     /** @var Collection<int, array> cabinet id => the sending departments' checklists (filled per tasks() call) */
     private Collection $linked;
 
+    /** @var Collection<string, Collection> 'p<project id>' / 'c<cabinet id>' => its date changes, oldest first (filled per tasks() call) */
+    private Collection $dateChanges;
+
     /** @var Collection<int, Collection> project id => department id => page id of the status Admin / PM set for it (filled per tasks() call) */
     private Collection $deptStatuses;
 
@@ -337,6 +345,9 @@ class PlanningBoard
 
     /** checklist item id => its status ids (ChecklistStatuses::idsFor) */
     private array $tags = [];
+
+    /** checklist item id => the other side of its pair's statuses (ChecklistStatuses::peersFor) */
+    private array $peerTags = [];
 
     /** @var Collection<int, Collection> project id => department id => [field key => value] (filled per tasks() call) */
     private Collection $fieldValues;
@@ -416,6 +427,8 @@ class PlanningBoard
             'assignees' => $stages->keys()->map(fn ($id) => self::deptKey((int) $id))->values()->all(),
             'owners' => $project->assignees->pluck('id')->values()->all(),
             'followers' => $project->followers->pluck('id')->values()->all(),   // "ติดตามโครงการ" (ProjectFollowers)
+            'fat' => self::fat($project),
+            'reschedule' => ProjectDates::brief($this->dateChanges->get('p'.$project->id, collect()), $project->due_date, route('projects.show', $project)),   // "เลื่อน n" (null = never postponed)   // วัน FAT: the latest round (ProjectFatController), on the calendar and the timeline
             // the project's own record (shown / edited in "ข้อมูลโครงการ"; editing it is for Admin / PM)
             'info' => [
                 // money and the customer's phone only for whom Settings > สิทธิ์การใช้งาน allows - left out of the JSON, not just hidden
@@ -460,6 +473,17 @@ class PlanningBoard
         ];
     }
 
+    /** The latest FAT round as the calendar draws it (null = none); cabinets null = every cabinet of the project. */
+    private static function fat(Project $project): ?array
+    {
+        $f = $project->latestFat;
+
+        return $f ? [
+            'round' => $f->round, 'date' => $f->fat_date->format('Y-m-d'), 'end' => $f->lastDay()->format('Y-m-d'), 'time' => (string) $f->fat_time, 'status' => $f->status,
+            'note' => (string) $f->note, 'cabinets' => $f->cabinet_ids ? array_map(fn ($id) => 'c'.$id, $f->cabinet_ids) : null,
+        ] : null;
+    }
+
     private function cabinet(Cabinet $cabinet, Collection $rows, \Carbon\Carbon $today): array
     {
         // in the cabinet's own order: Task, then its Sub Tasks (the checklist window shows Task › Sub Task › items)
@@ -486,6 +510,7 @@ class PlanningBoard
             'deptDates' => $deptDates ?: new \stdClass,
             'deptRanges' => $deptRanges ?: new \stdClass,
             'ownDue' => $cabinet->due_date?->format('Y-m-d'),
+            'reschedule' => ProjectDates::brief($this->dateChanges->get('c'.$cabinet->id, collect()), $cabinet->due_date, route('cabinets.show', $cabinet)),
             'remark' => (string) $cabinet->remark,
             // the remarks of its Tasks (the Sub Tasks' and items' ride on them below)
             'taskRemarks' => $rows->map->cabinetTask->unique('id')->filter(fn ($t) => filled($t->remark))
@@ -517,7 +542,8 @@ class PlanningBoard
                     'subId' => $subId,
                     'from' => ($a['source_checklist_id'] ?? null) ? 'k'.$a['source_checklist_id'] : null,   // a copy of the item of the Sub Task it compares with
                 ] + (($a['remark'] ?? '') !== '' ? ['remarkBy' => $this->remarkBy['k'.$a['id']]['by'] ?? ''] : [])
-                  + (isset($this->tags[$a['id']]) ? ['tags' => $this->tags[$a['id']]] : []));   // Settings > สีสถานะ Checklist (status ids)
+                  + (isset($this->tags[$a['id']]) ? ['tags' => $this->tags[$a['id']]] : [])   // Settings > สีสถานะ Checklist (status ids)
+                  + (isset($this->peerTags[$a['id']]) ? ['peerTags' => $this->peerTags[$a['id']]] : []));
             })->values()->all(),
         ];
     }

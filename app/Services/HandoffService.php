@@ -168,9 +168,11 @@ class HandoffService
                 $s->checklists->loadMissing('sourceItem:id,cabinet_subtask_id,expected_date', 'sourceItem.subtask:id,department_id');
             }
             $ownName = (string) ($s->department?->name ?? $s->name);
-            $items = $s->checklists->sortBy(fn ($c) => sprintf('%05d-%09d', $c->sequence ?? 0, $c->id))->map(function (CabinetChecklist $c) use ($mine, $watch, $own, $takers, $ownName) {
+            $tags = app(ChecklistStatuses::class)->idsFor($s->checklists->pluck('id'));   // its statuses, shown beside its items (read only)
+            $items = $s->checklists->sortBy(fn ($c) => sprintf('%05d-%09d', $c->sequence ?? 0, $c->id))->map(function (CabinetChecklist $c) use ($mine, $watch, $own, $takers, $ownName, $tags) {
                 $row = ['id' => 'k'.$c->id, 'text' => $c->name, 'done' => (bool) $c->is_completed, 'remark' => (string) $c->remark,
-                    'expected' => ($c->expected_date ?? ($watch || $own ? $c->sourceItem?->expected_date : null))?->format('Y-m-d')];
+                    'expected' => ($c->expected_date ?? ($watch || $own ? $c->sourceItem?->expected_date : null))?->format('Y-m-d')]
+                    + (isset($tags[$c->id]) ? ['tags' => $tags[$c->id]] : []);
                 // whether the ones receiving it have it (คลัง); none receive from this list (it is คลัง's own): its own tick
                 $receipts = fn () => $takers->isEmpty()
                     ? [['dept' => $ownName, 'at' => $c->is_completed ? $c->completed_at?->format('Y-m-d') : null, 'received' => (bool) $c->is_completed, 'verb' => 'ติ๊ก']]

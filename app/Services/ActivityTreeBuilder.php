@@ -26,7 +26,7 @@ class ActivityTreeBuilder
     /** Filter value => actions it matches (null = decided by entity type). */
     private const CATEGORIES = [
         'create' => ['created', 'copied_from_cabinet', 'template_applied'],
-        'edit' => ['updated', 'extended'],
+        'edit' => ['updated', 'extended', 'fat', 'rescheduled'],
         'status' => ['accepted', 'started', 'completed'],
         'assignment' => ['assigned', 'department_changed', 'accepted', 'started', 'completed'],
         'checklist' => ['checked', 'unchecked', 'checklists_copied', 'checklist_status'],
@@ -38,6 +38,7 @@ class ActivityTreeBuilder
         'created' => 'สร้าง',
         'updated' => 'แก้ไขรายละเอียด',
         'extended' => 'ขยายกำหนดเวลา',
+        'rescheduled' => 'เลื่อน / แก้วันโครงการ',
         'deleted' => 'ลบ',
         'restored' => 'กู้คืน',
         'remark_migrated' => 'หมายเหตุเดิม (ย้ายมาจากช่องหมายเหตุ)',
@@ -45,11 +46,13 @@ class ActivityTreeBuilder
         'unchecked' => 'ยกเลิกเครื่องหมายเสร็จ',
         'checklists_copied' => 'คัดลอก Checklist',
         'checklist_status' => 'สถานะ Checklist',
+        'fat' => 'วัน FAT',
         'assigned' => 'มอบหมายงานให้แผนก',
         'department_changed' => 'เปลี่ยนแผนกที่รับผิดชอบ',
         'accepted' => 'แผนกรับงาน',
         'started' => 'เริ่มงาน',
         'completed' => 'เสร็จงาน',
+        'reopened' => 'กลับเป็นกำลังดำเนินงาน',
         'attachment_uploaded' => 'อัปโหลดไฟล์แนบ',
         'attachment_deleted' => 'ลบไฟล์แนบ',
         'template_applied' => 'สร้างโครงสร้างงานจากเทมเพลต',
@@ -58,13 +61,14 @@ class ActivityTreeBuilder
 
     private const ACTION_ICONS = [
         'created' => 'plus', 'copied_from_cabinet' => 'plus', 'template_applied' => 'plus',
-        'updated' => 'edit', 'extended' => 'edit', 'restored' => 'check',
+        'updated' => 'edit', 'extended' => 'edit', 'rescheduled' => 'edit', 'restored' => 'check',
         'checked' => 'check', 'completed' => 'check',
         'unchecked' => 'circle',
         'assigned' => 'arrow', 'department_changed' => 'arrow', 'accepted' => 'arrow',
-        'started' => 'play',
+        'started' => 'play', 'reopened' => 'play',
         'checklists_copied' => 'copy',
         'checklist_status' => 'edit',
+        'fat' => 'edit',
         'attachment_uploaded' => 'clip', 'attachment_deleted' => 'clip',
         'deleted' => 'trash',
     ];
@@ -350,7 +354,7 @@ class ActivityTreeBuilder
         // The tree already says WHICH entity; only keep the sentence where it
         // carries information nothing else shows (counts, file names, deletions).
         $known = isset(self::ACTION_LABELS[$log->action]);
-        $detail = (! $changes && (! $known || in_array($log->action, ['deleted', 'checklists_copied', 'checklist_status', 'attachment_uploaded', 'attachment_deleted', 'template_applied', 'copied_from_cabinet', 'accepted', 'started', 'completed'], true)))
+        $detail = (! $changes && (! $known || in_array($log->action, ['deleted', 'checklists_copied', 'checklist_status', 'fat', 'attachment_uploaded', 'attachment_deleted', 'template_applied', 'copied_from_cabinet', 'accepted', 'started', 'completed'], true)))
             ? $description : null;
 
         $name = $log->user?->name;

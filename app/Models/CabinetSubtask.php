@@ -52,10 +52,11 @@ class CabinetSubtask extends Model
         self::ASSIGNMENT_ASSIGNED,
     ];
 
-    /** Statuses in which the assigned department may manage this Sub Task's checklist. */
+    /** Statuses in which the assigned department may manage this Sub Task's checklist (after เสร็จงาน too: an untick reopens it). */
     public const CHECKLIST_EDITABLE_STATUSES = [
         self::ASSIGNMENT_ACCEPTED,
         self::ASSIGNMENT_IN_PROGRESS,
+        self::ASSIGNMENT_COMPLETED,
     ];
 
     protected $fillable = [
@@ -188,9 +189,13 @@ class CabinetSubtask extends Model
         return $this->isChecklistEditableBy($user) || $this->tickWouldAccept($user);
     }
 
+    /** Admin / PM count too when Settings > กฎการทำงาน lets them act for departments (else their tick left the work "รอรับ"). */
     public function tickWouldAccept(?User $user): bool
     {
-        return $user !== null && ! $user->isViewOnly() && $user->inDepartment($this->department_id)
+        $actsFor = $user !== null && ($user->inDepartment($this->department_id)
+            || ($this->department_id !== null && $user->canDispatchWork() && (bool) AppSetting::get('pmo_acts_for_departments')));
+
+        return $actsFor && ! $user->isViewOnly()
             && $this->assignment_status === self::ASSIGNMENT_ASSIGNED && (bool) AppSetting::get('tick_accepts');
     }
 

@@ -194,6 +194,12 @@ trait PlanningSyncExtras
             $q = filter_var($f['quantity'], FILTER_VALIDATE_INT);
             $map['quantity'] = $q !== false && $q > 0 && $q < 100000 ? $q : throw new PlanningRejected('จำนวนต้องเป็นตัวเลขมากกว่า 0');
         }
+        // a date the cabinet already has moves only on หน้าตู้ › "เลื่อน / แก้วัน" (with a reason; ProjectDates)
+        foreach (['start_date' => 'วันเริ่ม', 'due_date' => 'กำหนดเสร็จ'] as $col => $label) {
+            if (array_key_exists($col, $map) && $cabinet->{$col} && $map[$col] !== $cabinet->{$col}->format('Y-m-d')) {
+                throw new PlanningRejected("เปลี่ยน{$label}ของตู้ได้ที่หน้าตู้ › เลื่อน / แก้วัน (ต้องใส่สาเหตุ)");
+            }
+        }
         $start = array_key_exists('start_date', $map) ? $map['start_date'] : $cabinet->start_date?->format('Y-m-d');
         $due = array_key_exists('due_date', $map) ? $map['due_date'] : $cabinet->due_date?->format('Y-m-d');
         $expected = array_key_exists('expected_completion_date', $map) ? $map['expected_completion_date'] : $cabinet->expected_completion_date?->format('Y-m-d');
@@ -278,9 +284,12 @@ trait PlanningSyncExtras
         $move = fn ($d) => $d?->copy()->addDays($days)->format('Y-m-d');
 
         $moved = collect();
-        DB::transaction(function () use ($project, $move, &$moved) {
+        [$oldStart, $oldDue] = [$project->start_date?->copy(), $project->due_date?->copy()];
+        DB::transaction(function () use ($project, $move, &$moved, $user, $oldStart, $oldDue, $days) {
+            app(\App\Services\ProjectDates::class)->shifted($project, $user, $oldStart, $oldDue, $days);
             $project->update(array_filter(['start_date' => $move($project->start_date), 'due_date' => $move($project->due_date)]));
             foreach ($project->cabinets()->get() as $cabinet) {
+                app(\App\Services\ProjectDates::class)->shifted($cabinet, $user, $cabinet->start_date?->copy(), $cabinet->due_date?->copy(), $days);
                 $cabinet->update(array_filter(['start_date' => $move($cabinet->start_date), 'due_date' => $move($cabinet->due_date), 'expected_completion_date' => $move($cabinet->expected_completion_date)]));
                 foreach (\App\Models\CabinetSubtask::whereHas('cabinetTask', fn ($q) => $q->where('cabinet_id', $cabinet->id))
                     ->where('assignment_status', '!=', \App\Models\CabinetSubtask::ASSIGNMENT_COMPLETED)->get() as $s) {

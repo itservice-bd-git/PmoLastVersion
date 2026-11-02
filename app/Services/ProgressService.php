@@ -100,6 +100,9 @@ class ProgressService
             $subtask->status = $this->deriveStatus($progress, $subtask->status);
             $subtask->completed_date = $progress >= 100 ? ($subtask->completed_date ?? now()) : null;
             $subtask->save();
+            if ($completed < $total) {   // เสร็จงาน, but an item was unticked or added since: back to กำลังดำเนินงาน
+                app(SubtaskAssignmentService::class)->reopenIfUnfinished($subtask, auth()->user());
+            }
         }
 
         $this->recalculateTask($subtask->cabinetTask);

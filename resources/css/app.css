@@ -310,3 +310,44 @@ html { color-scheme: light; }
     }
     .pmo-work-head { display: grid; }
 }
+
+/* Planning: "เลื่อน n" - a project / cabinet postponed n times (planning/partials, ProjectDates) */
+.res-chip {
+    @apply inline-flex h-[18px] shrink-0 items-center whitespace-nowrap rounded-full bg-orange-50 px-1.5 text-[11.5px] font-bold text-orange-800 ring-1 ring-inset ring-orange-300;
+}
+.res-pop {
+    @apply absolute w-[340px] rounded-[10px] bg-slate-900 px-3 py-2.5 text-[12.5px] leading-relaxed text-slate-50 shadow-xl;
+}
+.res-pop > p:first-child {
+    @apply text-[13px] font-bold;
+}
+.res-pop > p:nth-child(2) {
+    @apply mb-1 text-slate-300;
+}
+.res-pop > a {
+    @apply mt-1.5 inline-block text-blue-300 hover:underline;
+}
+.res-chip-lg {
+    @apply h-6 px-2.5 text-xs hover:bg-orange-100;
+}
+.res-btn {
+    @apply h-6 rounded-lg border border-slate-300 bg-white px-2 font-semibold text-slate-700 hover:bg-slate-50;
+}
+
+/* วัน FAT on Planning (planning-board.js fatBand / tlFat): a line along the top of the project's bar over the FAT days, and
+   the same "FAT" tab everywhere, hanging under the line's left end (where the FAT starts). FAT is the customer's day at the factory, so a colour no
+   project status uses (fuchsia); passed = green, failed = grey, after the project's due date = orange. */
+.fat-band {
+    --fat: #a21caf;
+    position: absolute; top: 0; height: 4px; z-index: 3; border-radius: 2px 2px 0 0; pointer-events: none; background: var(--fat);
+}
+.fat-band > span {
+    position: absolute; left: 0; top: 4px; white-space: nowrap;
+    border-radius: 0 6px 6px 6px; background: var(--fat); color: #fff; font-size: 11px; font-weight: 800; line-height: 16px; padding: 0 7px 1px;
+}
+/* the timeline: the same, as a button over the row (its day columns are narrow: the tab may run past the line's end) */
+button.fat-band { position: relative; height: 2rem; background: none; pointer-events: auto; text-align: left; }
+button.fat-band::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; border-radius: 2px 2px 0 0; background: var(--fat); }
+.fat-passed { --fat: #059669; }
+.fat-failed { --fat: #64748b; }
+.fat-late { --fat: #ea580c; }

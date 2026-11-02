@@ -203,6 +203,7 @@ class CabinetChecklistController extends Controller
         $data = $request->validate([
             'is_completed' => ['required', 'boolean'],
         ]);
+        $statusBefore = $checklist->subtask->assignment_status;
         // work still waiting for this department: ticking accepts it (Settings > กฎการทำงาน)
         $accepted = $data['is_completed'] && $assignments->acceptByTick($checklist->subtask, $request->user());
         if (! $accepted && ! $checklist->subtask->isChecklistEditableBy($request->user())) {
@@ -217,6 +218,7 @@ class CabinetChecklistController extends Controller
         $statusChanged = ($data['is_completed'] ? $automation->afterChecklistTicked($checklist->subtask, $request->user()) : false) || $accepted;
 
         $subtask = $checklist->subtask->fresh();
+        $statusChanged = $statusChanged || $subtask->assignment_status !== $statusBefore;   // an untick reopens done work
         $task = $subtask->cabinetTask;
         $cabinet = $task->cabinet;
 

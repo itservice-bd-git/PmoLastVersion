@@ -95,6 +95,20 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     // project data and dates: 'pmo' = edit.manage (Admin / Project Manager by default); reading, comments and the department's work stay open
     Route::resource('projects', ProjectController::class)->middlewareFor(['create', 'store', 'edit', 'update', 'destroy'], 'pmo')->middlewareFor('index', 'perm:page.projects');
 
+    // งานครบทุกแผนก: "ปิดโครงการ" from the project page's banner (Completed; the same rules as editing the status)
+    Route::post('projects/{project}/complete', [ProjectController::class, 'complete'])->middleware('pmo')->name('projects.complete');
+    // work ticked through by someone the tick did not accept it for: closed for its departments in one go
+    Route::post('projects/{project}/finish-ticked', [ProjectController::class, 'finishTicked'])->middleware('pmo')->name('projects.finish-ticked');
+
+    // วัน FAT (Admin / PM, checked in the controller): a round per appointment, the latest shows on Planning
+    // เลื่อน / แก้วันโครงการ (with a reason; counted rounds): App\Services\ProjectDates
+    Route::get('projects/{project}/dates', [\App\Http\Controllers\ProjectDateController::class, 'form'])->middleware('pmo')->name('projects.dates.form');   // Planning's project window
+    Route::post('projects/{project}/dates', [\App\Http\Controllers\ProjectDateController::class, 'store'])->middleware('pmo')->name('projects.dates.store');
+    Route::post('cabinets/{cabinet}/dates', [\App\Http\Controllers\ProjectDateController::class, 'storeCabinet'])->middleware('pmo')->name('cabinets.dates.store');
+    Route::get('projects/{project}/fat', [\App\Http\Controllers\ProjectFatController::class, 'form'])->name('projects.fats.form');   // Planning's project window
+    Route::post('projects/{project}/fats', [\App\Http\Controllers\ProjectFatController::class, 'store'])->name('projects.fats.store');
+    Route::put('project-fats/{fat}', [\App\Http\Controllers\ProjectFatController::class, 'update'])->name('project-fats.update');
+    Route::delete('project-fats/{fat}', [\App\Http\Controllers\ProjectFatController::class, 'destroy'])->name('project-fats.destroy');
     Route::patch('projects/{project}/color', [ProjectController::class, 'updateColor'])->name('projects.color');
 
     Route::post('projects/{project}/tasks', [ProjectTaskController::class, 'store'])->middleware('pmo')->name('project-tasks.store');
@@ -179,6 +193,13 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
         Route::delete('statuses/{status}', [\App\Http\Controllers\Settings\StatusController::class, 'destroy'])->name('settings.statuses.destroy');
         Route::patch('statuses/{status}/move', [\App\Http\Controllers\Settings\StatusController::class, 'move'])->name('settings.statuses.move');
         $boards = \App\Http\Controllers\Settings\BoardController::class;
+        // สาเหตุการเลื่อน: the reasons a project's dates may be moved for (App\Services\ProjectDates)
+        $reasons = \App\Http\Controllers\Settings\ProjectDateReasonController::class;
+        Route::get('date-reasons', [$reasons, 'index'])->name('settings.date-reasons.index');
+        Route::post('date-reasons', [$reasons, 'store'])->name('settings.date-reasons.store');
+        Route::put('date-reasons/{reason}', [$reasons, 'update'])->name('settings.date-reasons.update');
+        Route::delete('date-reasons/{reason}', [$reasons, 'destroy'])->name('settings.date-reasons.destroy');
+        Route::patch('date-reasons/{reason}/move', [$reasons, 'move'])->name('settings.date-reasons.move');
         // สีสถานะ Checklist: coloured tags a checklist item can carry (App\Services\ChecklistStatuses)
         Route::get('checklist-statuses', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'index'])->name('settings.checklist-statuses.index');
         Route::post('checklist-statuses', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'store'])->name('settings.checklist-statuses.store');

@@ -21,8 +21,14 @@ class CabinetTaskController extends Controller
             'progress' => 0,
         ]);
         $progress->recalculateCabinet($cabinet->fresh());
+        $message = "เพิ่ม Task \"{$task->name}\" แล้ว (เฉพาะตู้นี้ · เทมเพลตไม่เปลี่ยน)";
+        if ($request->wantsJson()) {   // the cabinet page adds it in place, without a reload
+            return response()->json(['id' => $task->id, 'message' => $message]);
+        }
 
-        return redirect()->route('cabinets.show', $cabinet)->with('success', "เพิ่ม Task \"{$task->name}\" แล้ว (เฉพาะตู้นี้ · เทมเพลตไม่เปลี่ยน)");
+        return redirect()->to(route('cabinets.show', $cabinet).'#task-card-'.$task->id)
+            ->with('success', $message)
+            ->with('new_task', $task->id);   // the page brings it to the middle, marked, its "+ เพิ่ม Sub Task" open
     }
 
     public function update(Request $request, CabinetTask $cabinetTask)

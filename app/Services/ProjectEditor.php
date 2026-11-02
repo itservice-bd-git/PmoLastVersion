@@ -50,6 +50,12 @@ class ProjectEditor
             }
         };
         $data = Validator::make($input, $rules, ['contract_value.numeric' => 'มูลค่างานต้องเป็นตัวเลข', 'margin.numeric' => 'Margin ต้องเป็นตัวเลข'])->validate();
+        // a date the project already has moves only through หน้าโครงการ › "เลื่อน / แก้วัน" (with a reason; ProjectDates)
+        foreach (['start_date' => 'วันเริ่ม', 'due_date' => 'วันครบกำหนด'] as $f => $label) {
+            if (array_key_exists($f, $data) && $project->{$f} && $data[$f] !== $project->{$f}->format('Y-m-d')) {
+                throw ValidationException::withMessages([$f => "เปลี่ยน{$label}โครงการได้ที่หน้าโครงการ › เลื่อน / แก้วัน (ต้องใส่สาเหตุ)"]);
+            }
+        }
 
         // the date order is judged on the values the Project will have AFTER this save
         $start = array_key_exists('start_date', $data) ? $data['start_date'] : $project->start_date?->format('Y-m-d');

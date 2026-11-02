@@ -223,9 +223,14 @@ class PlanningSyncTest extends TestCase
         $this->assertSame('MDB', $this->project->fresh()->project_name);
         $this->assertFalse($this->apply($member, $op(['description' => 'by a member']))['ok'], 'project data: Admin / PM only, even for a department working on it');
 
-        $this->assertTrue($this->apply($pm, $op(['title' => 'New name', 'priority' => 'urgent', 'description' => 'desc', 'date' => '2026-11-15', 'startDate' => '2026-10-05']))['ok']);
+        $this->assertTrue($this->apply($pm, $op(['title' => 'New name', 'priority' => 'urgent', 'description' => 'desc']))['ok']);
         $p = $this->project->fresh();
-        $this->assertSame(['New name', 'urgent', 'desc', '2026-11-15', '2026-10-05'], [$p->project_name, $p->priority, $p->description, $p->due_date->format('Y-m-d'), $p->start_date->format('Y-m-d')]);
+        $this->assertSame(['New name', 'urgent', 'desc'], [$p->project_name, $p->priority, $p->description]);
+        $due = $p->due_date?->format('Y-m-d');
+        // a date the project already has moves only on the project page ("เลื่อน / แก้วัน", with a reason)
+        $refused = $this->apply($pm, $op(['date' => '2026-11-15']));
+        $this->assertFalse($refused['ok']);
+        $this->assertSame($due, $this->project->fresh()->due_date?->format('Y-m-d'));
 
         $this->assertTrue($this->apply($pm, $op(['priority' => 'none']))['ok']);
         $this->assertSame('normal', $this->project->fresh()->priority, 'the board\'s "none" is PMO\'s "normal"');
@@ -236,7 +241,7 @@ class PlanningSyncTest extends TestCase
         $this->assertFalse($this->apply($pm, $op(['date' => '31/10/2026']))['ok']);
         $this->assertFalse($this->apply($pm, $op(['date' => '2026-02-30']))['ok'], 'an impossible calendar date is refused');
         $this->assertFalse($this->apply($pm, $op(['date' => ['2026-10-10']]))['ok'], 'a wrong type is refused, not an exception');
-        $this->assertSame('2026-11-15', $this->project->fresh()->due_date->format('Y-m-d'));
+        $this->assertSame($due, $this->project->fresh()->due_date?->format('Y-m-d'));
     }
 
     public function test_due_dates_move_open_sub_tasks_only_and_respect_date_limits_and_locks(): void

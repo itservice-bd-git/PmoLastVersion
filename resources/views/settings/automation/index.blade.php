@@ -6,7 +6,7 @@
     <div class="max-w-none mx-auto space-y-6">
         <x-settings-nav />
         {{-- ===== Workflow rules ===== --}}
-        <x-card title="กฎเลื่อนสถานะงานอัตโนมัติ" subtitle="ทำงานเมื่อมีคนติ๊ก Checklist ของ Sub Task เท่านั้น (ยกเลิกการติ๊กจะไม่ย้อนสถานะกลับ) และผ่านขั้นตอนรับงาน/เริ่มงาน/ปิดงานเดิม ไม่ข้ามสิทธิ์">
+        <x-card title="กฎเลื่อนสถานะงานอัตโนมัติ" subtitle="ทำงานเมื่อมีคนติ๊ก Checklist ของ Sub Task เท่านั้น (งานที่เสร็จแล้ว ถ้าเอาติ๊กออกหรือเพิ่มรายการ จะกลับเป็นกำลังดำเนินงาน) และผ่านขั้นตอนรับงาน/เริ่มงาน/ปิดงานเดิม ไม่ข้ามสิทธิ์">
             <div class="divide-y divide-slate-100 -mx-5 -mt-2">
                 @forelse ($rules as $rule)
                     <div class="px-5 py-3 flex items-center justify-between gap-3 {{ $rule->is_active ? '' : 'opacity-50' }}">

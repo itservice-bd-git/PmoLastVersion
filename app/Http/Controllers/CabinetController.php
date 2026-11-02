@@ -168,11 +168,18 @@ class CabinetController extends Controller
             'description' => ['nullable', 'string'],
             'start_date' => ['nullable', 'date'],
             'due_date' => ['nullable', 'date'],
-            'expected_completion_date' => ['nullable', 'date', 'before_or_equal:due_date'],
-        ], [
-            'expected_completion_date.before_or_equal' => 'วันคาดว่าจะเสร็จต้องไม่เกินวันครบกำหนด (Due Date)',
+            'expected_completion_date' => ['nullable', 'date'],   // not after the due date: checked below (the form may not send it)
         ]);
 
+        foreach (['start_date', 'due_date'] as $f) {   // set ones move only through หน้าตู้ › "เลื่อน / แก้วัน" (ProjectDates, with a reason)
+            if ($cabinet->{$f}) {
+                unset($data[$f]);
+            }
+        }
+        $due = $data['due_date'] ?? $cabinet->due_date?->format('Y-m-d');
+        if (! empty($data['expected_completion_date']) && $due && $data['expected_completion_date'] > $due) {
+            return back()->withInput()->withErrors(['expected_completion_date' => 'วันคาดว่าจะเสร็จต้องไม่เกินวันครบกำหนด (Due Date)']);
+        }
         $cabinet->update($data);
 
         return redirect()->route('cabinets.show', $cabinet)->with('success', 'บันทึกข้อมูลตู้ไฟฟ้าเรียบร้อยแล้ว');

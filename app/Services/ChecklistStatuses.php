@@ -57,6 +57,74 @@ class ChecklistStatuses
     }
 
     /**
+     * The statuses on the other items of the same linked list (SharedChecklist), for each item: the source, every copy of
+     * it, and copies of copies (a "ใช้รายการเดียวกัน" pair) - e.g. จัดซื้อ → คลัง → Production all see each other's. Shown
+     * read-only beside the item's own, with the department that put them there.
+     *
+     * @param  iterable<CabinetChecklist>  $items  (id, source_checklist_id, cabinet_subtask_id)
+     * @return array<int, list<array{id: int, dept: string, sub: string}>> sub: the Sub Task ('s'.id), so a page that already
+     *                                                                   shows that list beside the item can leave it out
+     */
+    public function peersFor(iterable $items): array
+    {
+        $items = collect($items);
+        if ($items->isEmpty() || $this->all()->isEmpty()) {
+            return [];
+        }
+        $cols = ['id', 'source_checklist_id', 'cabinet_subtask_id'];
+        $known = $items->mapWithKeys(fn ($c) => [$c->id => ['src' => $c->source_checklist_id, 'sub' => $c->cabinet_subtask_id]]);
+        $add = function ($rows) use (&$known) {
+            $new = $rows->reject(fn ($r) => $known->has($r->id));
+            $known = $known->union($new->mapWithKeys(fn ($r) => [$r->id => ['src' => $r->source_checklist_id, 'sub' => $r->cabinet_subtask_id]]));
+
+            return $new;
+        };
+        $fetch = fn ($col, $ids) => collect($ids)->unique()->chunk(800)->flatMap(fn ($chunk) => CabinetChecklist::whereIn($col, $chunk)->get($cols));
+
+        // up to each list's source, then down to every copy of it (a few steps at most: no loops, copies of copies one deep)
+        $up = $known->pluck('src')->filter()->reject(fn ($id) => $known->has($id));
+        for ($i = 0; $i < 5 && $up->isNotEmpty(); $i++) {
+            $up = $add($fetch('id', $up))->pluck('source_checklist_id')->filter()->reject(fn ($id) => $known->has($id));
+        }
+        $down = $known->keys();
+        for ($i = 0; $i < 5 && $down->isNotEmpty(); $i++) {
+            $down = $add($fetch('source_checklist_id', $down))->pluck('id');
+        }
+
+        $root = function ($id) use ($known) {
+            for ($i = 0; $i < 6 && ($src = $known[$id]['src'] ?? null) && $known->has($src); $i++) {
+                $id = $src;
+            }
+
+            return $id;
+        };
+        $groups = $known->keys()->groupBy($root)->filter(fn ($g) => $g->count() > 1);
+        if ($groups->isEmpty()) {
+            return [];
+        }
+        $tags = $this->idsFor($groups->flatten());
+        $dept = DB::table('cabinet_subtasks')->leftJoin('departments', 'departments.id', '=', 'cabinet_subtasks.department_id')
+            ->whereIn('cabinet_subtasks.id', $groups->flatten()->map(fn ($id) => $known[$id]['sub'])->unique())->pluck('departments.name', 'cabinet_subtasks.id');
+
+        $out = [];
+        foreach ($items as $item) {
+            foreach ($groups[$root($item->id)] ?? [] as $other) {
+                if ($other === $item->id || $known[$other]['sub'] === $item->cabinet_subtask_id) {
+                    continue;   // its own, or another item of the same Sub Task
+                }
+                foreach ($tags[$other] ?? [] as $id) {
+                    $row = ['id' => $id, 'dept' => (string) ($dept[$known[$other]['sub']] ?? 'แผนกที่เทียบ'), 'sub' => 's'.$known[$other]['sub']];
+                    if (! in_array($row, $out[$item->id] ?? [], true)) {
+                        $out[$item->id][] = $row;
+                    }
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Give one item exactly these statuses. Returns the Activity Log line, or null when nothing changed.
      *
      * @param  list<int|string>  $ids
@@ -103,6 +171,19 @@ class ChecklistStatuses
         $item->statuses()->attach($add->mapWithKeys(fn ($id) => [$id => ['created_by' => $user->id]])->all());
         CabinetChecklist::whereKey($item->id)->update(['updated_at' => now()]);   // the cabinet page's / board's stamps notice it
 
+        // a status set to tick the item ("ของเข้าแล้ว") ticks it as a hand would - progress, the pair's source, Automation,
+        // notices; taking the status off leaves the tick (the callers checked this user may edit, so may tick, the list)
+        $ticked = false;
+        if (! $item->is_completed && $add->contains(fn ($id) => $all[$id]->ticks_item)) {
+            $item->loadMissing('subtask.cabinetTask.cabinet');
+            if (app(SubtaskAssignmentService::class)->acceptByTick($item->subtask, $user)) {
+                $item->setRelation('subtask', $item->subtask->fresh());
+            }
+            app(ProgressService::class)->toggleChecklist($item, true, $user);
+            app(AutomationService::class)->afterChecklistTicked($item->subtask->fresh(), $user);
+            $ticked = true;
+        }
+
         $name = fn ($id) => '"'.$all[$id]->name.'"';
         $parts = [];
         $swapped = [];
@@ -119,6 +200,9 @@ class ChecklistStatuses
         }
         if (($off = $remove->diff($swapped))->isNotEmpty()) {
             $parts[] = 'เอาออก '.$off->map($name)->implode(', ');
+        }
+        if ($ticked) {
+            $parts[] = 'ติ๊กรายการให้';
         }
         $line = "สถานะของ Checklist \"{$item->name}\": ".implode(' · ', $parts);
         ActivityLog::record($projectId, $user->id, $item, 'checklist_status', $line);

@@ -38,9 +38,14 @@ class CabinetSubtaskController extends Controller
             $this->assignments->changeDepartment($subtask, (int) $data['department_id'], $request->user());
         }
         $progress->recalculateTask($cabinetTask->fresh());
+        $message = "เพิ่ม Sub Task \"{$subtask->name}\" แล้ว (เฉพาะตู้นี้ · เทมเพลตไม่เปลี่ยน)";
+        if ($request->wantsJson()) {   // the cabinet page adds it in place, without a reload
+            return response()->json(['id' => $subtask->id, 'message' => $message]);
+        }
 
         return redirect()->to(route('cabinets.show', $cabinetTask->cabinet_id).'#subtask-'.$subtask->id)
-            ->with('success', "เพิ่ม Sub Task \"{$subtask->name}\" แล้ว (เฉพาะตู้นี้ · เทมเพลตไม่เปลี่ยน)");
+            ->with('success', $message)
+            ->with('new_subtask', $subtask->id);   // the page brings it to the middle, marked, the cursor in its checklist
     }
 
     public function update(Request $request, CabinetSubtask $cabinetSubtask)

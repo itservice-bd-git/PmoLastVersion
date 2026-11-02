@@ -97,14 +97,20 @@
         <x-text-input id="payment_terms" name="payment_terms" class="mt-1 block w-full" :value="old('payment_terms', $p?->payment_terms)" />
         <x-input-error :messages="$errors->get('payment_terms')" class="mt-1" />
     </div>
-    <div>
-        <x-input-label for="start_date" value="วันเริ่ม" />
-        <x-text-input type="date" id="start_date" name="start_date" class="mt-1 block w-full" :value="old('start_date', $p?->start_date?->format('Y-m-d'))" />
-    </div>
-    <div>
-        <x-input-label for="due_date" value="วันครบกำหนด" />
-        <x-text-input type="date" id="due_date" name="due_date" class="mt-1 block w-full" :value="old('due_date', $p?->due_date?->format('Y-m-d'))" />
-    </div>
+    {{-- once the project has a date it moves only through หน้าโครงการ › "เลื่อน / แก้วัน" (with a reason; App\Services\ProjectDates) --}}
+    @foreach (['start_date' => 'วันเริ่ม', 'due_date' => 'วันครบกำหนด'] as $field => $label)
+        <div>
+            <x-input-label :for="$p?->{$field} ? null : $field" :value="$label" />
+            @if ($p?->{$field})
+                <p class="mt-1 flex h-[2.625rem] items-center justify-between gap-2 rounded-lg bg-slate-100 px-3 text-sm">
+                    <span class="tabular-nums text-slate-800">{{ $p->{$field}->thaiDate() }}</span>
+                    <a href="{{ route('projects.show', $p) }}#project-dates" class="text-xs font-semibold text-blue-700 hover:underline">เลื่อน / แก้วัน →</a>
+                </p>
+            @else
+                <x-text-input type="date" :id="$field" :name="$field" class="mt-1 block w-full" :value="old($field)" />
+            @endif
+        </div>
+    @endforeach
     @if ($p)
         <div>
             <x-input-label for="status" value="สถานะ" />

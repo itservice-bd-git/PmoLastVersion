@@ -80,9 +80,10 @@
                             <th class="px-5 py-2.5">โครงการ</th>
                             <th class="px-4 py-2.5">ลูกค้า</th>
                             <th class="px-4 py-2.5">กำหนดส่ง</th>
+                            <th class="px-4 py-2.5">FAT</th>
                             <th class="px-4 py-2.5">สถานะ</th>
                             <th class="px-4 py-2.5">แผนก</th>
-                            <th class="w-44 px-4 py-2.5">การผลิต</th>
+                            <th class="w-44 min-w-[9rem] whitespace-nowrap px-4 py-2.5">การผลิต</th>
                             <th class="px-4 py-2.5 text-right">ตู้</th>
                         </tr>
                     </thead>
@@ -102,7 +103,7 @@
                                         </span>
                                         <div class="min-w-0">
                                             <a href="{{ route('projects.show', $project) }}" class="flex items-center gap-2 font-bold text-ae-navy hover:underline">{{ $project->project_no }} <x-priority-flag :priority="$project->priority" /></a>
-                                            <p class="max-w-xs truncate text-xs text-slate-500" title="{{ $project->project_name }}">{{ $project->project_name }}</p>
+                                            <p class="max-w-[12rem] truncate text-xs text-slate-500" title="{{ $project->project_name }}">{{ $project->project_name }}</p>
                                         </div>
                                     </div>
                                 </td>
@@ -114,6 +115,17 @@
                                         <span data-countdown class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold {{ $days < 0 ? 'bg-red-100 text-red-700' : ($days <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500') }}">
                                             {{ $days < 0 ? 'เลยกำหนด '.abs($days).' วัน' : ($days === 0 ? 'ครบกำหนดวันนี้' : 'เหลือ '.$days.' วัน') }}
                                         </span>
+                                    @endif
+                                </td>
+                                {{-- วัน FAT: the latest round (ProjectFatController), as in หน้าโครงการ's FAT card --}}
+                                <td class="whitespace-nowrap px-4 py-3">
+                                    @if ($fat = $project->latestFat)
+                                        <div class="tabular-nums text-slate-700">{{ $fat->dateRange() }}</div>
+                                        <span class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold {{ ['passed' => 'bg-emerald-50 text-emerald-800', 'failed' => 'bg-red-50 text-red-800'][$fat->status] ?? 'bg-fuchsia-50 text-fuchsia-800' }}">{{ $fat->statusLabel() }}</span>
+                                        @if ($fat->fat_time || $fat->round > 1 || $fat->days() > 1)<span class="text-[12px] tabular-nums text-slate-500">{{ collect([$fat->days() > 1 ? $fat->days().' วัน' : null, $fat->fat_time, $fat->round > 1 ? 'รอบ '.$fat->round : null])->filter()->implode(' · ') }}</span>@endif
+                                        @if ($fat->isAfterDue($project))<div class="mt-0.5 text-[12px] font-semibold text-amber-700">หลังวันกำหนดส่ง</div>@endif
+                                    @else
+                                        <span class="text-slate-400">-</span>
                                     @endif
                                 </td>
                                 <td class="px-4 py-3"><x-project-status :status="$project->status" /></td>
@@ -147,7 +159,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="7" class="px-5 py-10 text-center text-slate-400">ไม่พบโครงการ</td></tr>
+                            <tr><td colspan="8" class="px-5 py-10 text-center text-slate-400">ไม่พบโครงการ</td></tr>
                         @endforelse
                     </tbody>
                 </table>

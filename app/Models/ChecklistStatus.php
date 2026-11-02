@@ -21,11 +21,11 @@ class ChecklistStatus extends Model
         'slate' => ['เทา', '#475569', '#e2e8f0', '#334155'],
     ];
 
-    protected $fillable = ['name', 'description', 'color', 'group_name', 'department_ids', 'sort', 'is_active'];
+    protected $fillable = ['name', 'description', 'color', 'group_name', 'department_ids', 'sort', 'is_active', 'ticks_item'];
 
     protected function casts(): array
     {
-        return ['department_ids' => 'array', 'is_active' => 'boolean'];
+        return ['department_ids' => 'array', 'is_active' => 'boolean', 'ticks_item' => 'boolean'];
     }
 
     public function checklists()
@@ -46,7 +46,7 @@ class ChecklistStatus extends Model
 
         return [
             'id' => $this->id, 'name' => $this->name, 'desc' => (string) $this->description, 'group' => (string) $this->group_name,
-            'depts' => array_map('intval', $this->department_ids ?? []), 'active' => $this->is_active,
+            'depts' => array_map('intval', $this->department_ids ?? []), 'active' => $this->is_active, 'ticks' => $this->ticks_item,   // putting it on ticks the item too
             'dot' => $dot, 'bg' => $bg, 'fg' => $fg,
         ];
     }

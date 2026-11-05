@@ -13,7 +13,7 @@
         $asked = in_array(request('tab'), ['project', 'cabinets', 'overview'], true) ? 'info' : request('tab');
         $initialTab = in_array($asked, $tabs, true) ? $asked : 'info';
     @endphp
-    <div class="max-w-screen-2xl mx-auto space-y-4" x-data="{ tab: '{{ $initialTab }}' }" x-init="$watch('tab', (t) => keepTabInUrl(t, 'info'))">
+    <div class="pmo-project max-w-screen-2xl mx-auto space-y-4" x-data="{ tab: '{{ $initialTab }}' }" x-init="$watch('tab', (t) => keepTabInUrl(t, 'info'))">
 
         <x-closed-project-banner :project="$project" />
 
@@ -33,7 +33,7 @@
             $fatDays = $hdrFat ? (int) $today->diffInDays($hdrFat->fat_date, false) : null;
             $fatEnd = $hdrFat ? (int) $today->diffInDays($hdrFat->lastDay(), false) : null;
             $fatTile = match (true) {
-                ! $hdrFat => ['ยังไม่ได้นัด', 'text-slate-400', $project->due_date ? 'ครบกำหนด '.$project->due_date->thaiDate() : '', '+ ลงวัน FAT'],
+                ! $hdrFat => ['ยังไม่ได้นัด', 'text-slate-500', $project->due_date ? 'ครบกำหนด '.$project->due_date->thaiDate() : '', '+ ลงวัน FAT'],
                 $hdrFat->status === 'passed' => ['ผ่าน', 'text-emerald-700', $hdrFat->when(), 'แก้วัน FAT'],
                 $hdrFat->status === 'failed' => ['ไม่ผ่าน', 'text-red-700', 'รอบที่ '.$hdrFat->round.' · '.$hdrFat->when(), 'นัด FAT รอบใหม่'],
                 $fatEnd < 0 => ['เลย '.abs($fatEnd).' วัน', 'text-red-700', $hdrFat->when().' · ยังไม่บันทึกผล', 'บันทึกผล FAT'],
@@ -43,7 +43,7 @@
             $dlDays = $hdrNext ? (int) $today->diffInDays($hdrNext->firstDay(), false) : null;
             $dlEnd = $hdrNext ? (int) $today->diffInDays($hdrNext->lastDay(), false) : null;
             $dlTile = match (true) {
-                ! $hdrRounds->count() => ['ยังไม่ได้นัด', 'text-slate-400', ''],
+                ! $hdrRounds->count() => ['ยังไม่ได้นัด', 'text-slate-500', ''],
                 ! $hdrNext => ['ส่งครบแล้ว', 'text-emerald-700', $hdrRounds->count().' รอบ'],
                 $dlEnd < 0 => ['เลย '.abs($dlEnd).' วัน', 'text-red-700', $hdrNext->when()],
                 $dlDays <= 0 => ['วันนี้', 'text-blue-700', $hdrNext->when()],
@@ -88,33 +88,33 @@
                 {{-- FAT and the next delivery round: how many days, the date, the button --}}
                 <div class="grid grid-cols-2 gap-3 lg:mr-12 lg:flex lg:gap-0">
                     <div class="flex min-w-0 flex-col gap-0.5 rounded-xl border border-slate-200 p-3 lg:min-w-[11rem] lg:rounded-none lg:border-0 lg:border-l lg:px-5 lg:py-0.5">
-                        <span class="text-xs font-semibold text-slate-600">วันที่ FAT @if ($hdrFat && $hdrFat->round > 1)<span class="font-normal">รอบที่ {{ $hdrFat->round }}</span>@endif</span>
+                        <span class="text-[13px] font-semibold text-slate-600">วันที่ FAT @if ($hdrFat && $hdrFat->round > 1)<span class="font-normal">รอบที่ {{ $hdrFat->round }}</span>@endif</span>
                         <span class="flex items-center gap-1.5 text-xl font-bold leading-tight tabular-nums {{ $fatTile[1] }} sm:text-2xl">
                             @if ($hdrFat?->status === 'passed')<svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>@endif
                             {{ $fatTile[0] }}</span>
-                        <span class="truncate text-[13px] tabular-nums text-slate-700">{{ $fatTile[2] ?: ' ' }}</span>
+                        <span class="text-[13px] tabular-nums text-slate-700">{{ $fatTile[2] ?: ' ' }}</span>
                         <span class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                             @if ($hdrCanAppt)
                                 <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-fat', 'edit'))"
-                                        class="inline-flex h-8 items-center rounded-lg px-3 text-[13px] font-semibold {{ $fatTile[1] === 'text-red-700' && $hdrFat?->status !== 'failed' ? 'bg-red-700 text-white hover:bg-red-800' : ($hdrFat ? 'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50' : 'border border-dashed border-slate-400 bg-white text-slate-800 hover:bg-slate-50') }}">{{ $fatTile[3] }}</button>
+                                        class="inline-flex h-10 items-center rounded-lg px-3 text-[13px] font-semibold sm:h-8 {{ $fatTile[1] === 'text-red-700' && $hdrFat?->status !== 'failed' ? 'bg-red-700 text-white hover:bg-red-800' : ($hdrFat ? 'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50' : 'border border-dashed border-slate-400 bg-white text-slate-800 hover:bg-slate-50') }}">{{ $fatTile[3] }}</button>
                             @endif
                             @if ($hdrFat)
-                                <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-fat', 'show'))" class="text-[13px] font-semibold text-blue-700 hover:underline">รายละเอียด</button>
+                                <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-fat', 'show'))" class="inline-flex min-h-10 items-center text-[13px] font-semibold text-blue-700 hover:underline sm:min-h-0">รายละเอียด</button>
                             @endif
                         </span>
                     </div>
                     <div class="flex min-w-0 flex-col gap-0.5 rounded-xl border border-slate-200 p-3 lg:min-w-[12.5rem] lg:rounded-none lg:border-0 lg:border-l lg:py-0.5 lg:pl-5 lg:pr-0">
-                        <span class="text-xs font-semibold text-slate-600">วันที่ส่งมอบ @if ($hdrNext && $hdrRounds->count() > 1)<span class="font-normal">รอบ {{ $hdrNext->round }} จาก {{ $hdrRounds->count() }}</span>@endif</span>
+                        <span class="text-[13px] font-semibold text-slate-600">วันที่ส่งมอบ @if ($hdrNext && $hdrRounds->count() > 1)<span class="font-normal">รอบ {{ $hdrNext->round }} จาก {{ $hdrRounds->count() }}</span>@endif</span>
                         <span class="flex flex-wrap items-baseline gap-x-2 text-xl font-bold leading-tight tabular-nums {{ $dlTile[1] }} sm:text-2xl">{{ $dlTile[0] }}
                             @if ($hdrNext)<span class="st-pill rounded-full px-2 py-0.5 text-xs font-bold" style="--c: {{ $hdrNext->stateColor() }}">{{ $hdrNext->status === 'scheduled' && $hdrNext->cabinet_ids ? $hdrNext->step()['text'] : $hdrNext->stateLabel() }}</span>@endif</span>
-                        <span class="truncate text-[13px] tabular-nums text-slate-700">{{ $dlTile[2] ?: ' ' }}{{ $hdrNext ? ' · '.$hdrNext->cabinetsText() : '' }}</span>
+                        <span class="text-[13px] tabular-nums text-slate-700">{{ $dlTile[2] ?: ' ' }}{{ $hdrNext ? ' · '.$hdrNext->cabinetsText() : '' }}</span>
                         <span class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                             @if ($hdrCanAppt)
                                 <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-delivery', 'new'))"
-                                        class="inline-flex h-8 items-center rounded-lg bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-700">ลงวันส่งมอบ</button>
+                                        class="inline-flex h-10 items-center rounded-lg bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-700 sm:h-8">ลงวันส่งมอบ</button>
                             @endif
                             @if ($hdrRounds->count())
-                                <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-delivery', 'show'))" class="text-[13px] font-semibold text-blue-700 hover:underline">ดูทุกรอบ</button>
+                                <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-delivery', 'show'))" class="inline-flex min-h-10 items-center text-[13px] font-semibold text-blue-700 hover:underline sm:min-h-0">ดูทุกรอบ</button>
                             @endif
                         </span>
                     </div>
@@ -125,7 +125,7 @@
             {{-- the rest of the actions; deleting moves the whole project to the trash, so it sits last --}}
             <div class="absolute right-3 top-3 sm:right-4 sm:top-4" x-data="{ menu: false }" @click.outside="menu = false" @keydown.escape="menu = false">
                 <button type="button" @click="menu = ! menu" :aria-expanded="menu" aria-haspopup="true" aria-label="เมนูเพิ่มเติม"
-                        class="flex h-9 w-9 items-center justify-center rounded-[10px] border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+                        class="flex h-10 w-10 items-center justify-center rounded-[10px] border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 sm:h-9 sm:w-9">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                 </button>
                 <div x-show="menu" x-cloak x-transition.opacity class="absolute right-0 z-30 mt-1 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-xl">
@@ -147,14 +147,14 @@
         <div class="flex gap-1 overflow-x-auto px-1" role="tablist" aria-label="ส่วนของโครงการ">
             <button type="button" @click="tab = 'info'" role="tab" :aria-selected="tab === 'info'"
                     :class="tab === 'info' ? 'bg-ae-navy text-white' : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-800'"
-                    class="whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold">ข้อมูลโครงการ</button>
+                    class="whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold">ข้อมูลโครงการ</button>
             @if (auth()->user()->allows('data.comments'))
             <button type="button" @click="tab = 'comment'" role="tab" :aria-selected="tab === 'comment'"
                     :class="tab === 'comment' ? 'bg-ae-navy text-white' : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-800'"
-                    class="whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold">Comment</button>
+                    class="whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold">Comment</button>
             <button type="button" @click="tab = 'activity'" role="tab" :aria-selected="tab === 'activity'"
                     :class="tab === 'activity' ? 'bg-ae-navy text-white' : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-800'"
-                    class="whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold">Activity Log</button>
+                    class="whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold">Activity Log</button>
             @endif
         </div>
 

@@ -401,3 +401,7 @@ button.del-band.del-wait { background: none; }
 .ev-card > b { @apply block truncate font-bold; }
 .ev-card > span { @apply block truncate text-slate-600; }
 .ev-need { border-style: dashed; border-left-style: solid; }
+
+/* the project page: keyboard focus and selected text in the app's blue, not the browser's defaults */
+.pmo-project :focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; border-radius: 6px; }
+.pmo-project ::selection { background: #dbe7ff; color: #0b1f3a; }

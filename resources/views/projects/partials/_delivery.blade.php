@@ -24,7 +24,7 @@
          @if ($errors->hasAny($errorKeys) && $old)
              x-init="f = { ...@js($form($rounds->firstWhere('id', (int) ($old['_delivery'] ?? 0)))), ...@js(\Illuminate\Support\Arr::except($old, ['_token', '_method', '_delivery', 'cabinet_ids'])), cabinet_ids: (@js($old['cabinet_ids'] ?? [])).map(Number) }; $nextTick(() => $dispatch('open-modal', 'project-delivery'))"
          @endif>
-  <div x-show="shown" x-cloak x-transition.opacity class="rounded-2xl border border-slate-200 bg-white p-5">
+  <div x-show="shown" x-cloak x-transition.opacity class="rounded-[14px] border border-slate-200 bg-white p-5">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span class="inline-flex h-6 items-center rounded bg-teal-700 px-2 text-xs font-extrabold tracking-wide text-white">ส่ง</span>
         <h3 class="text-base font-bold text-ae-navy">การจัดส่ง</h3>

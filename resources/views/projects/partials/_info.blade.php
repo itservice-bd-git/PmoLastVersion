@@ -99,10 +99,10 @@
         ]));
 
         // สถานะโครงการ: เริ่ม → ผลิต (the bar) → FAT → ส่งมอบ → ปิดโครงการ, from what the page already has
-        $th = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-        $short = fn ($d) => $d ? $d->day.' '.$th[$d->month - 1].($d->year !== today()->year ? ' '.substr((string) ($d->year + 543), 2) : '') : '';
-        // "17–18 พ.ย.", "30 พ.ย. – 2 ธ.ค.", one day: "17 พ.ย."
-        $range = fn ($a, $b) => ! $b || $b->lte($a) ? $short($a) : ($a->format('Y-m') === $b->format('Y-m') ? $a->day.'–'.$short($b) : $short($a).' – '.$short($b));
+        // dates as the rest of the app writes them (Planning's dd/mm): "17/11", another year "15/02/70"
+        $short = fn ($d) => $d ? $d->format('d/m').($d->year !== today()->year ? '/'.substr((string) ($d->year + 543), 2) : '') : '';
+        // "17–18/11", "30/11 – 02/12", one day: "17/11"
+        $range = fn ($a, $b) => ! $b || $b->lte($a) ? $short($a) : ($a->format('Y-m') === $b->format('Y-m') ? $a->format('d').'–'.$short($b) : $short($a).' – '.$short($b));
         $tlFat = $hdrFat ?? $project->fats()->get()->last();
         $tlRounds = $hdrRounds ?? $project->deliveries()->where('status', '!=', 'draft')->get();
         $tlCan = $hdrCanAppt ?? (auth()->user()->canDispatchWork() && ! $project->isLocked());
@@ -128,20 +128,23 @@
                 $sent->isNotEmpty() ? 'ส่งแล้ว '.$sent->flatMap(fn ($d) => $d->cabinet_ids)->unique()->count().' / '.$s['total'].' ตู้'
                     : $range($tlRounds->min(fn ($d) => $d->firstDay()), $tlRounds->max(fn ($d) => $d->lastDay())).($tlRounds->count() > 1 ? ' · '.$tlRounds->count().' รอบ' : ''), 'show'],
         };
-        // the first one still to come is "ถัดไป"
-        foreach ([&$fatNode, &$dlNode] as &$n) {
-            if (in_array($n[0], ['wait', 'part'], true)) { $n[] = true; break; }
+        // "ถัดไป": whichever still to come is sooner (a delivery may well come before the FAT)
+        $fatSoon = $fatNode[0] === 'wait' ? $tlFat->fat_date : null;
+        $dlSoon = in_array($dlNode[0], ['wait', 'part'], true) ? $nextRound?->firstDay() : null;
+        if ($fatSoon && (! $dlSoon || $fatSoon->lte($dlSoon))) {
+            $fatNode[4] = true;
+        } elseif ($dlSoon) {
+            $dlNode[4] = true;
         }
-        unset($n);
         $closed = $project->status === 'completed';
         $dot = function (string $state, ?string $text = null, bool $next = false) {
             $check = '<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>';
             return match ($state) {
                 'done' => '<span class="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-white">'.$check.'</span>',
-                'late', 'fail' => '<span class="flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-red-600 bg-white text-[11px] font-bold text-red-700">'.e($text ?? '!').'</span>',
+                'late', 'fail' => '<span class="flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-red-600 bg-white text-xs font-bold text-red-700">'.e($text ?? '!').'</span>',
                 'todo' => '<span class="block h-6 w-6 rounded-full border-2 border-dashed border-slate-400 bg-white"></span>',
-                default => $next ? '<span class="flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-blue-600 bg-white text-[11px] font-bold text-blue-700">'.($text ? e($text) : '<span class="block h-2.5 w-2.5 rounded-full bg-blue-600"></span>').'</span>'
-                    : '<span class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-[10px] font-bold text-slate-600">'.e($text ?? '').'</span>',
+                default => $next ? '<span class="flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-blue-600 bg-white text-xs font-bold text-blue-700">'.($text ? e($text) : '<span class="block h-2.5 w-2.5 rounded-full bg-blue-600"></span>').'</span>'
+                    : '<span class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-[11px] font-bold text-slate-600">'.e($text ?? '').'</span>',
             };
         };
         $tone = fn (array $n) => match ($n[0]) { 'done' => 'text-emerald-700', 'late', 'fail' => 'text-red-700', 'todo' => 'text-slate-500', default => ! empty($n[4]) ? 'text-blue-700' : 'text-slate-800' };
@@ -159,7 +162,7 @@
                 <dl class="grid grid-cols-[7.5rem_minmax(0,1fr)] content-start text-sm">
                     @foreach ($facts as [$label, $value, $class])
                         <dt class="border-b border-slate-100 py-2.5 text-slate-600">{{ $label === 'เลขที่ใบสั่งซื้อ (PO)' ? 'เลขที่ PO' : $label }}</dt>
-                        <dd class="min-w-0 break-words border-b border-slate-100 py-2.5 {{ $value === null ? 'text-slate-400' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
+                        <dd class="min-w-0 break-words border-b border-slate-100 py-2.5 {{ $value === null ? 'text-slate-500' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
                     @endforeach
                 </dl>
                 <div class="content-start">
@@ -167,7 +170,7 @@
                     <dl class="grid grid-cols-[7.5rem_minmax(0,1fr)] text-sm">
                         @foreach ($contacts as [$label, $value, $class])
                             <dt class="border-b border-slate-100 py-2.5 text-slate-600">{{ $label === 'ผู้จัดการโครงการ (PM)' ? 'PM' : ($label === 'เบอร์ติดต่อลูกค้า' ? 'เบอร์ลูกค้า' : $label) }}</dt>
-                            <dd class="min-w-0 break-words border-b border-slate-100 py-2.5 {{ $value === null ? 'text-slate-400' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
+                            <dd class="min-w-0 break-words border-b border-slate-100 py-2.5 {{ $value === null ? 'text-slate-500' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
                         @endforeach
                     </dl>
                 </div>
@@ -177,7 +180,7 @@
                     @if ($project->description)
                         <p class="mt-1 whitespace-pre-line text-[15px] leading-relaxed text-slate-800">{{ $project->description }}</p>
                     @else
-                        <p class="mt-1 text-sm text-slate-400">ยังไม่มีคำอธิบาย</p>
+                        <p class="mt-1 text-sm text-slate-500">ยังไม่มีคำอธิบาย @editplan<a href="{{ route('projects.edit', $project) }}" class="font-semibold text-blue-700 hover:underline">เพิ่มที่ แก้ไขโครงการ</a>@endeditplan</p>
                     @endif
                 </div>
             </div>
@@ -192,7 +195,7 @@
                                 @if ($class === 'badge')
                                     <dd class="flex flex-wrap items-center gap-2 border-b border-slate-100 py-2"><x-project-status :status="$project->status" /><x-priority-flag :priority="$project->priority" :always="true" /></dd>
                                 @else
-                                    <dd class="min-w-0 break-words border-b border-slate-100 py-2 {{ $value === null ? 'text-slate-400' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
+                                    <dd class="min-w-0 break-words border-b border-slate-100 py-2 {{ $value === null ? 'text-slate-500' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
                                 @endif
                             @endforeach
                         </dl>
@@ -220,7 +223,7 @@
                         @continue($label === 'พักไว้' && ! $n)
                         <div>
                             <dt class="flex items-center gap-1.5 text-slate-600"><span class="h-2 w-2 rounded-full {{ $color }}"></span>{{ $label }}</dt>
-                            <dd class="text-base font-bold tabular-nums {{ $n ? 'text-slate-900' : 'text-slate-400' }}">{{ $n }} <span class="text-[13px] font-medium text-slate-500">ตู้</span></dd>
+                            <dd class="text-base font-bold tabular-nums {{ $n ? 'text-slate-900' : 'text-slate-500' }}">{{ $n }} <span class="text-[13px] font-medium text-slate-500">ตู้</span></dd>
                         </div>
                     @endforeach
                 </dl>
@@ -238,9 +241,9 @@
                                 @if ($s['timeElapsed'] !== null && $s['progress'] < 100)<span class="absolute -top-1.5 h-[18px] w-0.5 -translate-x-1/2 rounded bg-slate-900" style="left: {{ $s['timeElapsed'] }}%" title="เวลาผ่านไป {{ $s['timeElapsed'] }}%"></span>@endif</span>
                             <span class="mt-1 block text-slate-600">{{ $s['timeElapsed'] !== null && $s['progress'] < 100 ? 'ควรได้ '.$s['timeElapsed'].'% ตามเวลา' : ($s['progress'] >= 100 ? 'ผลิตครบ' : $s['total'].' ตู้') }}</span></span></li>
                     <li class="flex gap-3"><span class="flex flex-col items-center">{!! $dot($fatNode[0], $fatText, ! empty($fatNode[4])) !!}<span class="w-0.5 flex-1 bg-slate-200"></span></span>
-                        <button type="button" {!! $go($fatNode, 'pmo-fat') !!} @disabled(! $fatNode[3]) class="pb-3 text-left text-[13px]"><b class="block {{ $tone($fatNode) }}">{{ $fatNode[1] }}{{ ! empty($fatNode[4]) ? ' · ถัดไป' : '' }}</b><span class="{{ $fatNode[3] && $fatNode[0] === 'todo' ? 'font-semibold text-blue-700' : 'text-slate-600' }} tabular-nums">{{ $fatNode[2] }}</span></button></li>
+                        <button type="button" {!! $go($fatNode, 'pmo-fat') !!} @disabled(! $fatNode[3]) class="-mx-1.5 -mt-1 mb-2 min-h-11 flex-1 rounded-lg px-1.5 pt-1 text-left text-[13px] enabled:hover:bg-slate-50 disabled:cursor-default"><b class="block {{ $tone($fatNode) }}">{{ $fatNode[1] }}{{ ! empty($fatNode[4]) ? ' · ถัดไป' : '' }}</b><span class="{{ $fatNode[3] && $fatNode[0] === 'todo' ? 'font-semibold text-blue-700' : 'text-slate-600' }} tabular-nums">{{ $fatNode[2] }}</span></button></li>
                     <li class="flex gap-3"><span class="flex flex-col items-center">{!! $dot($dlNode[0], $dlText, ! empty($dlNode[4])) !!}<span class="w-0.5 flex-1 bg-slate-200"></span></span>
-                        <button type="button" {!! $go($dlNode, 'pmo-delivery') !!} @disabled(! $dlNode[3]) class="pb-3 text-left text-[13px]"><b class="block {{ $tone($dlNode) }}">{{ $dlNode[1] }}{{ ! empty($dlNode[4]) ? ' · ถัดไป' : '' }}</b><span class="{{ $dlNode[3] ? 'text-blue-700' : 'text-slate-600' }} tabular-nums">{{ $dlNode[2] }}</span></button></li>
+                        <button type="button" {!! $go($dlNode, 'pmo-delivery') !!} @disabled(! $dlNode[3]) class="-mx-1.5 -mt-1 mb-2 min-h-11 flex-1 rounded-lg px-1.5 pt-1 text-left text-[13px] enabled:hover:bg-slate-50 disabled:cursor-default"><b class="block {{ $tone($dlNode) }}">{{ $dlNode[1] }}{{ ! empty($dlNode[4]) ? ' · ถัดไป' : '' }}</b><span class="{{ $dlNode[3] ? 'text-blue-700' : 'text-slate-600' }} tabular-nums">{{ $dlNode[2] }}</span></button></li>
                     <li class="flex gap-3">{!! $dot($closed ? 'done' : 'wait') !!}
                         <span class="text-[13px]"><b class="block {{ $closed ? 'text-emerald-700' : '' }}">ปิดโครงการ</b><span class="text-slate-600">{{ $closed ? 'ปิดแล้ว' : ($project->due_date ? 'ครบกำหนด '.$short($project->due_date) : 'ยังไม่มีวันครบกำหนด') }}</span></span></li>
                 </ol>
@@ -356,7 +359,7 @@
             </div>
         @endforeach
         @if ($quiet->isNotEmpty())
-            <span class="text-xs text-slate-400">ไม่มี: {{ $quiet->implode(' · ') }}</span>
+            <span class="text-xs text-slate-500">ไม่มี: {{ $quiet->implode(' · ') }}</span>
         @endif
     </section>
 
@@ -453,7 +456,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     <template x-for="r in paged()" :key="r.id">
-                        <tr class="cursor-pointer hover:bg-slate-50 hover:shadow-[inset_3px_0_0_#2563eb]" @click="if (! $event.target.closest('a, button')) window.location = r.url">
+                        <tr class="cursor-pointer hover:bg-slate-50" @click="if (! $event.target.closest('a, button')) window.location = r.url">
                             <td class="py-3 pl-5 pr-0 text-right align-top text-sm font-semibold tabular-nums text-slate-400" x-text="r.no"></td>
                             <td class="max-w-[18rem] px-4 py-3" :title="r.mo">
                                 <span class="flex items-center gap-2">
@@ -465,7 +468,7 @@
                             <td class="px-2 py-3">
                                 <div class="flex min-w-[7rem] items-center gap-2">
                                     <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100"><div class="h-1.5 rounded-full bg-emerald-600" :style="'width:' + r.progress + '%'"></div></div>
-                                    <span class="w-9 text-right text-[13px] font-bold tabular-nums" :class="r.progress ? 'text-slate-800' : 'text-slate-400'" x-text="r.progress + '%'"></span>
+                                    <span class="w-9 text-right text-[13px] font-bold tabular-nums" :class="r.progress ? 'text-slate-800' : 'text-slate-500'" x-text="r.progress + '%'"></span>
                                 </div>
                             </td>
                             <td class="hidden max-w-[16rem] px-2 py-3 md:table-cell">
@@ -483,7 +486,7 @@
                             </td>
                             <td class="hidden whitespace-nowrap px-2 py-3 text-right sm:table-cell">
                                 <span x-show="r.lateTasks" class="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-bold text-red-700" x-text="r.lateTasks + ' งาน'"></span>
-                                <span x-show="! r.lateTasks" class="text-xs text-slate-400">ไม่มี</span>
+                                <span x-show="! r.lateTasks" class="text-xs text-slate-500">ไม่มี</span>
                             </td>
                             <td class="whitespace-nowrap py-3 pl-2 pr-5 text-right">
                                 <span class="inline-flex items-center gap-1.5">
@@ -493,7 +496,7 @@
                                     {{-- fixed, from the button's place: the table's scroll box would clip it otherwise --}}
                                     <span x-data="{ menu: false, x: 0, y: 0 }" @click.outside="menu = false" @keydown.escape="menu = false" @scroll.window="menu = false" @resize.window="menu = false">
                                         <button type="button" @click="const b = $el.getBoundingClientRect(); x = b.right; y = b.bottom; menu = ! menu" :aria-expanded="menu" aria-haspopup="true" :aria-label="'เมนูของตู้ ' + r.mo"
-                                                class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800">
+                                                class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800 sm:h-8 sm:w-8">
                                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
                                         </button>
                                         <span x-show="menu" x-cloak x-transition.opacity :style="'left:' + (x - 160) + 'px; top:' + (y + 4) + 'px'" class="fixed z-40 block w-40 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 text-left text-sm shadow-xl">
@@ -507,7 +510,7 @@
                         </tr>
                     </template>
                     <tr x-show="! filtered().length">
-                        <td colspan="7" class="px-4 py-8 text-center text-sm text-slate-400">{{ $overview['cabinetCount'] ? 'ไม่มีตู้ที่ตรงกับตัวกรอง' : 'ยังไม่มีตู้ไฟฟ้าในโครงการนี้' }}</td>
+                        <td colspan="7" class="px-4 py-8 text-center text-sm text-slate-500">{{ $overview['cabinetCount'] ? 'ไม่มีตู้ที่ตรงกับตัวกรอง' : 'ยังไม่มีตู้ไฟฟ้าในโครงการนี้' }}</td>
                     </tr>
                 </tbody>
             </table>

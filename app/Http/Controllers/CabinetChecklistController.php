@@ -203,6 +203,11 @@ class CabinetChecklistController extends Controller
         $data = $request->validate([
             'is_completed' => ['required', 'boolean'],
         ]);
+        try {   // ห่อตู้ / แจ้งเปิดบิล / ส่งมอบ of a cabinet in a sent round: ticked from "งานจัดส่ง" only
+            app(\App\Services\DeliveryChecklist::class)->assertManual($checklist);
+        } catch (\App\Exceptions\PlanningRejected $e) {
+            abort(423, $e->getMessage());
+        }
         $statusBefore = $checklist->subtask->assignment_status;
         // work still waiting for this department: ticking accepts it (Settings > กฎการทำงาน)
         $accepted = $data['is_completed'] && $assignments->acceptByTick($checklist->subtask, $request->user());

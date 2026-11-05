@@ -35,6 +35,7 @@ class AppSetting extends Model
         'department_permissions' => [],       // Settings > สิทธิ์การใช้งาน: department id | 'none' => permission => bool (missing = App\Support\Access defaults)
         'event_statuses' => [],               // Settings > สถานะงาน: renamed / recoloured FAT and delivery states (App\Support\EventStatuses)
         'delivery_reject_reasons' => [],   // Settings > รถขนส่ง: the reasons "ไม่รับงาน" offers (empty = ProjectDelivery::REJECT_REASONS)
+        'delivery_billing_department' => null,   // Settings > รถขนส่ง: the department "แจ้งเปิดบิล" goes to (null = nobody besides PM)
     ];
 
     private static ?array $memo = null;

@@ -350,7 +350,7 @@ class NotificationService
             $todo ? 'delivery_todo' : 'delivery',
             $title,
             $this->deliveryText($d),
-            route('deliveries.index', ['tab' => $d->isOpen() ? 'waiting' : 'scheduled', 'round' => $d->id]),
+            route('deliveries.index', ['round' => $d->id]),
             projectId: $project->id,
             group: $todo ? null : "delivery:{$d->id}",
         ));
@@ -376,7 +376,24 @@ class NotificationService
         ));
     }
 
-    /** "SO-690112 MDB โรงงานบางนา · รอบ 2 · 3 ตู้ · ส่งได้ 18–22/11/2569" */
+    /**
+     * แจ้งเปิดบิล (DeliveryFlow::bill): the billing department chosen at Settings > รถขนส่ง hears it as "ต้องทำ"; none
+     * chosen = nobody besides PM (who hears it from bill()).
+     */
+    public function deliveryBilling(\App\Models\ProjectDelivery $d, User $actor): int
+    {
+        $dept = (int) \App\Models\AppSetting::get('delivery_billing_department');
+        $people = $dept ? User::ofDepartment([$dept])->where('is_active', true)->where('id', '!=', $actor->id)->get() : collect();
+
+        // the project page for whoever may open it; the rest (billing has no work in the project) the notice list
+        [$see, $not] = $people->partition(fn (User $u) => \App\Services\WorkScope::canSeeProject($d->project, $u));
+        $notice = fn (string $url) => new PmoNotice('delivery_todo', 'แจ้งเปิดบิล', $this->deliveryText($d).' · กดรับทราบเมื่อเปิดบิลแล้ว', $url, projectId: $d->project_id);
+
+        return ($see->isEmpty() ? 0 : $this->send($see->values(), $notice(route('projects.show', $d->project).'#delivery')))
+            + ($not->isEmpty() ? 0 : $this->send($not->values(), $notice(route('notifications.index'))));
+    }
+
+    /** "SO-690112 MDB โรงงานบางนา · รอบ 2 · 3 ตู้ · 20/11/2569 · 09:00 น." */
     private function deliveryText(\App\Models\ProjectDelivery $d): string
     {
         return "{$d->project->project_no} {$d->project->project_name} · รอบ {$d->round} · ".$d->cabinetsText().' · '.$d->when();

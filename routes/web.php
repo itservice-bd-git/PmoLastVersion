@@ -118,7 +118,9 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::middleware('perm:edit.delivery')->group(function () {
         $deliveries = \App\Http\Controllers\DeliveryController::class;
         Route::get('deliveries', [$deliveries, 'index'])->name('deliveries.index');
-        Route::post('deliveries/{delivery}/schedule', [$deliveries, 'schedule'])->name('deliveries.schedule');
+        Route::post('deliveries/{delivery}/assign', [$deliveries, 'assign'])->name('deliveries.assign');
+        Route::post('deliveries/{delivery}/pack', [$deliveries, 'pack'])->name('deliveries.pack');
+        Route::post('deliveries/{delivery}/bill', [$deliveries, 'bill'])->name('deliveries.bill');
         Route::post('deliveries/{delivery}/reject', [$deliveries, 'reject'])->name('deliveries.reject');
         Route::post('deliveries/{delivery}/depart', [$deliveries, 'depart'])->name('deliveries.depart');
         Route::post('deliveries/{delivery}/deliver', [$deliveries, 'deliver'])->name('deliveries.deliver');
@@ -127,6 +129,7 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
         Route::get('settings/vehicles', [$vehicles, 'index'])->name('settings.vehicles.index');
         Route::post('settings/vehicles', [$vehicles, 'store'])->name('settings.vehicles.store');
         Route::put('settings/vehicles/reasons', [$vehicles, 'reasons'])->name('settings.vehicles.reasons');
+        Route::put('settings/vehicles/billing', [$vehicles, 'billing'])->name('settings.vehicles.billing');
         Route::put('settings/vehicles/{vehicle}', [$vehicles, 'update'])->name('settings.vehicles.update');
         Route::delete('settings/vehicles/{vehicle}', [$vehicles, 'destroy'])->name('settings.vehicles.destroy');
     });

@@ -14,16 +14,17 @@ class Vehicle extends Model
         return ['is_active' => 'boolean', 'capacity' => 'integer'];
     }
 
+    /** The rounds it went on / is put on (through ProjectDeliveryVehicle). */
     public function deliveries()
     {
-        return $this->hasMany(ProjectDelivery::class);
+        return $this->belongsToMany(ProjectDelivery::class, 'project_delivery_vehicles');
     }
 
-    /** The kinds of vehicle PM may ask for: those of the vehicles in use (plus $keep, a round's kind whose vehicles are gone). */
-    public static function types(?string $keep = null): array
+    /** The kinds of vehicle PM may ask for: those of the vehicles in use (plus $keep, a round's kinds whose vehicles are gone). */
+    public static function types(string|array|null $keep = null): array
     {
         return self::where('is_active', true)->whereNotNull('type')->where('type', '!=', '')->distinct()->orderBy('type')->pluck('type')
-            ->push($keep)->filter()->unique()->sort()->values()->all();
+            ->merge((array) $keep)->filter()->unique()->sort()->values()->all();
     }
 
     /** "6 ล้อเครน · 3กข-1234" */

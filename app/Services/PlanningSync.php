@@ -215,6 +215,7 @@ class PlanningSync
         if ((bool) $item->is_completed === $done) {
             return null;
         }
+        app(DeliveryChecklist::class)->assertManual($item);   // ห่อตู้ / แจ้งเปิดบิล / ส่งมอบ: the delivery round ticks them
         $accepted = $done && $this->assignments->acceptByTick($subtask, $user);   // work still waiting: ticking accepts it (Settings > กฎการทำงาน)
         if (! $accepted && ! $subtask->isChecklistEditableBy($user)) {
             throw new PlanningRejected('ติ๊ก Checklist ได้เฉพาะแผนกที่รับงานแล้ว — ต้อง "รับงาน" ก่อน');

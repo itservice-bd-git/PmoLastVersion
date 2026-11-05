@@ -51,12 +51,12 @@ class EventStatusesTest extends TestCase
     public function test_only_admin_renames_and_recolours_and_only_changes_are_kept(): void
     {
         $this->actingAs($this->pm)->put(route('settings.statuses.events'), $this->input())->assertForbidden();
-        $this->actingAs($this->admin)->get(route('settings.statuses.edit'))->assertOk()->assertSee('สถานะ FAT และการจัดส่ง')->assertSee('รอกำหนดวัน');
+        $this->actingAs($this->admin)->get(route('settings.statuses.edit'))->assertOk()->assertSee('สถานะ FAT และการจัดส่ง')->assertSee('รอจัดรถ');
 
         $this->actingAs($this->admin)->put(route('settings.statuses.events'), $this->input(['delivery' => ['waiting' => ['name' => 'รอเลือกวัน', 'color' => '#FF0000']]]))
             ->assertSessionHasNoErrors();
         $this->assertSame(['delivery' => ['waiting' => ['name' => 'รอเลือกวัน', 'color' => '#ff0000']]], AppSetting::get('event_statuses'));
-        $this->assertSame(['รอเลือกวัน', '#ff0000', 'กำหนดวันแล้ว'], [EventStatuses::name('delivery', 'waiting'), EventStatuses::color('delivery', 'waiting'), EventStatuses::name('delivery', 'booked')]);
+        $this->assertSame(['รอเลือกวัน', '#ff0000', 'จัดรถแล้ว'], [EventStatuses::name('delivery', 'waiting'), EventStatuses::color('delivery', 'waiting'), EventStatuses::name('delivery', 'booked')]);
 
         $this->actingAs($this->admin)->put(route('settings.statuses.events'), $this->input(['fat' => ['passed' => ['name' => '', 'color' => 'green']]]))->assertSessionHasErrors();
         $this->actingAs($this->admin)->put(route('settings.statuses.events'), ['reset' => 1])->assertSessionHasNoErrors();
@@ -67,8 +67,8 @@ class EventStatusesTest extends TestCase
     {
         EventStatuses::save(['fat' => ['scheduled' => ['name' => 'จองแล้ว', 'color' => '#123456']], 'delivery' => ['delivered' => ['name' => 'ลูกค้ารับของแล้ว', 'color' => '#00aa00'], 'external' => ['name' => 'รถรับจ้าง', 'color' => '#7c3aed']]]);
         ProjectFat::forceCreate(['project_id' => $this->project->id, 'round' => 1, 'fat_date' => '2026-11-12', 'status' => 'scheduled']);
-        $d = ProjectDelivery::forceCreate(['project_id' => $this->project->id, 'round' => 1, 'window_from' => '2026-11-15', 'window_to' => '2026-11-15', 'delivery_date' => '2026-11-15',
-            'status' => 'scheduled', 'cabinet_ids' => [$this->cab->id], 'method' => 'external', 'carrier' => '']);
+        $d = ProjectDelivery::forceCreate(['project_id' => $this->project->id, 'round' => 1, 'delivery_date' => '2026-11-15',
+            'status' => 'scheduled', 'cabinet_ids' => [$this->cab->id], 'packed' => [$this->cab->id => '2026-11-14 10:00'], 'billed_at' => '2026-11-14 11:00', 'method' => 'external', 'carrier' => '']);
 
         $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()
             ->assertSee('จองแล้ว')->assertSee('--c: #123456', false)->assertSee('รถรับจ้าง');

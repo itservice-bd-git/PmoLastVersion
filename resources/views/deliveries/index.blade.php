@@ -1,44 +1,44 @@
-{{-- งานจัดส่ง (DeliveryController, Access 'edit.delivery'): the delivery department's rounds by step. Each row's buttons open
-     one of the windows below (pick the day / ไม่รับงาน / ส่งถึงแล้ว), filled from its row; they post to DeliveryFlow's steps. --}}
+{{-- งานจัดส่ง (DeliveryController, Access 'edit.delivery'): the delivery department's rounds by step - the one place it
+     works. PM set the day; here the vehicles and the people go on it (or ไม่รับงาน), each cabinet is packed, แจ้งเปิดบิล,
+     it leaves and arrives. Each step posts to DeliveryFlow, which ticks the cabinets' Checklist to match. --}}
 @php
     $field = 'mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal';
     $btn = 'inline-flex h-9 items-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50';
     $main = 'inline-flex h-9 items-center rounded-lg bg-teal-700 px-3 text-sm font-semibold text-white hover:bg-teal-800';
+    $steps = ['ห่อตู้', 'แจ้งเปิดบิล', 'ออกจากโรงงาน', 'ส่งถึง'];
 @endphp
 <x-app-layout>
     <x-slot name="header">
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h2 class="text-lg font-semibold text-slate-900">งานจัดส่ง</h2>
-            <span class="text-sm text-slate-500">เลือกวันส่งในช่วงที่ PM ให้ · บันทึกออกจากโรงงาน / ส่งถึงแล้ว</span>
+            <span class="text-sm text-slate-500">จัดรถ / คนตามวันที่ PM ลง · ห่อตู้ · แจ้งเปิดบิล · ออกจากโรงงาน · ส่งถึง (Checklist ของตู้ติ๊กให้เอง)</span>
             <a href="{{ route('settings.vehicles.index') }}" class="ml-auto text-sm font-semibold text-teal-700 hover:underline">จัดการรถ / เหตุผลไม่รับงาน</a>
         </div>
     </x-slot>
 
     <div class="mx-auto max-w-6xl space-y-4"
-         x-data="{ r: null, busy: @js((object) $busy), vehicles: @js($vehicles), reasons: @js($reasons), people: @js($people), pick: {}, rej: {}, dlv: {},
-                   wd: ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'],
-                   // the people: the driver, then as many others as PM asked for (more may be added)
-                   openPick(row) { this.r = row; const v = this.vehicles.find((x) => String(x.id) === String(row.vehicle_id));
-                       this.pick = { date: row.date, time: row.time, vehicle_id: row.vehicle_id, driver_name: row.driver_name || (v ? v.driver : ''), carrier: row.carrier,
-                           crew: [...row.crew, ...Array(Math.max(0, (row.crew_size || 1) - 1 - row.crew.length)).fill('')] }; this.$dispatch('open-modal', 'dl-pick'); },
-                   get going() { return [this.pick.driver_name, ...(this.pick.crew || [])].filter((n) => n && n.trim()).length; },
-                   // the vehicles of the kind PM asked for first
-                   get carList() { const t = this.r ? this.r.vehicle_type : ''; return [...this.vehicles].sort((a, b) => (t && b.type === t) - (t && a.type === t)); },
+         x-data="{ r: null, busy: @js((object) $busy), vehicles: @js($vehicles), reasons: @js($reasons), people: @js($people), asg: { rows: [], carrier: '' }, rej: {}, dlv: {},
+                   // จัดรถ / คน: the round's vehicles, or one empty line per kind PM asked for
+                   openAssign(row) {
+                       this.r = row;
+                       const blank = (t) => ({ vehicle_id: '', label: '', driver_name: '', crew: [], want: t || '' });
+                       const rows = row.vehicles.length ? row.vehicles.map((v) => ({ vehicle_id: v.vehicle_id, label: v.label, driver_name: v.driver_name, crew: [...v.crew], want: '' }))
+                           : (row.method === 'company' && row.types.length ? row.types.map(blank) : [blank('')]);
+                       this.asg = { rows, carrier: row.carrier };
+                       this.$dispatch('open-modal', 'dl-assign');
+                   },
+                   car(id) { return this.vehicles.find((v) => String(v.id) === String(id)); },
+                   // the vehicles of the kind the line was opened for first, then the others PM asked for, then the rest
+                   carList(want) { const t = this.r ? this.r.types : []; const rank = (v) => (want && v.type === want ? 2 : (t.includes(v.type) ? 1 : 0)); return [...this.vehicles].sort((a, b) => rank(b) - rank(a)); },
+                   pickCar(row) { const v = this.car(row.vehicle_id); if (v && !row.driver_name) row.driver_name = v.driver; },
+                   takenElsewhere(row) { return row.vehicle_id && this.asg.rows.filter((x) => String(x.vehicle_id) === String(row.vehicle_id)).length > 1; },
+                   busyOn(row) { const v = this.busy[row.vehicle_id] || {}; return (v[this.r.date] || []).filter((x) => x.id !== this.r.id).map((x) => x.label); },
+                   notAsked(row) { const v = this.car(row.vehicle_id); return v && v.type && this.r.types.length && !this.r.types.includes(v.type) ? v.type : ''; },
+                   get going() { return this.asg.rows.flatMap((x) => [x.driver_name, ...x.crew]).filter((n) => n && n.trim()).length; },
+                   get canSave() { return this.r && (this.r.method !== 'company' || this.asg.rows.some((x) => x.vehicle_id)) && !this.asg.rows.some((x) => this.takenElsewhere(x)); },
                    openReject(row) { this.r = row; this.rej = { reason: '', note: '' }; this.$dispatch('open-modal', 'dl-reject'); },
                    openDeliver(row) { this.r = row; const now = new Date(); this.dlv = { date: row.delivered_date || now.toISOString().slice(0, 10), time: row.delivered_time || String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
-                       receiver: row.receiver, doc_no: row.doc_no, issue: row.issue, cabinet_ids: row.cabinets.map((c) => c.id) }; this.$dispatch('open-modal', 'dl-deliver'); },
-                   // the window's days, each: is the vehicle already out on another round that day
-                   days() {
-                       if (!this.r) return [];
-                       const out = [], d = new Date(this.r.from + 'T00:00:00'), end = new Date(this.r.to + 'T00:00:00');
-                       for (; d <= end; d.setDate(d.getDate() + 1)) {
-                           const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-                           out.push({ iso, wd: this.wd[d.getDay()], day: d.getDate(), busy: this.busyOn(iso) });
-                       }
-                       return out;
-                   },
-                   busyOn(iso) { const v = this.busy[this.pick.vehicle_id] || {}; return (v[iso] || []).filter((x) => x.id !== this.r.id).map((x) => x.label); },
-                   get vehicle() { return this.vehicles.find((v) => String(v.id) === String(this.pick.vehicle_id)); } }">
+                       receiver: row.receiver, doc_no: row.doc_no, issue: row.issue, cabinet_ids: row.cabinets.map((c) => c.id) }; this.$dispatch('open-modal', 'dl-deliver'); } }">
 
         @if ($errors->any())
             <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{{ $errors->first() }}</p>
@@ -59,61 +59,112 @@
 
         <section class="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="{{ \App\Http\Controllers\DeliveryController::TABS[$tab] }}">
             @forelse ($rows as $row)
-                <article class="grid gap-x-4 gap-y-2 border-t border-slate-100 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center {{ $round === $row['id'] ? 'bg-amber-50/60 ring-2 ring-inset ring-amber-300' : '' }}"
+                @php
+                    $before = in_array($row['status'], ['waiting', 'rejected', 'scheduled'], true);   // packing / แจ้งเปิดบิล may happen
+                    $packable = $before && ! $row['billed'];
+                @endphp
+                <article class="grid gap-x-4 gap-y-3 border-t border-slate-100 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] {{ $round === $row['id'] ? 'bg-amber-50/60 ring-2 ring-inset ring-amber-300' : '' }}"
                          id="round-{{ $row['id'] }}">
+                    {{-- what goes: each cabinet with its ห่อแล้ว button --}}
                     <div class="min-w-0">
                         <p class="truncate text-sm font-bold text-slate-900">{{ $row['project'] }} <span class="font-semibold text-slate-600">{{ $row['name'] }}</span></p>
                         <p class="text-[13px] text-slate-600">รอบ {{ $row['round'] }} · {{ count($row['cabinets']) }} ตู้{{ $row['site'] ? ' · '.$row['site'] : '' }}</p>
-                        <p class="mt-1 flex flex-wrap gap-1">
-                            @foreach ($row['cabinets'] as $c)<span class="rounded-md border border-slate-300 px-1.5 text-xs font-semibold tabular-nums text-slate-700">{{ $c['name'] }}</span>@endforeach
-                        </p>
+                        <div class="mt-1.5 flex flex-wrap gap-1.5">
+                            @foreach ($row['cabinets'] as $c)
+                                @if ($packable)
+                                    <form method="POST" action="{{ $row['urls']['pack'] }}">
+                                        @csrf
+                                        <input type="hidden" name="cabinet_ids[]" value="{{ $c['id'] }}"><input type="hidden" name="packed" value="{{ $c['packed'] ? 0 : 1 }}">
+                                        <button class="inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold tabular-nums {{ $c['packed'] ? 'border-transparent bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-500 hover:text-emerald-800' }}"
+                                                title="{{ $c['packed'] ? 'ห่อแล้ว '.$c['at'].' · กดเพื่อเอาออก' : 'กดเมื่อห่อตู้นี้เสร็จ' }}" aria-pressed="{{ $c['packed'] ? 'true' : 'false' }}">
+                                            {{ $c['packed'] ? '✓' : '○' }} {{ $c['name'] }}
+                                        </button>
+                                    </form>
+                                @else
+                                    <span class="inline-flex h-7 items-center rounded-full px-2.5 text-xs font-semibold tabular-nums {{ $c['packed'] || in_array($row['status'], ['departed', 'delivered'], true) ? 'bg-emerald-50 text-emerald-800' : 'border border-slate-300 text-slate-700' }}">{{ $c['name'] }}</span>
+                                @endif
+                            @endforeach
+                            @if ($packable && $row['packedCount'] < count($row['cabinets']) - 1)
+                                <form method="POST" action="{{ $row['urls']['pack'] }}">
+                                    @csrf
+                                    @foreach ($row['cabinets'] as $c)@unless ($c['packed'])<input type="hidden" name="cabinet_ids[]" value="{{ $c['id'] }}">@endunless @endforeach
+                                    <input type="hidden" name="packed" value="1">
+                                    <button class="inline-flex h-8 items-center rounded-full px-2.5 text-xs font-semibold text-teal-700 hover:bg-teal-50">ห่อครบทุกตู้</button>
+                                </form>
+                            @endif
+                        </div>
+                        {{-- the four steps --}}
+                        <ol class="mt-2 grid max-w-sm grid-cols-4 gap-1" aria-label="ขั้น: {{ $row['step']['text'] }}">
+                            @foreach ($steps as $i => $label)
+                                @php $fill = $i === 0 ? ($row['step']['n'] >= 1 ? 100 : (int) round($row['packedCount'] / max(1, count($row['cabinets'])) * 100)) : ($row['step']['n'] > $i ? 100 : 0); @endphp
+                                <li class="min-w-0"><span class="block h-1.5 overflow-hidden rounded-full bg-slate-200"><span class="block h-full {{ $row['step']['n'] === $i && $fill < 100 ? 'bg-sky-600' : 'bg-emerald-600' }}" style="width: {{ $fill }}%"></span></span>
+                                    <span class="block truncate text-[11px] {{ $row['step']['n'] === $i ? 'font-bold text-slate-900' : ($row['step']['n'] > $i ? 'text-emerald-700' : 'text-slate-500') }}">{{ $i === 0 ? 'ห่อ '.$row['packedCount'].'/'.count($row['cabinets']) : $label }}</span></li>
+                            @endforeach
+                        </ol>
                     </div>
-                    <div class="min-w-0 text-[13px] text-slate-700">
+                    {{-- on what: PM's request, the vehicles put on it --}}
+                    <div class="min-w-0 space-y-0.5 text-[13px] text-slate-700">
                         @if ($row['request'])<p class="text-slate-500">PM ขอ <span class="font-semibold text-slate-700">{{ $row['request'] }}</span></p>@endif
-                        @if ($row['vehicle_id'] || $row['method'] !== 'company')
-                            <p class="font-semibold">{{ $row['method'] === 'company' ? '🚚 ' : '' }}{{ $row['transport'] }}@if ($row['other'])<span class="ml-1 rounded bg-amber-100 px-1 text-xs font-bold text-amber-800">คนละประเภท</span>@endif</p>
-                        @endif
+                        @forelse ($row['vehicles'] as $v)
+                            <p><span class="font-semibold">{{ $row['method'] === 'company' ? '🚚 ' : '' }}{{ $v['name'] }}</span>
+                                @if ($v['type'] && $row['types'] && ! in_array($v['type'], $row['types'], true))<span class="ml-1 rounded bg-amber-100 px-1 text-xs font-bold text-amber-800">ไม่ได้ขอ</span>@endif
+                                @if ($v['driver_name'] || $v['crew'])<span class="text-slate-500"> · {{ implode(', ', array_filter([$v['driver_name'], ...$v['crew']])) }}</span>@endif</p>
+                        @empty
+                            @if ($row['method'] !== 'company')<p class="font-semibold">{{ $row['transport'] }}</p>@endif
+                        @endforelse
                         @if ($row['people'])<p class="{{ $row['short'] ? 'font-semibold text-amber-800' : 'text-slate-500' }}">👷 {{ $row['people'] }}</p>@endif
                         @if ($row['contact'])<p class="text-slate-500">📞 {{ $row['contact'] }}</p>@endif
                     </div>
+                    {{-- when: PM's day --}}
                     <div class="min-w-0 text-[13px]">
-                        @if (in_array($row['status'], ['waiting', 'rejected'], true))
-                            <p class="font-semibold {{ $row['late'] ? 'text-red-700' : ($row['soon'] ? 'text-orange-700' : 'text-slate-800') }}">ช่วงส่งได้ {{ $row['window'] }}</p>
-                            <p class="{{ $row['late'] ? 'text-red-700' : ($row['soon'] ? 'text-orange-700' : 'text-slate-500') }}">
-                                {{ $row['late'] ? 'เลยช่วงวันแล้ว' : ($row['left'] === 0 ? 'วันนี้วันสุดท้ายที่เลือกได้' : 'เลือกได้อีก '.$row['left'].' วัน') }}
-                            </p>
-                            @if ($row['sender'])<p class="text-slate-500">PM {{ $row['sender'] }}</p>@endif
-                        @elseif ($row['status'] === 'delivered')
+                        @if ($row['status'] === 'delivered')
                             <p class="font-semibold text-slate-800">ส่งถึง {{ $row['delivered'] }}</p>
                             <p class="text-slate-500">ผู้รับ {{ $row['receiver'] }}{{ $row['doc_no'] ? ' · ใบส่งของ '.$row['doc_no'] : '' }}</p>
                         @else
                             <p class="font-semibold {{ $row['late'] ? 'text-orange-700' : 'text-slate-800' }}">{{ $row['when'] }}</p>
-                            <p class="{{ $row['late'] ? 'font-semibold text-orange-700' : 'text-slate-500' }}">{{ $row['late'] ? 'เลยวันส่งแล้ว · ยังไม่ได้บันทึกว่าส่งถึง' : ($row['departed'] ? 'ออก '.$row['departed'] : 'ช่วงที่ PM ให้ '.$row['window']) }}</p>
+                            <p class="{{ $row['late'] ? 'font-semibold text-orange-700' : 'text-slate-500' }}">
+                                {{ $row['late'] ? 'เลยวันส่งแล้ว · ยังไม่ได้บันทึกว่าส่งถึง' : ($row['departed'] ? 'ออก '.$row['departed'] : ($row['left'] === 0 ? 'วันนี้' : ($row['left'] > 0 ? 'อีก '.$row['left'].' วัน' : ''))) }}
+                            </p>
+                            @if ($row['sender'] && in_array($row['status'], ['waiting', 'rejected'], true))<p class="text-slate-500">PM {{ $row['sender'] }}</p>@endif
+                            @if ($row['billed'])<p class="text-slate-500">แจ้งเปิดบิล {{ $row['billed'] }}</p>@endif
                         @endif
                         <span class="st-pill mt-1 inline-block rounded-full px-2 text-xs font-bold" style="--c: {{ $row['color'] }}">{{ $row['state'] }}</span>
                     </div>
-                    <div class="flex flex-wrap gap-2 md:justify-end">
-                        @switch($row['status'])
-                            @case('waiting')
-                                <button type="button" class="{{ $main }}" @click="openPick(@js($row))">เลือกวันส่ง</button>
-                                <button type="button" class="{{ $btn }}" @click="openReject(@js($row))">ไม่รับงาน</button>
-                                @break
-                            @case('scheduled')
+                    {{-- the next step's button first --}}
+                    <div class="flex flex-wrap content-start gap-2 md:max-w-[13rem] md:justify-end">
+                        @if ($row['status'] === 'waiting')
+                            @if ($row['method'] === 'pickup')
+                                <form method="POST" action="{{ $row['urls']['assign'] }}">@csrf<button class="{{ $main }}">รับงาน</button></form>
+                            @else
+                                <button type="button" class="{{ $main }}" @click="openAssign(@js($row))">จัดรถ / คน</button>
+                            @endif
+                            <button type="button" class="{{ $btn }}" @click="openReject(@js($row))">ไม่รับงาน</button>
+                        @endif
+                        @if ($before && $row['status'] !== 'rejected' && $row['allPacked'] && ! $row['billed'])
+                            <form method="POST" action="{{ $row['urls']['bill'] }}">@csrf<button class="{{ $row['status'] === 'scheduled' ? $main : $btn }}">แจ้งเปิดบิล</button></form>
+                        @endif
+                        @if ($row['status'] === 'scheduled')
+                            @if ($row['billed'])
                                 <form method="POST" action="{{ $row['urls']['depart'] }}">@csrf<button class="{{ $main }}">{{ \App\Models\ProjectDelivery::statusName('departed') }}</button></form>
-                                <button type="button" class="{{ $btn }}" @click="openDeliver(@js($row))">{{ \App\Models\ProjectDelivery::statusName('delivered') }}</button>
-                                <button type="button" class="{{ $btn }}" @click="openPick(@js($row))">เลื่อน / แก้</button>
-                                @break
-                            @case('departed')
-                                <button type="button" class="{{ $main }}" @click="openDeliver(@js($row))">{{ \App\Models\ProjectDelivery::statusName('delivered') }}</button>
-                                <form method="POST" action="{{ $row['urls']['back'] }}">@csrf<button class="{{ $btn }}">ย้อนสถานะ</button></form>
-                                @break
-                            @case('delivered')
-                                <button type="button" class="{{ $btn }}" @click="openDeliver(@js($row))">แก้</button>
-                                <form method="POST" action="{{ $row['urls']['back'] }}">@csrf<button class="{{ $btn }}">ย้อนสถานะ</button></form>
-                                @break
-                            @default
-                                <span class="text-sm text-slate-500">รอ PM แก้แล้วส่งมาอีกครั้ง</span>
-                        @endswitch
+                            @elseif (! $row['allPacked'])
+                                <span class="inline-flex h-9 items-center rounded-lg border border-dashed border-slate-300 px-3 text-sm text-slate-500">ห่อให้ครบก่อน ({{ $row['packedCount'] }}/{{ count($row['cabinets']) }})</span>
+                            @endif
+                            @if ($row['method'] !== 'pickup')
+                                <button type="button" class="{{ $btn }}" @click="openAssign(@js($row))">แก้รถ / คน</button>
+                            @endif
+                        @endif
+                        @if ($row['status'] === 'departed')
+                            <button type="button" class="{{ $main }}" @click="openDeliver(@js($row))">{{ \App\Models\ProjectDelivery::statusName('delivered') }}</button>
+                        @endif
+                        @if ($row['status'] === 'delivered')
+                            <button type="button" class="{{ $btn }}" @click="openDeliver(@js($row))">แก้</button>
+                        @endif
+                        @if (in_array($row['status'], ['departed', 'delivered'], true) || ($before && $row['billed']))
+                            <form method="POST" action="{{ $row['urls']['back'] }}">@csrf<button class="{{ $btn }}" title="ย้อนจาก “{{ $row['step']['text'] }}” หนึ่งขั้น · Checklist ที่ติ๊กไว้จะเอาออกด้วย">ย้อนขั้น</button></form>
+                        @endif
+                        @if ($row['status'] === 'rejected')
+                            <span class="text-sm text-slate-500">รอ PM เลือกวันใหม่แล้วส่งมาอีกครั้ง</span>
+                        @endif
                     </div>
                     @if ($row['rejected'] || $row['issue'] || $row['note'])
                         <p class="text-[13px] md:col-span-4 {{ $row['rejected'] || $row['issue'] ? 'rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-800' : 'text-slate-600' }}">
@@ -123,96 +174,84 @@
                 </article>
             @empty
                 <p class="px-4 py-10 text-center text-sm text-slate-500">
-                    {{ ['waiting' => 'ไม่มีรอบที่รอกำหนดวัน', 'today' => 'วันนี้ไม่มีรอบส่ง', 'scheduled' => 'ยังไม่มีรอบที่กำหนดวันแล้ว', 'departed' => 'ไม่มีรถที่ออกจากโรงงานอยู่',
+                    {{ ['waiting' => 'ไม่มีรอบที่รอจัดรถ', 'today' => 'วันนี้ไม่มีรอบส่ง', 'scheduled' => 'ยังไม่มีรอบที่จัดรถแล้ว', 'departed' => 'ไม่มีรถที่ออกจากโรงงานอยู่',
                         'delivered' => 'ยังไม่มีรอบที่ส่งถึงใน 30 วันนี้', 'rejected' => 'ไม่มีรอบที่ส่งกลับให้ PM'][$tab] }}
                 </p>
             @endforelse
         </section>
 
-        {{-- pick the day (and the time, the driver, maybe another vehicle) --}}
-        <x-modal name="dl-pick" maxWidth="lg">
+        {{-- จัดรถ / คน: as many vehicles as it takes, each with its driver and the people who go on it; the day is PM's --}}
+        <x-modal name="dl-assign" maxWidth="2xl">
             <template x-if="r">
-                <form method="POST" :action="r.urls.schedule" class="space-y-4 p-6">
+                <form method="POST" :action="r.urls.assign" class="space-y-4 p-6">
                     @csrf
                     <div>
-                        <h3 class="text-base font-semibold text-slate-900" x-text="(r.date ? 'เลื่อน / แก้วันส่ง' : 'เลือกวันส่ง') + ' · ' + r.project + ' รอบ ' + r.round"></h3>
+                        <h3 class="text-base font-semibold text-slate-900" x-text="(r.vehicles.length ? 'แก้รถ / คน' : 'จัดรถ / คน') + ' · ' + r.project + ' รอบ ' + r.round"></h3>
                         <p class="mt-1 text-sm text-slate-600" x-text="r.cabinets.length + ' ตู้ (' + r.cabinets.map((c) => c.name).join(', ') + ')' + (r.site ? ' · ' + r.site : '')"></p>
-                        <p class="text-sm font-semibold text-teal-800" x-text="(r.sender ? 'PM ' + r.sender + ' ' : '') + 'ให้ส่งได้ ' + r.window"></p>
+                        <p class="mt-1 flex flex-wrap gap-1.5 text-sm">
+                            <span class="rounded-md bg-teal-50 px-2 font-semibold text-teal-900" x-text="'ส่ง ' + r.when + ' (PM กำหนด)'"></span>
+                            <span x-show="r.request" class="rounded-md bg-slate-100 px-2 text-slate-700" x-text="'PM ขอ ' + r.request"></span>
+                        </p>
                     </div>
-                    <fieldset>
-                        <legend class="text-sm font-semibold text-slate-800">วันส่ง *</legend>
-                        <input type="hidden" name="delivery_date" :value="pick.date">
-                        <div class="mt-1.5 grid grid-cols-7 gap-1 text-center">
-                            <template x-for="d in days()" :key="d.iso">
-                                <button type="button" @click="pick.date = d.iso" :aria-pressed="pick.date === d.iso"
-                                        class="rounded-lg py-1.5 text-sm font-semibold leading-tight"
-                                        :class="pick.date === d.iso ? 'bg-teal-700 text-white' : 'bg-teal-50 text-teal-900 hover:bg-teal-100'"
-                                        :style="d.busy.length ? 'box-shadow: inset 0 -3px 0 #f59e0b' : ''" :title="d.busy.length ? 'รถคันนี้มีรอบอื่น: ' + d.busy.join(', ') : ''">
-                                    <span class="block text-[11px] font-normal" x-text="d.wd"></span><span x-text="d.day"></span>
-                                </button>
-                            </template>
-                        </div>
-                        <p class="mt-1.5 text-xs text-slate-500">เลือกได้เฉพาะวันในช่วงที่ PM ให้ · ขีดส้ม = รถคันนี้มีรอบอื่นวันนั้น (เตือนเท่านั้น)</p>
-                        <p x-show="pick.date && busyOn(pick.date).length" class="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status"
-                           x-text="'วันที่เลือก รถคันนี้มีรอบอื่นแล้ว: ' + busyOn(pick.date).join(', ')"></p>
-                    </fieldset>
-                    {{-- the vehicle (those of the kind PM asked for first; another kind is allowed, PM hears it) --}}
-                    <div x-show="r.method === 'company'">
-                        <label class="block text-sm font-semibold text-slate-800">รถ * <span x-show="r.vehicle_type" class="font-normal text-slate-500" x-text="'· PM ขอ ' + r.vehicle_type"></span>
-                            <select name="vehicle_id" x-model="pick.vehicle_id" :disabled="r.method !== 'company'" :required="r.method === 'company'" class="{{ $field }}"
-                                    @change="const was = vehicles.find((v) => String(v.id) === String(r.vehicle_id)); if (!pick.driver_name || pick.driver_name === (was && was.driver) || pick.driver_name === r.driver_name) pick.driver_name = vehicle ? vehicle.driver : ''">
-                                <option value="">เลือกรถ</option>
-                                <template x-for="v in carList" :key="v.id">
-                                    <option :value="String(v.id)" :selected="String(v.id) === String(pick.vehicle_id)"
-                                            x-text="v.label + (v.type && v.type !== v.name ? ' · ' + v.type : '') + (v.capacity ? ' · ~' + v.capacity + ' ตู้' : '') + (v.equipment ? ' · ' + v.equipment : '') + (r.vehicle_type && v.type !== r.vehicle_type ? ' (คนละประเภท)' : '') + (v.active ? '' : ' (เลิกใช้)')"></option>
-                                </template>
-                            </select>
-                        </label>
-                        <p x-show="vehicle && r.vehicle_type && vehicle.type && vehicle.type !== r.vehicle_type" class="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status"
-                           x-text="vehicle ? 'PM ขอ ' + r.vehicle_type + ' แต่คันนี้เป็น ' + vehicle.type + ' · บันทึกได้ PM จะได้แจ้งเตือน' : ''"></p>
-                    </div>
-                    <label x-show="r.method === 'external'" class="block text-sm font-semibold text-slate-800">บริษัทขนส่ง / ทะเบียน
-                        <input type="text" name="carrier" x-model="pick.carrier" :disabled="r.method !== 'external'" maxlength="150" class="{{ $field }}">
+                    <label x-show="r.method === 'external'" class="block text-sm font-semibold text-slate-800">บริษัทขนส่ง
+                        <input type="text" name="carrier" x-model="asg.carrier" :disabled="r.method !== 'external'" maxlength="150" class="{{ $field }}">
                     </label>
-                    {{-- the people who go: typed (names typed before are offered) --}}
-                    <fieldset x-show="r.method !== 'pickup'">
-                        <legend class="flex w-full items-center text-sm font-semibold text-slate-800">คนที่ไปส่ง
-                            <span class="ml-2 text-xs font-bold tabular-nums" :class="r.crew_size && going < r.crew_size ? 'text-amber-700' : 'text-slate-500'"
-                                  x-text="r.crew_size ? going + '/' + r.crew_size + ' คน' + (going < r.crew_size ? ' · ยังไม่ครบที่ PM ขอ' : '') : going + ' คน'"></span></legend>
-                        <div class="mt-1.5 space-y-2">
-                            <label class="flex items-center gap-2 text-sm text-slate-600"><span class="w-14 shrink-0">คนขับ</span>
-                                <input type="text" name="driver_name" x-model="pick.driver_name" list="dl-people" maxlength="100" autocomplete="off" :disabled="r.method === 'pickup'"
-                                       :placeholder="vehicle && vehicle.driver ? vehicle.driver + ' (ประจำรถ)' : 'ชื่อคนขับ'" class="block h-10 w-full rounded-lg border-slate-300 text-sm"></label>
-                            <template x-for="(n, i) in pick.crew" :key="i">
-                                <label class="flex items-center gap-2 text-sm text-slate-600"><span class="w-14 shrink-0" x-text="'คนที่ ' + (i + 2)"></span>
-                                    <input type="text" name="crew[]" x-model="pick.crew[i]" list="dl-people" maxlength="100" autocomplete="off" :disabled="r.method === 'pickup'" placeholder="ชื่อ" class="block h-10 w-full rounded-lg border-slate-300 text-sm">
-                                    <button type="button" @click="pick.crew.splice(i, 1)" class="h-10 shrink-0 rounded-lg px-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" :aria-label="'เอาคนที่ ' + (i + 2) + ' ออก'">✕</button>
-                                </label>
-                            </template>
-                        </div>
-                        <button type="button" @click="pick.crew.push('')" class="mt-1.5 text-sm font-semibold text-teal-700 hover:underline">+ เพิ่มคน</button>
-                    </fieldset>
+                    <div class="space-y-3">
+                        <template x-for="(v, i) in asg.rows" :key="i">
+                            <fieldset class="rounded-xl border border-slate-200 p-3">
+                                <legend class="flex w-full items-center gap-2 px-1 text-sm font-semibold text-slate-800">
+                                    <span x-text="'คันที่ ' + (i + 1)"></span>
+                                    <span x-show="v.want" class="text-xs font-normal text-slate-500" x-text="'(PM ขอ ' + v.want + ')'"></span>
+                                </legend>
+                                <div class="grid gap-2 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto]">
+                                    <select x-show="r.method === 'company'" :name="'vehicles[' + i + '][vehicle_id]'" x-model="v.vehicle_id" @change="pickCar(v)" :disabled="r.method !== 'company'"
+                                            class="block h-10 w-full rounded-lg border-slate-300 text-sm" :aria-label="'รถคันที่ ' + (i + 1)">
+                                        <option value="">เลือกรถ</option>
+                                        <template x-for="c in carList(v.want)" :key="c.id">
+                                            <option :value="String(c.id)" :selected="String(c.id) === String(v.vehicle_id)"
+                                                    x-text="c.label + (c.type && c.type !== c.name ? ' · ' + c.type : '') + (c.capacity ? ' · ~' + c.capacity + ' ตู้' : '') + (c.equipment ? ' · ' + c.equipment : '') + (r.types.length && c.type && !r.types.includes(c.type) ? ' (ไม่ได้ขอ)' : '') + (c.active ? '' : ' (เลิกใช้)')"></option>
+                                        </template>
+                                    </select>
+                                    <input x-show="r.method === 'external'" type="text" :name="'vehicles[' + i + '][label]'" x-model="v.label" :disabled="r.method !== 'external'" maxlength="150" placeholder="รถ / ทะเบียน" class="block h-10 w-full rounded-lg border-slate-300 text-sm">
+                                    <input type="text" :name="'vehicles[' + i + '][driver_name]'" x-model="v.driver_name" list="dl-people" maxlength="100" autocomplete="off"
+                                           :placeholder="car(v.vehicle_id) && car(v.vehicle_id).driver ? car(v.vehicle_id).driver + ' (ประจำรถ)' : 'คนขับ'" class="block h-10 w-full rounded-lg border-slate-300 text-sm" :aria-label="'คนขับคันที่ ' + (i + 1)">
+                                    <button type="button" @click="asg.rows.splice(i, 1)" x-show="asg.rows.length > 1" class="h-10 rounded-lg px-2 text-sm text-slate-400 hover:bg-slate-100 hover:text-red-700" :aria-label="'เอาคันที่ ' + (i + 1) + ' ออก'">✕</button>
+                                </div>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <span class="text-xs text-slate-500">ไปด้วย</span>
+                                    <template x-for="(n, j) in v.crew" :key="j">
+                                        <span class="inline-flex items-center">
+                                            <input type="text" :name="'vehicles[' + i + '][crew][]'" x-model="v.crew[j]" list="dl-people" maxlength="100" autocomplete="off" placeholder="ชื่อ" class="block h-9 w-32 rounded-lg border-slate-300 text-sm">
+                                            <button type="button" @click="v.crew.splice(j, 1)" class="h-9 px-1.5 text-slate-400 hover:text-slate-700" aria-label="เอาคนนี้ออก">✕</button>
+                                        </span>
+                                    </template>
+                                    <button type="button" @click="v.crew.push('')" class="text-sm font-semibold text-teal-700 hover:underline">+ เพิ่มคน</button>
+                                </div>
+                                <p x-show="takenElsewhere(v)" class="mt-2 rounded-lg bg-red-50 px-3 py-1.5 text-sm text-red-800">รถคันนี้ใส่ซ้ำ</p>
+                                <p x-show="v.vehicle_id && busyOn(v).length" class="mt-2 rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900" x-text="'วันนั้นรถคันนี้มีงาน ' + busyOn(v).join(', ') + ' แล้ว (เตือนเท่านั้น)'"></p>
+                                <p x-show="notAsked(v)" class="mt-2 rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900" x-text="'PM ไม่ได้ขอ ' + notAsked(v) + ' · บันทึกได้ PM จะได้แจ้งเตือน'"></p>
+                            </fieldset>
+                        </template>
+                    </div>
+                    <button type="button" @click="asg.rows.push({ vehicle_id: '', label: '', driver_name: '', crew: [], want: '' })" class="text-sm font-semibold text-teal-700 hover:underline">+ เพิ่มรถ</button>
                     <datalist id="dl-people"><template x-for="n in people" :key="n"><option :value="n"></option></template></datalist>
-                    <label class="block w-40 text-sm font-semibold text-slate-800">เวลาถึงหน้างาน
-                        <input type="text" name="delivery_time" x-model="pick.time" placeholder="เช่น 09:00" inputmode="numeric" maxlength="5" autocomplete="off"
-                               x-init="window.flatpickr($el, { enableTime: true, noCalendar: true, dateFormat: 'H:i', time_24hr: true, allowInput: true, defaultHour: 9, defaultDate: pick.time || null, onChange: (d, v) => { pick.time = v; } })"
-                               class="{{ $field }} tabular-nums">
-                    </label>
+                    <p class="text-sm font-semibold tabular-nums" :class="r.crew_size && going < r.crew_size ? 'text-amber-700' : 'text-slate-600'"
+                       x-text="asg.rows.length + ' คัน · ' + going + (r.crew_size ? '/' + r.crew_size : '') + ' คน' + (r.crew_size && going < r.crew_size ? ' · น้อยกว่าที่ PM ขอ (บันทึกได้ PM จะได้แจ้งเตือน)' : '')"></p>
                     <div class="flex items-center gap-2 pt-1">
-                        <button type="button" x-show="r.status === 'waiting'" @click="$dispatch('close-modal', 'dl-pick'); openReject(r)" class="h-10 rounded-lg px-3 text-sm font-semibold text-red-700 hover:bg-red-50">ไม่รับงาน</button>
-                        <button type="button" @click="$dispatch('close-modal', 'dl-pick')" class="ml-auto h-10 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ปิด</button>
-                        <button type="submit" :disabled="!pick.date" class="h-10 rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50">บันทึกวันส่ง</button>
+                        <button type="button" x-show="r.status === 'waiting'" @click="$dispatch('close-modal', 'dl-assign'); openReject(r)" class="h-10 rounded-lg px-3 text-sm font-semibold text-red-700 hover:bg-red-50">ไม่รับงาน</button>
+                        <button type="button" @click="$dispatch('close-modal', 'dl-assign')" class="ml-auto h-10 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ปิด</button>
+                        <button type="submit" :disabled="!canSave" class="h-10 rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50">บันทึก</button>
                     </div>
                 </form>
             </template>
         </x-modal>
 
-        {{-- ไม่รับงาน: a reason (Settings > รถขนส่ง) or "อื่น ๆ" with its words; back to PM --}}
+        {{-- ไม่รับงาน: a reason (Settings > รถขนส่ง) or "อื่น ๆ" with its words; back to PM for another day --}}
         <x-modal name="dl-reject" maxWidth="lg">
             <template x-if="r">
                 <form method="POST" :action="r.urls.reject" class="space-y-4 p-6">
                     @csrf
-                    <h3 class="text-base font-semibold text-slate-900" x-text="'ไม่รับงาน · ' + r.project + ' รอบ ' + r.round"></h3>
+                    <h3 class="text-base font-semibold text-slate-900" x-text="'ไม่รับงาน · ' + r.project + ' รอบ ' + r.round + ' · ' + r.when"></h3>
                     <fieldset>
                         <legend class="text-sm font-semibold text-slate-800">เหตุผล *</legend>
                         <div class="mt-1.5 flex flex-wrap gap-2">
@@ -224,9 +263,9 @@
                         </div>
                     </fieldset>
                     <label class="block text-sm font-semibold text-slate-800">รายละเอียด <span x-show="rej.reason === 'อื่น ๆ'">*</span>
-                        <textarea name="note" x-model="rej.note" rows="3" maxlength="500" :required="rej.reason === 'อื่น ๆ'" placeholder="เช่น คิวรถเต็มถึง 27/11 ขอเลื่อนเป็น 28–29/11" class="mt-1 block w-full rounded-lg border-slate-300 text-sm font-normal"></textarea>
+                        <textarea name="note" x-model="rej.note" rows="3" maxlength="500" :required="rej.reason === 'อื่น ๆ'" placeholder="เช่น 10 ล้อเข้าศูนย์ 17–18/11 ว่างอีกที 19/11" class="mt-1 block w-full rounded-lg border-slate-300 text-sm font-normal"></textarea>
                     </label>
-                    <p class="text-xs text-slate-500">ส่งกลับให้ PM พร้อมเหตุผล · ไม่รับงานได้เฉพาะรอบที่ยังไม่ได้เลือกวัน</p>
+                    <p class="text-xs text-slate-500">ส่งกลับให้ PM เลือกวันใหม่ · ไม่รับงานได้เฉพาะรอบที่ยังไม่ได้จัดรถ</p>
                     <div class="flex items-center gap-2 pt-1">
                         <button type="button" @click="$dispatch('close-modal', 'dl-reject')" class="ml-auto h-10 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ยกเลิก</button>
                         <button type="submit" :disabled="!rej.reason || (rej.reason === 'อื่น ๆ' && !rej.note.trim())" class="h-10 rounded-lg bg-red-700 px-5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">ส่งกลับให้ PM</button>

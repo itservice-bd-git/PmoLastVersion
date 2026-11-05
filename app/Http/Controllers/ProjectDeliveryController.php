@@ -13,8 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * การจัดส่ง on the project page (and Planning's project window): Admin / PM keep a round as a draft or send it to the
- * delivery department (which cabinets, the kind of vehicle and how many people, the window of days it may go in, where),
- * fix it when it is sent back, or take it back. The steps after
+ * delivery department (which cabinets, the day it goes, the kinds of vehicle and how many people, where), move its day,
+ * pick another day when it is sent back, or take it back. The steps after
  * that are the delivery department's (DeliveryController). A cabinet belongs to one round at a time; a round that arrives
  * keeps only the cabinets that did, the rest are free to book again.
  */
@@ -80,7 +80,7 @@ class ProjectDeliveryController extends Controller
                 return ['id' => $c->id, 'name' => $c->mo_no ?: $c->cabinet_name, 'progress' => (int) round((float) $c->progress),
                     'round' => $in?->id, 'where' => $in ? ($in->status === ProjectDelivery::DELIVERED ? 'ส่งแล้ว '.$in->delivered_at?->format('d/m') : 'อยู่ในรอบที่ '.$in->round) : null];
             })->values()->all(),
-            'vehicles' => self::vehicles($rounds->pluck('vehicle_id')->filter()->all()),
+            'vehicles' => self::vehicles(),
             'types' => Vehicle::types(),
         ];
     }
@@ -110,13 +110,14 @@ class ProjectDeliveryController extends Controller
             'id' => $d?->id, 'status' => $d?->status ?? ProjectDelivery::WAITING, 'draft' => $d?->status === ProjectDelivery::DRAFT, 'all' => $d && ! $d->cabinet_ids,
             'url' => $d ? route('project-deliveries.update', $d) : route('projects.deliveries.store', $project), 'verb' => $d ? 'PUT' : 'POST',
             'title' => $d ? ($d->status === ProjectDelivery::DRAFT ? 'ร่างการจัดส่งรอบที่ ' : 'แก้การจัดส่งรอบที่ ').$d->round : 'นัดส่งรอบที่ '.$next,
-            'window_from' => $d?->window_from->format('Y-m-d') ?? '', 'window_to' => $d?->window_to->format('Y-m-d') ?? '',
+            'delivery_date' => $d?->delivery_date?->format('Y-m-d') ?? '', 'delivery_time' => (string) $d?->delivery_time, 'was_date' => $d?->delivery_date?->format('Y-m-d') ?? '',
             'cabinet_ids' => $cabinets, 'method' => $d?->method ?? ProjectDelivery::COMPANY,
-            'vehicle_type' => (string) $d?->vehicle_type, 'crew_size' => $d?->crew_size ? (string) $d->crew_size : '', 'carrier' => (string) $d?->carrier,
-            'types' => Vehicle::types($d?->vehicle_type),
+            'vehicle_types' => $d?->vehicle_types ?? [], 'crew_size' => $d?->crew_size ? (string) $d->crew_size : '', 'carrier' => (string) $d?->carrier,
+            'types' => Vehicle::types($d?->vehicle_types ?? []),
             'site' => (string) $last?->site, 'contact_name' => (string) $last?->contact_name, 'contact_phone' => (string) $last?->contact_phone, 'note' => (string) $d?->note,
-            // what the delivery department did with it: the picked day, or why it was sent back
-            'picked' => $d?->delivery_date ? $d->when().' · '.($d->transport() ?? '-').($d->people() ? ' · '.$d->peopleText() : '') : '', 'picked_date' => $d?->delivery_date?->format('Y-m-d') ?? '',
+            // what the delivery department did with it: the vehicles and people put on it, or why it was sent back
+            'picked' => $d && $d->status === ProjectDelivery::SCHEDULED ? ($d->transport() ?? '-').($d->people() ? ' · '.$d->peopleText() : '') : '',
+            'billed' => (bool) $d?->billed_at,
             'rejected' => $d?->status === ProjectDelivery::REJECTED ? ['reason' => $d->rejected_reason, 'note' => (string) $d->rejected_note,
                 'by' => (string) $d->rejecter?->name, 'at' => $d->rejected_at?->format('d/m H:i')] : null,
             'locked' => $d && in_array($d->status, [ProjectDelivery::DEPARTED, ProjectDelivery::DELIVERED], true),
@@ -137,30 +138,30 @@ class ProjectDeliveryController extends Controller
 
     /**
      * The fields PM sets. A draft may have no cabinets (= every cabinet) and no kind of vehicle yet; sending needs both
-     * (the kind only once Settings > รถขนส่ง has any).
+     * (the kinds only once Settings > รถขนส่ง has any).
      */
     public static function rules(Project $project, ?ProjectDelivery $current, bool $send, ?string $method): array
     {
-        $types = Vehicle::types($current?->vehicle_type);
+        $types = Vehicle::types($current?->vehicle_types ?? []);
 
         return [
-            'window_from' => ['required', 'date'],
-            'window_to' => ['required', 'date', 'after_or_equal:window_from'],
+            'delivery_date' => ['required', 'date'],
+            'delivery_time' => ['nullable', 'date_format:H:i'],
             'cabinet_ids' => [$send ? 'required' : 'nullable', 'array', $send ? 'min:1' : 'min:0'],
             'cabinet_ids.*' => ['integer', Rule::exists('cabinets', 'id')->where('project_id', $project->id)->whereNull('deleted_at')],
             'method' => ['required', Rule::in(array_keys(ProjectDelivery::METHOD_LABELS))],
-            'vehicle_type' => [Rule::requiredIf($send && $method === ProjectDelivery::COMPANY && $types), 'nullable', 'string', Rule::in($types)],
+            'vehicle_types' => [Rule::requiredIf($send && $method === ProjectDelivery::COMPANY && $types), 'nullable', 'array', 'max:10'],
+            'vehicle_types.*' => ['string', Rule::in($types)],
             'crew_size' => ['nullable', 'integer', 'min:1', 'max:20'],
         ];
     }
 
     public const MESSAGES = [
-        'window_from.required' => 'เลือกวันแรกที่ส่งได้',
-        'window_to.required' => 'เลือกวันสุดท้ายที่ส่งได้',
-        'window_to.after_or_equal' => 'วันสุดท้ายที่ส่งได้ต้องไม่ก่อนวันแรก',
+        'delivery_date.required' => 'เลือกวันส่ง',
+        'delivery_time.date_format' => 'ใส่เวลาแบบ 09:00',
         'cabinet_ids.required' => 'เลือกตู้ที่ส่งรอบนี้อย่างน้อย 1 ตู้',
-        'vehicle_type.required' => 'เลือกประเภทรถ',
-        'vehicle_type.in' => 'ไม่มีรถประเภทนี้ · เพิ่มได้ที่ ตั้งค่า › รถขนส่ง',
+        'vehicle_types.required' => 'เลือกประเภทรถอย่างน้อย 1 แบบ',
+        'vehicle_types.*.in' => 'ไม่มีรถประเภทนี้ · เพิ่มได้ที่ ตั้งค่า › รถขนส่ง',
         'crew_size.min' => 'จำนวนคนอย่างน้อย 1 คน',
         'crew_size.max' => 'จำนวนคนไม่เกิน 20 คน',
     ];
@@ -189,14 +190,14 @@ class ProjectDeliveryController extends Controller
         $text = fn (string $k) => trim((string) ($data[$k] ?? '')) ?: null;
         $company = $method === ProjectDelivery::COMPANY;
 
-        // the vehicle and the people are the delivery department's; a round taken off the company's vehicles drops them
+        // the vehicles and the people are the delivery department's (DeliveryFlow::assign)
         return [
-            'window_from' => $data['window_from'], 'window_to' => $data['window_to'],
+            'delivery_date' => $data['delivery_date'], 'delivery_time' => $text('delivery_time'),
             'cabinet_ids' => $ids,
             'method' => $method,
-            'vehicle_type' => $company ? $text('vehicle_type') : null,
-            'crew_size' => $company && ! empty($data['crew_size']) ? (int) $data['crew_size'] : null,
-        ] + ($company ? [] : ['vehicle_id' => null]) + ($method === ProjectDelivery::PICKUP ? ['driver_name' => null, 'crew' => null] : []) + [
+            'vehicle_types' => $company ? (array_values(array_unique(array_filter($data['vehicle_types'] ?? []))) ?: null) : null,
+            'crew_size' => $method !== ProjectDelivery::PICKUP && ! empty($data['crew_size']) ? (int) $data['crew_size'] : null,
+        ] + [
             'carrier' => $method === ProjectDelivery::EXTERNAL ? $text('carrier') : null,
             'site' => $text('site'), 'contact_name' => $text('contact_name'), 'contact_phone' => $text('contact_phone'), 'note' => $text('note'),
         ];

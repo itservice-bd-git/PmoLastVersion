@@ -315,7 +315,7 @@ class ProjectController extends Controller
         if (! $request->user()->canDispatchWork()) {
             return [];
         }
-        $delivery = ['delivery_to', 'delivery_vehicle_type', 'delivery_crew_size', 'delivery_carrier', 'delivery_site', 'delivery_contact_name', 'delivery_contact_phone', 'delivery_note'];
+        $delivery = ['delivery_time', 'delivery_vehicle_types', 'delivery_crew_size', 'delivery_carrier', 'delivery_site', 'delivery_contact_name', 'delivery_contact_phone', 'delivery_note'];
 
         return $request->validate([
             'fat_date' => ['nullable', 'date', 'required_with:fat_end_date,fat_time,fat_note'],
@@ -323,10 +323,11 @@ class ProjectController extends Controller
             'fat_time' => ['nullable', 'date_format:H:i'],
             'fat_status' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(\App\Models\ProjectFat::STATUS_LABELS))],
             'fat_note' => ['nullable', 'string', 'max:500'],
-            'delivery_from' => ['nullable', 'date', 'required_with:'.implode(',', $delivery)],
-            'delivery_to' => ['nullable', 'date', 'required_with:delivery_from', 'after_or_equal:delivery_from'],
+            'delivery_date' => ['nullable', 'date', 'required_with:'.implode(',', $delivery)],
+            'delivery_time' => ['nullable', 'date_format:H:i'],
             'delivery_method' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(\App\Models\ProjectDelivery::METHOD_LABELS))],
-            'delivery_vehicle_type' => ['nullable', 'string', \Illuminate\Validation\Rule::in(\App\Models\Vehicle::types())],
+            'delivery_vehicle_types' => ['nullable', 'array', 'max:10'],
+            'delivery_vehicle_types.*' => ['string', \Illuminate\Validation\Rule::in(\App\Models\Vehicle::types())],
             'delivery_crew_size' => ['nullable', 'integer', 'min:1', 'max:20'],
             'delivery_carrier' => ['nullable', 'string', 'max:150'],
             'delivery_site' => ['nullable', 'string', 'max:255'],
@@ -337,10 +338,9 @@ class ProjectController extends Controller
             'fat_date.required_with' => 'ใส่วัน FAT ก่อน',
             'fat_end_date.after_or_equal' => 'วันสุดท้ายของ FAT ต้องไม่ก่อนวันแรก',
             'fat_time.date_format' => 'ใส่เวลา FAT แบบ 13:30',
-            'delivery_from.required_with' => 'ใส่ช่วงวันส่งให้ครบ (ตั้งแต่ – ถึง)',
-            'delivery_to.required_with' => 'ใส่ช่วงวันส่งให้ครบ (ตั้งแต่ – ถึง)',
-            'delivery_to.after_or_equal' => 'วันสุดท้ายที่ส่งได้ต้องไม่ก่อนวันแรก',
-            'delivery_vehicle_type.in' => 'ไม่มีรถประเภทนี้ · เพิ่มได้ที่ ตั้งค่า › รถขนส่ง',
+            'delivery_date.required_with' => 'ใส่วันส่งก่อน',
+            'delivery_time.date_format' => 'ใส่เวลาส่งแบบ 09:00',
+            'delivery_vehicle_types.*.in' => 'ไม่มีรถประเภทนี้ · เพิ่มได้ที่ ตั้งค่า › รถขนส่ง',
             'delivery_crew_size.min' => 'จำนวนคนอย่างน้อย 1 คน',
             'delivery_crew_size.max' => 'จำนวนคนไม่เกิน 20 คน',
         ]);
@@ -356,13 +356,13 @@ class ProjectController extends Controller
             ActivityLog::record($project->id, $actor->id, $project, 'fat', 'ลงวัน FAT: '.$fat->when());
             \App\Services\PlanningBoard::touch();
         }
-        if (! empty($a['delivery_from'])) {
+        if (! empty($a['delivery_date'])) {
             $method = $a['delivery_method'] ?? \App\Models\ProjectDelivery::COMPANY;
             $company = $method === \App\Models\ProjectDelivery::COMPANY;
             app(\App\Services\DeliveryFlow::class)->draft($project, [
-                'window_from' => $a['delivery_from'], 'window_to' => $a['delivery_to'], 'cabinet_ids' => [], 'method' => $method,
-                'vehicle_type' => $company ? $text('delivery_vehicle_type') : null,
-                'crew_size' => $company && ! empty($a['delivery_crew_size']) ? (int) $a['delivery_crew_size'] : null,
+                'delivery_date' => $a['delivery_date'], 'delivery_time' => $text('delivery_time'), 'cabinet_ids' => [], 'method' => $method,
+                'vehicle_types' => $company ? (array_values(array_unique(array_filter($a['delivery_vehicle_types'] ?? []))) ?: null) : null,
+                'crew_size' => $method !== \App\Models\ProjectDelivery::PICKUP && ! empty($a['delivery_crew_size']) ? (int) $a['delivery_crew_size'] : null,
                 'carrier' => $method === \App\Models\ProjectDelivery::EXTERNAL ? $text('delivery_carrier') : null,
                 'site' => $text('delivery_site'), 'contact_name' => $text('delivery_contact_name'), 'contact_phone' => $text('delivery_contact_phone'), 'note' => $text('delivery_note'),
             ], $actor);

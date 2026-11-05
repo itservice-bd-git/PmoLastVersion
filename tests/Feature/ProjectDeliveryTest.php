@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Models\ActivityLog;
 use App\Models\AppSetting;
 use App\Models\Cabinet;
+use App\Models\CabinetChecklist;
+use App\Models\CabinetSubtask;
+use App\Models\CabinetTask;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\ProjectDelivery;
@@ -16,9 +19,10 @@ use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
- * การจัดส่ง (App\Services\DeliveryFlow): PM keeps a round as a draft or sends it with a window of days, the kind of vehicle
- * and how many people; the delivery department picks the day in it, the vehicle and the people, or sends it back with a
- * reason, then records it leaving and arriving; Planning shows the window dashed and the day solid.
+ * การจัดส่ง (App\Services\DeliveryFlow): PM keeps a round as a draft or sends it with its day, the kinds of vehicle and
+ * how many people; the delivery department puts the vehicles and the people on it (several) or sends it back for another
+ * day, packs each cabinet, แจ้งเปิดบิล, records it leaving and arriving - and each of those ticks the cabinets' Checklist
+ * (DeliveryChecklist), which a hand may no longer tick.
  */
 class ProjectDeliveryTest extends TestCase
 {
@@ -42,13 +46,17 @@ class ProjectDeliveryTest extends TestCase
 
     private Vehicle $van;
 
+    private Vehicle $pickup;
+
+    private Department $ship;
+
     protected function setUp(): void
     {
         parent::setUp();
         Carbon::setTestNow('2026-11-10 08:00');
 
         $dept = Department::create(['name' => 'ไฟฟ้า', 'code' => 'EL', 'is_active' => true]);
-        $ship = Department::create(['name' => 'จัดส่งสินค้า', 'code' => 'SH', 'is_active' => true]);
+        $ship = $this->ship = Department::create(['name' => 'จัดส่งสินค้า', 'code' => 'SH', 'is_active' => true]);
         AppSetting::put('department_permissions', [(string) $ship->id => ['edit.delivery' => true]]);
         $this->pm = User::forceCreate(['name' => 'PM', 'email' => 'dl-pm', 'password' => 'secret-pass', 'role' => 'project_manager', 'is_active' => true]);
         $this->admin = User::forceCreate(['name' => 'แอดมิน', 'email' => 'dl-admin', 'password' => 'secret-pass', 'role' => 'admin', 'is_active' => true]);
@@ -60,6 +68,16 @@ class ProjectDeliveryTest extends TestCase
         $this->cab2 = Cabinet::forceCreate(['project_id' => $this->project->id, 'mo_no' => 'MO-2', 'cabinet_name' => 'B', 'quantity' => 1, 'status' => 'not_started', 'progress' => 40]);
         $this->truck = Vehicle::create(['name' => '6 ล้อเครน', 'type' => '6 ล้อเครน', 'plate' => '3กข-1234', 'capacity' => 1, 'driver_name' => 'สมศักดิ์', 'is_active' => true]);
         $this->van = Vehicle::create(['name' => '4 ล้อ', 'type' => '4 ล้อ', 'plate' => '1กก-4455', 'driver_name' => 'ประยุทธ', 'is_active' => true]);
+        $this->pickup = Vehicle::create(['name' => 'กระบะขาว', 'type' => 'กระบะ', 'plate' => '2กข-555', 'driver_name' => 'อนันต์', 'is_active' => true]);
+        foreach ([$this->cab1, $this->cab2] as $cab) {   // Task 14-15 of the template: the items the round's steps tick
+            foreach ([[14, 'แพ็กสินค้าและจัดคิวรถ', ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล']], [15, 'ส่งมอบ / ติดตั้ง Onsite', ['ดำเนินการส่งมอบ', 'ส่งมอบ เสร็จสิ้น']]] as [$seq, $name, $items]) {
+                $t = CabinetTask::forceCreate(['cabinet_id' => $cab->id, 'name' => $name, 'status' => 'not_started', 'progress' => 0, 'sequence' => $seq]);
+                $sub = CabinetSubtask::forceCreate(['cabinet_task_id' => $t->id, 'name' => $name, 'department_id' => $ship->id, 'assignment_status' => 'ACCEPTED', 'status' => 'not_started', 'progress' => 0]);
+                foreach ($items as $i => $item) {
+                    CabinetChecklist::forceCreate(['cabinet_subtask_id' => $sub->id, 'name' => $item, 'is_completed' => false, 'sequence' => $i + 1]);
+                }
+            }
+        }
     }
 
     protected function tearDown(): void
@@ -70,8 +88,8 @@ class ProjectDeliveryTest extends TestCase
 
     private function data(array $over = []): array
     {
-        return $over + ['window_from' => '2026-11-18', 'window_to' => '2026-11-22', 'cabinet_ids' => [$this->cab1->id, $this->cab2->id],
-            'method' => 'company', 'vehicle_type' => '6 ล้อเครน', 'crew_size' => 3, 'site' => 'บางนา ประตู 2', 'contact_name' => 'คุณวิทยา', 'contact_phone' => '0812345678'];
+        return $over + ['delivery_date' => '2026-11-20', 'delivery_time' => '09:00', 'cabinet_ids' => [$this->cab1->id, $this->cab2->id],
+            'method' => 'company', 'vehicle_types' => ['6 ล้อเครน', 'กระบะ'], 'crew_size' => 3, 'site' => 'บางนา ประตู 2', 'contact_name' => 'คุณวิทยา', 'contact_phone' => '0812345678'];
     }
 
     private function send(array $over = []): ProjectDelivery
@@ -81,10 +99,22 @@ class ProjectDeliveryTest extends TestCase
         return ProjectDelivery::latest('id')->firstOrFail();
     }
 
-    /** The delivery department picks the day (on the truck unless said otherwise). */
-    private function pick(ProjectDelivery $d, array $over = [])
+    /** The delivery department puts the truck (and whatever else is given) on the round. */
+    private function assign(ProjectDelivery $d, ?array $vehicles = null)
     {
-        return $this->actingAs($this->clerk)->post(route('deliveries.schedule', $d), $over + ['delivery_date' => '2026-11-20', 'delivery_time' => '09:00', 'vehicle_id' => $this->truck->id]);
+        return $this->actingAs($this->clerk)->post(route('deliveries.assign', $d), ['vehicles' => $vehicles ?? [['vehicle_id' => $this->truck->id, 'crew' => ['วิชัย']]]]);
+    }
+
+    private function pack(ProjectDelivery $d, array $cabinets, bool $packed = true)
+    {
+        return $this->actingAs($this->clerk)->post(route('deliveries.pack', $d), ['cabinet_ids' => array_map(fn ($c) => $c->id, $cabinets), 'packed' => $packed ? 1 : 0]);
+    }
+
+    /** cabinet MO => the ticked items of its Task 14-15 */
+    private function ticked(): array
+    {
+        return collect([$this->cab1, $this->cab2])->mapWithKeys(fn ($c) => [$c->mo_no => CabinetChecklist::whereHas('subtask.cabinetTask', fn ($q) => $q->where('cabinet_id', $c->id))
+            ->where('is_completed', true)->orderBy('id')->pluck('name')->all()])->all();
     }
 
     private function lastLog(): string
@@ -98,147 +128,171 @@ class ProjectDeliveryTest extends TestCase
         return $user->notifications()->get()->filter(fn ($n) => $n->data['kind'] === $kind)->map(fn ($n) => $n->data['title'])->values()->all();
     }
 
-    public function test_pm_sends_a_round_with_a_window_and_the_delivery_department_has_it_to_do(): void
+    public function test_pm_sends_a_round_with_its_day_kinds_and_people_and_the_delivery_department_has_it_to_do(): void
     {
-        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['vehicle_type' => '']))->assertSessionHasErrors(['vehicle_type' => 'เลือกประเภทรถ']);
-        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['vehicle_type' => '10 ล้อ']))
-            ->assertSessionHasErrors(['vehicle_type' => 'ไม่มีรถประเภทนี้ · เพิ่มได้ที่ ตั้งค่า › รถขนส่ง']);
-        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['window_to' => '2026-11-17']))
-            ->assertSessionHasErrors(['window_to' => 'วันสุดท้ายที่ส่งได้ต้องไม่ก่อนวันแรก']);
+        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['vehicle_types' => []]))->assertSessionHasErrors(['vehicle_types' => 'เลือกประเภทรถอย่างน้อย 1 แบบ']);
+        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['vehicle_types' => ['10 ล้อ']]))
+            ->assertSessionHasErrors(['vehicle_types.0' => 'ไม่มีรถประเภทนี้ · เพิ่มได้ที่ ตั้งค่า › รถขนส่ง']);
+        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['delivery_date' => '']))->assertSessionHasErrors(['delivery_date' => 'เลือกวันส่ง']);
         $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data())->assertSessionHas('success', 'ส่งให้แผนกจัดส่งแล้ว');
 
         $d = ProjectDelivery::firstOrFail();
-        $this->assertSame([1, 'waiting', null, null, null, '6 ล้อเครน', 3, 'รอกำหนดวัน', $this->pm->id],
-            [$d->round, $d->status, $d->delivery_date, $d->vehicle_id, $d->driver_name, $d->vehicle_type, $d->crew_size, $d->stateLabel(), $d->sent_by], 'the vehicle and the people are the delivery department\'s');
-        $this->assertSame('ส่งให้แผนกจัดส่ง รอบที่ 1: ส่งได้ 18–22/11/2569 · 2 ตู้ (MO-1, MO-2) · 6 ล้อเครน · 3 คน', $this->lastLog());
-        $this->assertSame(['งานจัดส่งใหม่ · เลือกวันส่ง'], $this->notices($this->clerk, 'delivery_todo'));
-        $this->assertTrue($this->clerk->notifications()->first()->data['todo']);
+        $this->assertSame([1, 'waiting', '20/11/2569 · 09:00 น.', ['6 ล้อเครน', 'กระบะ'], 3, 'รอจัดรถ', $this->pm->id, 0, '6 ล้อเครน + กระบะ · 3 คน'],
+            [$d->round, $d->status, $d->when(), $d->vehicle_types, $d->crew_size, $d->stateLabel(), $d->sent_by, $d->vehicles()->count(), $d->request()], 'the vehicles and the people are the delivery department\'s');
+        $this->assertSame('ส่งให้แผนกจัดส่ง รอบที่ 1: 20/11/2569 · 09:00 น. · 2 ตู้ (MO-1, MO-2) · 6 ล้อเครน + กระบะ · 3 คน', $this->lastLog());
+        $this->assertSame(['งานจัดส่งใหม่ · จัดรถ / คน'], $this->notices($this->clerk, 'delivery_todo'));
         $this->assertSame(0, $this->member->notifications()->count(), 'another department does not hear it');
 
-        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()
-            ->assertSee('ส่งได้ 18–22/11/2569')->assertSee('รอแผนกจัดส่งเลือกวันส่งในช่วงนี้')->assertSee('6 ล้อเครน · 3 คน');
+        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('20/11/2569 · 09:00 น.')->assertSee('รอแผนกจัดส่งจัดรถ / คน')->assertSee('ขอ 6 ล้อเครน + กระบะ · 3 คน');
         $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk()->assertViewHas('tab', 'waiting')
-            ->assertSee('SO-1')->assertSee('ช่วงส่งได้ 18–22/11/2569')->assertSee('PM ขอ')->assertSee('6 ล้อเครน · 3 คน')->assertSee('เลือกวันส่ง')->assertSee('ไม่รับงาน');
+            ->assertSee('SO-1')->assertSee('PM ขอ')->assertSee('6 ล้อเครน + กระบะ · 3 คน')->assertSee('จัดรถ / คน')->assertSee('ไม่รับงาน')->assertDontSee('เลือกวันส่ง');
     }
 
-    public function test_the_delivery_department_picks_the_day_the_vehicle_and_the_people_and_pm_hears_of_another_kind(): void
+    public function test_the_delivery_department_puts_several_vehicles_and_people_on_it_and_pm_hears_what_differs(): void
     {
         $d = $this->send();
-        $this->actingAs($this->member)->post(route('deliveries.schedule', $d), ['delivery_date' => '2026-11-20'])->assertForbidden();
-        $this->pick($d, ['delivery_date' => '2026-11-23'])->assertSessionHasErrors(['delivery_date' => 'เลือกวันในช่วงที่ PM ให้: 18–22/11/2569']);
-        $this->pick($d, ['vehicle_id' => ''])->assertSessionHasErrors(['vehicle_id' => 'เลือกรถ']);
+        $this->actingAs($this->member)->post(route('deliveries.assign', $d), ['vehicles' => [['vehicle_id' => $this->truck->id]]])->assertForbidden();
+        $this->assign($d, [['vehicle_id' => '']])->assertSessionHasErrors(['vehicles' => 'เลือกรถอย่างน้อย 1 คัน']);
+        $this->assign($d, [['vehicle_id' => $this->truck->id], ['vehicle_id' => $this->truck->id]])->assertSessionHasErrors(['vehicles.1.vehicle_id' => '6 ล้อเครน · 3กข-1234 ใส่ซ้ำ']);
 
-        // the vehicle's usual driver unless another is typed, and the others who go (blank / repeated names dropped)
-        $this->pick($d, ['crew' => ['วิชัย', '', 'อนันต์', 'วิชัย', 'สมศักดิ์']])->assertSessionHas('success', 'กำหนดวันส่งแล้ว');
+        // each vehicle its driver (its usual one unless typed) and the others on it; blank / repeated names dropped
+        $this->assign($d, [['vehicle_id' => $this->truck->id, 'crew' => ['วิชัย', '', 'วิชัย', 'สมศักดิ์']], ['vehicle_id' => $this->pickup->id, 'driver_name' => 'ธนา']])
+            ->assertSessionHas('success', 'จัดรถแล้ว');
         $d->refresh();
-        $this->assertSame(['scheduled', '20/11/2569 · 09:00 น.', $this->clerk->id, 'กำหนดวันแล้ว'], [$d->status, $d->when(), $d->scheduled_by, $d->stateLabel()]);
-        $this->assertSame([['สมศักดิ์', 'วิชัย', 'อนันต์'], 'สมศักดิ์, วิชัย, อนันต์ (3/3 คน)', false], [$d->people(), $d->peopleText(), $d->otherType()]);
-        $this->assertSame('การจัดส่งรอบที่ 1: แผนกจัดส่งกำหนดวันส่ง 20/11/2569 · 09:00 น. · 6 ล้อเครน · 3กข-1234 · คน สมศักดิ์, วิชัย, อนันต์ (3/3 คน)', $this->lastLog());
-        $this->assertSame(['แผนกจัดส่งกำหนดวันส่งแล้ว'], $this->notices($this->pm, 'delivery'));
-        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertSee('สมศักดิ์, วิชัย, อนันต์ (3/3 คน)')->assertSee('PM ขอ 6 ล้อเครน · 3 คน');
+        $this->assertSame(['scheduled', 'จัดรถแล้ว', $this->clerk->id, '20/11/2569 · 09:00 น.'], [$d->status, $d->stateLabel(), $d->scheduled_by, $d->when()], 'PM\'s day stays');
+        $this->assertSame(['6 ล้อเครน · 3กข-1234, กระบะขาว · 2กข-555', ['สมศักดิ์', 'วิชัย', 'ธนา'], 'สมศักดิ์, วิชัย, ธนา (3/3 คน)', [], false],
+            [$d->transport(), $d->people(), $d->peopleText(), $d->otherTypes(), $d->shortOfPeople()]);
+        $this->assertSame('การจัดส่งรอบที่ 1: แผนกจัดส่งจัดรถแล้ว: 6 ล้อเครน · 3กข-1234, กระบะขาว · 2กข-555 · คน สมศักดิ์, วิชัย, ธนา (3/3 คน)', $this->lastLog());
+        $this->assertSame(['แผนกจัดส่งจัดรถแล้ว'], $this->notices($this->pm, 'delivery'));
+        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertSee('สมศักดิ์, วิชัย, ธนา (3/3 คน)')->assertSee('PM ขอ 6 ล้อเครน + กระบะ · 3 คน');
 
-        // another kind of vehicle than PM asked for (its usual driver comes with it): allowed, PM hears it once; refusing is too late now
-        $this->pick($d, ['vehicle_id' => $this->van->id, 'crew' => ['วิชัย']]);
+        // a kind PM did not ask for and fewer people: allowed, PM hears both
+        $this->assign($d, [['vehicle_id' => $this->van->id]]);
         $d->refresh();
-        $this->assertSame([$this->van->id, 'ประยุทธ', true, 'ประยุทธ, วิชัย (2/3 คน)'], [$d->vehicle_id, $d->driver_name, $d->otherType(), $d->peopleText()]);
-        $this->assertSame(['แผนกจัดส่งใช้รถคนละประเภท'], $this->notices($this->pm->fresh(), 'delivery'), 'the round\'s notice, updated');
-        $this->assertStringContainsString('PM ขอ 6 ล้อเครน · ได้ 4 ล้อ (4 ล้อ · 1กก-4455)', $this->pm->notifications()->first()->data['body']);
-        $this->pick($d, ['vehicle_id' => $this->van->id, 'delivery_time' => '10:00']);
-        $this->assertSame(['แผนกจัดส่งเลื่อนวันส่ง'], $this->notices($this->pm->fresh(), 'delivery'));
-        $this->assertStringNotContainsString('PM ขอ', $this->pm->notifications()->first()->data['body'], 'the same vehicle again: told once');
-        $this->actingAs($this->clerk)->get(route('deliveries.index', ['round' => $d->id]))->assertSee('คนละประเภท')->assertSee('ยังไม่ครบที่ PM ขอ', false);
-        $this->actingAs($this->clerk)->post(route('deliveries.reject', $d), ['reason' => 'รถไม่ว่างทั้งช่วงวัน'])
-            ->assertSessionHasErrors(['delivery' => 'ไม่รับงานได้เฉพาะรอบที่ยังรอกำหนดวัน — รอบนี้กำหนดวันแล้ว · ติดต่อ PM เพื่อแก้หรือยกเลิก']);
-
-        $this->actingAs($this->clerk)->get(route('deliveries.index', ['round' => $d->id]))->assertViewHas('tab', 'scheduled')->assertSee('20/11/2569 · 10:00 น.');
+        $this->assertSame([['4 ล้อ'], true, 'ประยุทธ (1/3 คน)'], [$d->otherTypes(), $d->shortOfPeople(), $d->peopleText()]);
+        $this->assertSame(['แผนกจัดส่งเปลี่ยนรถ / คน'], $this->notices($this->pm->fresh(), 'delivery'), 'the round\'s notice, updated');
+        $body = $this->pm->notifications()->first()->data['body'];
+        $this->assertStringContainsString('PM ขอ 6 ล้อเครน + กระบะ · ใช้ 4 ล้อ ด้วย', $body);
+        $this->assertStringContainsString('คน 1/3 (น้อยกว่าที่ขอ)', $body);
+        $this->actingAs($this->clerk)->get(route('deliveries.index', ['round' => $d->id]))->assertViewHas('tab', 'scheduled')->assertSee('ไม่ได้ขอ');
+        $this->actingAs($this->clerk)->post(route('deliveries.reject', $d), ['reason' => 'รถไม่ว่างวันนั้น'])
+            ->assertSessionHasErrors(['delivery' => 'ไม่รับงานได้เฉพาะรอบที่ยังไม่ได้จัดรถ — รอบนี้จัดรถแล้ว · ติดต่อ PM เพื่อเลื่อนหรือยกเลิก']);
     }
 
-    public function test_sent_back_with_a_reason_pm_fixes_it_and_sends_it_again(): void
+    public function test_the_vehicles_a_day_already_has_are_shown_as_busy(): void
+    {
+        $this->assign($this->send(['cabinet_ids' => [$this->cab1->id]]));
+        $this->send(['cabinet_ids' => [$this->cab2->id]]);
+        $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertViewHas('busy', fn ($b) => $b[$this->truck->id]['2026-11-20'][0]['label'] === 'SO-1 รอบ 1');
+    }
+
+    public function test_sent_back_with_a_reason_pm_picks_another_day_and_sends_it_again(): void
     {
         $d = $this->send();
         $this->actingAs($this->clerk)->post(route('deliveries.reject', $d), ['reason' => ''])->assertSessionHasErrors('reason');
         $this->actingAs($this->clerk)->post(route('deliveries.reject', $d), ['reason' => 'อื่น ๆ'])->assertSessionHasErrors(['reason' => 'พิมพ์รายละเอียดของเหตุผล']);
-        $this->actingAs($this->clerk)->post(route('deliveries.reject', $d), ['reason' => 'รถไม่ว่างทั้งช่วงวัน', 'note' => 'ขอเลื่อนเป็น 28–29/11'])->assertSessionHas('success');
+        $this->actingAs($this->clerk)->post(route('deliveries.reject', $d), ['reason' => 'รถไม่ว่างวันนั้น', 'note' => 'ว่างอีกที 24/11'])->assertSessionHas('success');
 
         $d->refresh();
-        $this->assertSame(['rejected', 'รถไม่ว่างทั้งช่วงวัน', $this->clerk->id], [$d->status, $d->rejected_reason, $d->rejected_by]);
-        $this->assertSame('การจัดส่งรอบที่ 1: แผนกจัดส่งไม่รับงาน — เหตุผล: รถไม่ว่างทั้งช่วงวัน · ขอเลื่อนเป็น 28–29/11', $this->lastLog());
-        $this->assertSame(['แผนกจัดส่งไม่รับงาน'], $this->notices($this->pm, 'delivery_rejected'));
-        $this->assertTrue($this->pm->notifications()->first()->data['todo']);
-        $this->actingAs($this->clerk)->post(route('deliveries.schedule', $d), ['delivery_date' => '2026-11-20'])->assertSessionHasErrors(['delivery' => 'รอบนี้ส่งกลับให้ PM แล้ว · รอ PM ส่งมาอีกครั้ง']);
-        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertSee('แผนกจัดส่งไม่รับงาน · รถไม่ว่างทั้งช่วงวัน · ขอเลื่อนเป็น 28–29/11')->assertSee('แก้แล้วส่งอีกครั้ง');
+        $this->assertSame(['rejected', 'รถไม่ว่างวันนั้น', $this->clerk->id], [$d->status, $d->rejected_reason, $d->rejected_by]);
+        $this->assertSame('การจัดส่งรอบที่ 1: แผนกจัดส่งไม่รับงาน — เหตุผล: รถไม่ว่างวันนั้น · ว่างอีกที 24/11', $this->lastLog());
+        $this->assertSame(['แผนกจัดส่งไม่รับงาน · เลือกวันใหม่'], $this->notices($this->pm, 'delivery_rejected'));
+        $this->assign($d)->assertSessionHasErrors(['delivery' => 'รอบนี้ส่งกลับให้ PM แล้ว · รอ PM ส่งมาอีกครั้ง']);
+        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertSee('แผนกจัดส่งไม่รับงาน · รถไม่ว่างวันนั้น · ว่างอีกที 24/11')->assertSee('เลือกวันใหม่แล้วส่ง');
 
-        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['window_from' => '2026-11-28', 'window_to' => '2026-11-29']))
-            ->assertSessionHas('success', 'ส่งให้แผนกจัดส่งอีกครั้งแล้ว');
+        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['delivery_date' => '2026-11-24']))->assertSessionHas('success', 'ส่งให้แผนกจัดส่งอีกครั้งแล้ว');
         $d->refresh();
-        $this->assertSame(['waiting', null, null], [$d->status, $d->rejected_reason, $d->rejected_at]);
-        $this->assertSame('การจัดส่งรอบที่ 1: ส่งให้จัดส่งอีกครั้ง · ส่งได้ 28–29/11/2569 · 2 ตู้ (MO-1, MO-2) · 6 ล้อเครน · 3 คน', $this->lastLog());
-        $this->assertSame(['งานจัดส่งใหม่ · เลือกวันส่ง', 'PM ส่งรอบส่งให้อีกครั้ง · เลือกวันส่ง'], $this->notices($this->clerk->fresh(), 'delivery_todo'));
+        $this->assertSame(['waiting', null, '24/11/2569 · 09:00 น.'], [$d->status, $d->rejected_reason, $d->when()]);
+        $this->assertSame('การจัดส่งรอบที่ 1: ส่งให้จัดส่งอีกครั้ง · 24/11/2569 · 09:00 น. · 2 ตู้ (MO-1, MO-2) · 6 ล้อเครน + กระบะ · 3 คน', $this->lastLog());
+        $this->assertSame(['งานจัดส่งใหม่ · จัดรถ / คน', 'PM ส่งรอบส่งให้อีกครั้ง · จัดรถ / คน'], $this->notices($this->clerk->fresh(), 'delivery_todo'));
     }
 
-    public function test_a_new_window_that_leaves_out_the_picked_day_sends_it_back_to_be_picked(): void
+    public function test_only_pm_moves_the_day_logged_like_fat_and_the_vehicles_stay(): void
     {
         $d = $this->send();
-        $this->pick($d);
+        $this->assign($d);
 
-        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['window_from' => '2026-11-19']))->assertSessionHasNoErrors();
-        $this->assertSame(['scheduled', '2026-11-20'], [$d->fresh()->status, $d->fresh()->delivery_date->format('Y-m-d')], 'still fits: kept');
-        $this->assertSame(['PM แก้รอบส่ง: ช่วงวัน ส่งได้ 19–22/11/2569'], $this->notices($this->clerk, 'delivery'));
-
-        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['window_from' => '2026-11-21']))->assertSessionHasNoErrors();
+        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['delivery_date' => '2026-11-23']))->assertSessionHasNoErrors();
         $d->refresh();
-        $this->assertSame(['waiting', null, null], [$d->status, $d->delivery_date, $d->delivery_time]);
-        $this->assertStringEndsWith('วันส่งเดิม 20/11/2569 · 09:00 น. ไม่อยู่ในช่วงใหม่ · รอแผนกจัดส่งเลือกวันใหม่', $this->lastLog());
-        $this->assertContains('PM เปลี่ยนช่วงวัน · เลือกวันส่งใหม่', $this->notices($this->clerk, 'delivery_todo'));
+        $this->assertSame(['scheduled', '23/11/2569 · 09:00 น.', 1], [$d->status, $d->when(), $d->vehicles()->count()], 'the vehicles stay on it');
+        $this->assertSame('การจัดส่งรอบที่ 1: เลื่อนวันส่งจาก 20/11/2569 · 09:00 น. เป็น 23/11/2569 · 09:00 น.', $this->lastLog());
+        $this->assertContains('PM เลื่อนวันส่งจาก 20/11/2569 · 09:00 น. · ตรวจว่ารถ / คนยังว่าง', $this->notices($this->clerk, 'delivery_todo'));
+
+        // another way of sending takes the vehicles off: to be put on again
+        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['delivery_date' => '2026-11-23', 'method' => 'external', 'carrier' => 'ไทยขนส่ง']))->assertSessionHasNoErrors();
+        $d->refresh();
+        $this->assertSame(['waiting', 0, null], [$d->status, $d->vehicles()->count(), $d->vehicle_types]);
+        $this->assertContains('PM เปลี่ยนวิธีส่ง · จัดรถ / คนใหม่', $this->notices($this->clerk->fresh(), 'delivery_todo'));
+        $this->assign($d, [['label' => '70-1234', 'driver_name' => 'คนขับไทยขนส่ง']])->assertSessionHasNoErrors();
+        $this->assertSame('ขนส่งภายนอก · ไทยขนส่ง · 70-1234', $d->fresh()->transport());
     }
 
-    public function test_a_round_goes_on_one_day_of_the_window_and_is_late_after_it(): void
-    {
-        $d = $this->send(['window_from' => '2026-11-12', 'window_to' => '2026-11-16']);
-        $this->assertSame('ส่งได้ 12–16/11/2569', $d->windowText());
-        $this->assertFalse($d->isOverdue(Carbon::parse('2026-11-16')), 'a day can still be picked on the window\'s last day');
-        $this->assertTrue($d->isOverdue(Carbon::parse('2026-11-17')));
-        $this->pick($d, ['delivery_date' => '2026-11-11'])->assertSessionHasErrors(['delivery_date' => 'เลือกวันในช่วงที่ PM ให้: 12–16/11/2569']);
-        $this->pick($d, ['delivery_date' => '2026-11-16', 'delivery_time' => ''])->assertSessionHasNoErrors();
-
-        $d->refresh();
-        $this->assertSame(['16/11/2569', '2026-11-16'], [$d->when(), $d->lastDay()->format('Y-m-d')]);
-        $this->assertTrue($d->isOverdue(Carbon::parse('2026-11-17')), 'past its day and not there yet');
-        $task = collect(app(PlanningBoard::class)->tasks($this->pm))->firstWhere('id', 'p'.$this->project->id);
-        $this->assertSame(['2026-11-16', '2026-11-16', false], [$task['deliveries'][0]['date'], $task['deliveries'][0]['end'], $task['deliveries'][0]['wait']]);
-    }
-
-    public function test_it_leaves_and_arrives_and_what_did_not_arrive_can_be_booked_again(): void
+    public function test_packing_billing_leaving_and_arriving_tick_the_checklist_and_step_back_unticks(): void
     {
         $d = $this->send();
-        $this->actingAs($this->clerk)->post(route('deliveries.depart', $d))->assertSessionHasErrors(['delivery' => 'รอบนี้ยังไม่ได้กำหนดวันส่ง']);
-        $this->pick($d, ['delivery_date' => '2026-11-18']);
-        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['cabinet_ids' => [$this->cab2->id]]))
-            ->assertSessionHasErrors(['cabinet_ids' => 'MO-2 อยู่ในรอบที่ 1 แล้ว · แก้รอบนั้นก่อน']);
+        $this->actingAs($this->clerk)->post(route('deliveries.bill', $d))->assertSessionHasErrors(['delivery' => 'ห่อตู้ให้ครบก่อน (ห่อแล้ว 0/2)']);
 
+        // packing waits for the cabinet, not for the vehicles
+        $this->pack($d, [$this->cab1])->assertSessionHas('success', 'บันทึกห่อตู้แล้ว');
+        $d->refresh();
+        $this->assertSame([true, false, 1, ['n' => 0, 'text' => 'ห่อ 1/2']], [$d->isPacked($this->cab1->id), $d->isPacked($this->cab2->id), $d->packedCount(), $d->step()]);
+        $this->assertSame(['MO-1' => ['ห่อตู้เสร็จสิ้น'], 'MO-2' => []], $this->ticked());
+        $this->assertSame('การจัดส่งรอบที่ 1: ห่อตู้เสร็จสิ้น MO-1 (ห่อแล้ว 1/2)', $this->lastLog());
+        $this->assertSame(['ห่อตู้แล้ว 1/2'], $this->notices($this->pm, 'delivery'));
+
+        // a hand may not tick the round's items any more (the other items stay the department's)
+        $item = CabinetChecklist::where('name', 'แจ้งเปิดบิล')->whereHas('subtask.cabinetTask', fn ($q) => $q->where('cabinet_id', $this->cab1->id))->firstOrFail();
+        $this->actingAs($this->clerk)->patchJson(route('checklists.toggle', $item), ['is_completed' => true])->assertStatus(423)
+            ->assertJson(['message' => '"แจ้งเปิดบิล" ติ๊กจากหน้า "งานจัดส่ง" (รอบที่ 1) · Checklist นี้ดูได้อย่างเดียว']);
+
+        $this->pack($d, [$this->cab2]);
+        $this->assertSame(['ห่อตู้ครบแล้ว · รอแจ้งเปิดบิล'], $this->notices($this->pm->fresh(), 'delivery'), 'one notice for the round, replaced');
+        $this->actingAs($this->clerk)->post(route('deliveries.depart', $d))->assertSessionHasErrors(['delivery' => 'รอบนี้ยังไม่ได้จัดรถ']);
+
+        // แจ้งเปิดบิล: the billing department hears it (Settings > รถขนส่ง)
+        $acc = Department::create(['name' => 'บัญชี', 'code' => 'AC', 'is_active' => true]);
+        $clerkAcc = User::forceCreate(['name' => 'บัญชี', 'email' => 'dl-ac', 'password' => 'secret-pass', 'role' => 'member', 'department_id' => $acc->id, 'is_active' => true]);
+        $this->actingAs($this->clerk)->put(route('settings.vehicles.billing'), ['department_id' => $acc->id])->assertRedirect()->assertSessionHas('success');
+        $this->actingAs($this->clerk)->post(route('deliveries.bill', $d))->assertSessionHas('success', 'แจ้งเปิดบิลแล้ว');
+        $this->assertSame(['แจ้งเปิดบิล'], $this->notices($clerkAcc, 'delivery_todo'));
+        $this->assertSame(route('notifications.index'), $clerkAcc->notifications()->first()->data['url'], 'billing has no work in the project: the notice list');
+        $this->assertSame(['MO-1' => ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล'], 'MO-2' => ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล']], $this->ticked());
+        $this->pack($d, [$this->cab1], false)->assertSessionHasErrors(['delivery' => 'แจ้งเปิดบิลแล้ว · ย้อนขั้นก่อนถึงจะเอาการห่อออกได้']);
+        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['cabinet_ids' => [$this->cab1->id]]))
+            ->assertSessionHasErrors(['cabinet_ids' => 'รอบนี้แจ้งเปิดบิลแล้ว เปลี่ยนตู้ไม่ได้ · ให้แผนกจัดส่งย้อนขั้นก่อน']);
+
+        $this->assign($d);
         $this->actingAs($this->clerk)->post(route('deliveries.depart', $d))->assertSessionHas('success');
-        $this->assertSame('departed', $d->fresh()->status);
-        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data())->assertSessionHasErrors('delivery');
-        $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-18', 'cabinet_ids' => [$this->cab1->id]])->assertSessionHasErrors('receiver');
-        $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-18', 'delivered_time' => '10:40', 'receiver' => 'คุณสมชาย',
+        $this->assertSame(['MO-1' => ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล', 'ดำเนินการส่งมอบ'], 'MO-2' => ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล', 'ดำเนินการส่งมอบ']], $this->ticked());
+        $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-20', 'delivered_time' => '10:40', 'receiver' => 'คุณสมชาย',
             'doc_no' => 'DO-0412', 'issue' => 'รอยขีดข่วน', 'cabinet_ids' => [$this->cab1->id]])->assertSessionHasNoErrors();
-
         $d->refresh();
-        $this->assertSame(['delivered', [$this->cab1->id], '2026-11-18 10:40'], [$d->status, $d->cabinet_ids, $d->delivered_at->format('Y-m-d H:i')]);
-        $this->assertSame('การจัดส่งรอบที่ 1: ส่งถึงแล้ว 18/11/2569 10:40 น. · 18/11/2569 · 09:00 น. · 1 ตู้ (MO-1) · 6 ล้อเครน · 3กข-1234 · 3 คน · ผู้รับ คุณสมชาย · ใบส่งของ DO-0412 · ปัญหา: รอยขีดข่วน · ไม่ได้ส่ง MO-2', $this->lastLog());
-        $this->assertSame(['ส่งถึงแล้ว · มีปัญหาที่หน้างาน'], $this->notices($this->pm, 'delivery_rejected'), 'a problem on site is for PM to act on');
+        $this->assertSame(['delivered', [$this->cab1->id], ['n' => 4, 'text' => 'ส่งถึงแล้ว']], [$d->status, $d->cabinet_ids, $d->step()]);
+        $this->assertSame(['MO-1' => ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล', 'ดำเนินการส่งมอบ', 'ส่งมอบ เสร็จสิ้น'], 'MO-2' => ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล']], $this->ticked(),
+            'what did not arrive is back at the factory');
+        $this->assertSame(['ส่งถึงแล้ว · มีปัญหาที่หน้างาน'], $this->notices($this->pm, 'delivery_rejected'));
+        $this->assertSame(1, (int) CabinetSubtask::whereHas('cabinetTask', fn ($q) => $q->where('cabinet_id', $this->cab1->id)->where('sequence', 15))->value('progress') / 100, 'progress follows the ticks');
 
-        // MO-2 is free again; MO-1 has arrived
-        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['cabinet_ids' => [$this->cab1->id]]))
-            ->assertSessionHasErrors(['cabinet_ids' => 'MO-1 อยู่ในรอบที่ 1 แล้ว (ส่งถึงแล้ว)']);
-        $this->assertNull($this->send(['cabinet_ids' => [$this->cab2->id], 'method' => 'external', 'carrier' => 'ไทยขนส่ง'])->vehicle_type, 'only the company\'s vehicles have a kind');
-        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertSee('ส่งแล้ว 1 / 2 ตู้')->assertSee('ขนส่งภายนอก · ไทยขนส่ง')->assertSee('คุณสมชาย · ใบส่งของ DO-0412');
-
-        // pressed by mistake: one step back at a time
+        // ย้อนขั้น one step at a time, unticking with it
         $this->actingAs($this->clerk)->post(route('deliveries.back', $d))->assertSessionHasNoErrors();
-        $this->assertSame(['departed', null], [$d->fresh()->status, $d->fresh()->receiver]);
+        $this->assertSame(['departed', ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล', 'ดำเนินการส่งมอบ']], [$d->fresh()->status, $this->ticked()['MO-1']]);
         $this->actingAs($this->clerk)->post(route('deliveries.back', $d));
-        $this->assertSame(['scheduled', null], [$d->fresh()->status, $d->fresh()->departed_at]);
+        $this->assertSame(['scheduled', ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล']], [$d->fresh()->status, $this->ticked()['MO-1']]);
+        $this->actingAs($this->clerk)->post(route('deliveries.back', $d));
+        $this->assertSame([null, ['ห่อตู้เสร็จสิ้น'], 'การจัดส่งรอบที่ 1: ย้อนขั้น แจ้งเปิดบิลแล้ว → ห่อครบ · รอแจ้งเปิดบิล'], [$d->fresh()->billed_at, $this->ticked()['MO-1'], $this->lastLog()]);
+        $this->actingAs($this->clerk)->post(route('deliveries.back', $d))->assertSessionHasErrors(['delivery' => 'ไม่มีขั้นให้ย้อน']);
+
+        // a cancelled round takes its ticks with it, and the items are a hand's again
+        $this->actingAs($this->pm)->delete(route('project-deliveries.destroy', $d))->assertSessionHasNoErrors();
+        $this->assertSame(['MO-1' => [], 'MO-2' => ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล']], $this->ticked());
+    }
+
+    public function test_a_round_is_late_after_its_day(): void
+    {
+        $d = $this->send(['delivery_date' => '2026-11-16', 'delivery_time' => '']);
+        $this->assertSame('16/11/2569', $d->when());
+        $this->assertFalse($d->isOverdue(Carbon::parse('2026-11-16')));
+        $this->assertTrue($d->isOverdue(Carbon::parse('2026-11-17')), 'past its day and not there yet');
     }
 
     public function test_who_may_do_what_and_a_closed_project_refuses(): void
@@ -248,37 +302,37 @@ class ProjectDeliveryTest extends TestCase
         $this->actingAs($this->clerk)->post(route('projects.deliveries.store', $this->project), $this->data())->assertForbidden();
         $this->actingAs($this->member)->get(route('deliveries.index'))->assertForbidden();
         $this->actingAs($this->member)->get(route('dashboard'))->assertDontSee(route('deliveries.index'));
-        $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk()->assertSee('ไม่มีรอบที่รอกำหนดวัน');
+        $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk()->assertSee('ไม่มีรอบที่รอจัดรถ');
 
         $this->project->update(['status' => 'completed']);
         $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data());
         $this->assertSame(0, ProjectDelivery::count());
     }
 
-    public function test_planning_carries_the_window_then_the_day_and_opens_the_window_that_saves_as_json(): void
+    public function test_planning_carries_the_day_the_steps_and_opens_the_window_that_saves_as_json(): void
     {
         $this->actingAs($this->pm)->get(route('projects.deliveries.form', $this->project))->assertOk()->assertSee('id="project-delivery"', false)->assertSee('MO-2')
-            ->assertViewHas('f', fn ($f) => $f['title'] === 'นัดส่งรอบที่ 1' && $f['verb'] === 'POST' && $f['method'] === 'company');
+            ->assertViewHas('f', fn ($f) => $f['title'] === 'นัดส่งรอบที่ 1' && $f['verb'] === 'POST' && $f['method'] === 'company' && $f['vehicle_types'] === []);
         $this->actingAs($this->pm)->postJson(route('projects.deliveries.store', $this->project), $this->data(['cabinet_ids' => []]))->assertStatus(422)->assertJsonValidationErrors('cabinet_ids');
         $this->actingAs($this->pm)->postJson(route('projects.deliveries.store', $this->project), $this->data())->assertOk()->assertExactJson(['message' => 'ส่งให้แผนกจัดส่งแล้ว']);
         $d = ProjectDelivery::firstOrFail();
         $this->actingAs($this->pm)->get(route('projects.deliveries.form', $this->project))
             ->assertViewHas('cabinets', fn ($c) => $c[0]['where'] === 'อยู่ในรอบที่ 1' && $c[1]['progress'] === 40)
-            ->assertViewHas('types', ['4 ล้อ', '6 ล้อเครน']);
-        // a card of the จัดส่ง tab opens its own round; a round of another project is not found
+            ->assertViewHas('types', ['4 ล้อ', '6 ล้อเครน', 'กระบะ']);
         $this->actingAs($this->pm)->get(route('projects.deliveries.form', [$this->project, 'delivery' => $d->id]))
-            ->assertViewHas('f', fn ($f) => $f['id'] === $d->id && $f['verb'] === 'PUT' && $f['window_from'] === '2026-11-18' && $f['picked'] === '');
+            ->assertViewHas('f', fn ($f) => $f['id'] === $d->id && $f['verb'] === 'PUT' && $f['delivery_date'] === '2026-11-20' && $f['vehicle_types'] === ['6 ล้อเครน', 'กระบะ'] && $f['picked'] === '');
         $other = Project::forceCreate(['project_no' => 'SO-2', 'project_name' => 'X', 'customer_name' => 'C', 'status' => 'in_progress', 'priority' => 'normal']);
         $this->actingAs($this->pm)->get(route('projects.deliveries.form', [$other, 'delivery' => $d->id]))->assertNotFound();
 
-        $json = fn () => collect(app(PlanningBoard::class)->tasks($this->pm))->firstWhere('id', 'p'.$this->project->id)['deliveries'];
-        $this->assertSame([['id' => $d->id, 'round' => 1, 'date' => '2026-11-18', 'end' => '2026-11-22', 'time' => '', 'status' => 'waiting', 'wait' => true, 'why' => '',
-            'cabs' => ['c'.$this->cab1->id, 'c'.$this->cab2->id], 'method' => 'company', 'car' => '6 ล้อเครน', 'carFull' => '6 ล้อเครน', 'driver' => '', 'crew' => 3, 'people' => '',
-            'dep' => null, 'at' => null]], $json(), 'no vehicle yet: the kind PM asked for');
-        $this->actingAs($this->clerk)->postJson(route('deliveries.schedule', $d), ['delivery_date' => '2026-11-20', 'delivery_time' => '09:00', 'vehicle_id' => $this->truck->id])
-            ->assertOk()->assertExactJson(['message' => 'กำหนดวันส่งแล้ว']);
-        $this->assertSame(['2026-11-20', '2026-11-20', '09:00', 'scheduled', false, '6 ล้อเครน · 3กข-1234', 'สมศักดิ์ (1/3 คน)'],
-            array_values(array_intersect_key($json()[0], array_flip(['date', 'end', 'time', 'status', 'wait', 'carFull', 'people']))));
+        $json = fn (User $u) => collect(app(PlanningBoard::class)->tasks($u))->firstWhere('id', 'p'.$this->project->id)['deliveries'] ?? [];
+        $this->assertSame([['id' => $d->id, 'round' => 1, 'date' => '2026-11-20', 'end' => '2026-11-20', 'time' => '09:00', 'status' => 'waiting', 'wait' => true, 'why' => '',
+            'cabs' => ['c'.$this->cab1->id, 'c'.$this->cab2->id], 'method' => 'company', 'packed' => [], 'step' => 0, 'stepText' => 'ห่อ 0/2', 'billed' => false,
+            'car' => '6 ล้อเครน + กระบะ', 'carFull' => '6 ล้อเครน + กระบะ', 'driver' => '', 'crew' => 3, 'people' => '', 'dep' => null, 'at' => null]], $json($this->pm), 'no vehicle yet: the kinds PM asked for');
+        $this->actingAs($this->clerk)->postJson(route('deliveries.assign', $d), ['vehicles' => [['vehicle_id' => $this->truck->id], ['vehicle_id' => $this->pickup->id]]])
+            ->assertOk()->assertExactJson(['message' => 'จัดรถแล้ว']);
+        $this->pack($d, [$this->cab2]);
+        $this->assertSame(['scheduled', false, ['c'.$this->cab2->id], 'ห่อ 1/2', '6 ล้อเครน + กระบะขาว', 'สมศักดิ์, อนันต์ (2/3 คน)'],
+            array_values(array_intersect_key($json($this->pm)[0], array_flip(['status', 'wait', 'car', 'packed', 'stepText', 'people']))));
 
         $this->actingAs($this->pm)->deleteJson(route('project-deliveries.destroy', $d))->assertOk()->assertExactJson(['message' => 'ยกเลิกรอบส่งแล้ว']);
         $this->assertSame(0, ProjectDelivery::count());
@@ -288,14 +342,14 @@ class ProjectDeliveryTest extends TestCase
     public function test_the_delivery_department_keeps_the_vehicles_and_the_reasons(): void
     {
         $this->actingAs($this->member)->get(route('settings.vehicles.index'))->assertForbidden();
-        $this->actingAs($this->clerk)->get(route('settings.vehicles.index'))->assertOk()->assertSee('6 ล้อเครน')->assertSee('รถไม่ว่างทั้งช่วงวัน');
-        $this->actingAs($this->clerk)->post(route('settings.vehicles.store'), ['name' => 'กระบะขาว', 'type' => ' กระบะ ', 'plate' => '1กข-9999', 'capacity' => 1])->assertSessionHasNoErrors();
-        $pickup = Vehicle::where('name', 'กระบะขาว')->firstOrFail();
+        $this->actingAs($this->clerk)->get(route('settings.vehicles.index'))->assertOk()->assertSee('6 ล้อเครน')->assertSee('รถไม่ว่างวันนั้น')->assertSee('แจ้งเปิดบิล');
+        $this->actingAs($this->clerk)->post(route('settings.vehicles.store'), ['name' => 'กระบะดำ', 'type' => ' กระบะ ', 'plate' => '1กข-9999', 'capacity' => 1])->assertSessionHasNoErrors();
+        $spare = Vehicle::where('name', 'กระบะดำ')->firstOrFail();
         $this->assertSame(['4 ล้อ', '6 ล้อเครน', 'กระบะ'], Vehicle::types(), 'PM asks for the kinds of the vehicles in use');
-        $this->actingAs($this->clerk)->delete(route('settings.vehicles.destroy', $pickup));
-        $this->assertNull(Vehicle::find($pickup->id));
+        $this->actingAs($this->clerk)->delete(route('settings.vehicles.destroy', $spare));
+        $this->assertNull(Vehicle::find($spare->id));
 
-        $this->pick($this->send());
+        $this->assign($this->send());
         $this->actingAs($this->admin)->delete(route('settings.vehicles.destroy', $this->truck));
         $this->assertFalse($this->truck->fresh()->is_active);
         $this->assertSame('6 ล้อเครน · 3กข-1234', ProjectDelivery::first()->transport(), 'its rounds still say which vehicle went');
@@ -307,65 +361,60 @@ class ProjectDeliveryTest extends TestCase
         $this->assertSame(ProjectDelivery::REJECT_REASONS, ProjectDelivery::rejectReasons());
     }
 
-    public function test_pm_keeps_a_draft_for_every_cabinet_and_sends_it_when_the_cabinets_are_checked(): void
+    public function test_pm_keeps_a_draft_for_every_cabinet_that_only_pm_sees_and_sends_it_when_the_cabinets_are_checked(): void
     {
-        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['send' => '0', 'cabinet_ids' => [], 'vehicle_type' => '']))
+        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['send' => '0', 'cabinet_ids' => [], 'vehicle_types' => []]))
             ->assertSessionHas('success', 'บันทึกร่างการจัดส่งแล้ว');
         $d = ProjectDelivery::firstOrFail();
         $this->assertSame(['draft', [], null, 'ร่าง', 'ทุกตู้'], [$d->status, $d->cabinet_ids, $d->sent_by, $d->stateLabel(), $d->cabinetsText()]);
-        $this->assertSame('ร่างการจัดส่ง รอบที่ 1: ส่งได้ 18–22/11/2569 · ทุกตู้ · - · 3 คน', $this->lastLog());
+        $this->assertSame('ร่างการจัดส่ง รอบที่ 1: 20/11/2569 · 09:00 น. · ทุกตู้ · - · 3 คน', $this->lastLog());
         $this->assertSame(0, $this->clerk->notifications()->count(), 'a draft is PM\'s own');
-        $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertSee('ไม่มีรอบที่รอกำหนดวัน')->assertDontSee('SO-1');
+        $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertSee('ไม่มีรอบที่รอจัดรถ')->assertDontSee('SO-1');
         $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertSee('ร่าง · ยังไม่ได้ส่งให้แผนกจัดส่ง')->assertSee('ตรวจแล้วส่งให้แผนกจัดส่ง');
-        $this->assertTrue(collect(app(PlanningBoard::class)->tasks($this->pm))->firstWhere('id', 'p'.$this->project->id)['deliveries'][0]['wait']);
+        $planning = fn (User $u) => collect(app(PlanningBoard::class)->tasks($u))->firstWhere('id', 'p'.$this->project->id)['deliveries'] ?? [];
+        $this->assertTrue($planning($this->pm)[0]['wait']);
+        $this->assertSame([], $planning($this->clerk), 'Planning hides PM\'s drafts from the others');
 
-        // its window ticks the cabinets free to go; sending needs them and the kind of vehicle
         $this->actingAs($this->pm)->get(route('projects.deliveries.form', [$this->project, 'delivery' => $d->id]))
             ->assertViewHas('f', fn ($f) => $f['draft'] && $f['all'] && $f['cabinet_ids'] === [$this->cab1->id, $this->cab2->id] && $f['title'] === 'ร่างการจัดส่งรอบที่ 1');
-        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['send' => '1', 'cabinet_ids' => [], 'vehicle_type' => '']))
-            ->assertSessionHasErrors(['cabinet_ids', 'vehicle_type']);
+        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['send' => '1', 'cabinet_ids' => [], 'vehicle_types' => []]))
+            ->assertSessionHasErrors(['cabinet_ids', 'vehicle_types']);
         $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['send' => '1']))->assertSessionHas('success', 'ส่งให้แผนกจัดส่งแล้ว');
         $d->refresh();
         $this->assertSame(['waiting', $this->pm->id, 2], [$d->status, $d->sent_by, count($d->cabinet_ids)]);
-        $this->assertSame('ส่งให้แผนกจัดส่ง รอบที่ 1: ส่งได้ 18–22/11/2569 · 2 ตู้ (MO-1, MO-2) · 6 ล้อเครน · 3 คน', $this->lastLog());
-        $this->assertSame(['งานจัดส่งใหม่ · เลือกวันส่ง'], $this->notices($this->clerk, 'delivery_todo'));
+        $this->assertSame(['งานจัดส่งใหม่ · จัดรถ / คน'], $this->notices($this->clerk, 'delivery_todo'));
     }
 
     public function test_the_new_project_page_books_the_fat_day_and_a_draft_delivery(): void
     {
-        $this->actingAs($this->pm)->get(route('projects.create'))->assertOk()->assertSee('วัน FAT')->assertSee('ถึงวันที่')->assertSee('การจัดส่ง')->assertSee('สถานที่ส่ง')->assertSee('ขนส่งภายนอก')->assertSee('6 ล้อเครน');
+        $this->actingAs($this->pm)->get(route('projects.create'))->assertOk()->assertSee('วัน FAT')->assertSee('การจัดส่ง')->assertSee('วันส่ง')->assertSee('ขนส่งภายนอก')->assertSee('6 ล้อเครน')->assertSee('กระบะ');
         $base = ['project_no' => 'SO-9', 'project_name' => 'ใหม่', 'customer_name' => 'ลูกค้า', 'priority' => 'normal'];
-        $this->actingAs($this->pm)->post(route('projects.store'), $base + ['delivery_from' => '2026-12-10'])->assertSessionHasErrors(['delivery_to' => 'ใส่ช่วงวันส่งให้ครบ (ตั้งแต่ – ถึง)']);
-        $this->assertNull(Project::where('project_no', 'SO-9')->first(), 'nothing saved with a half window');
-
-        $this->actingAs($this->pm)->post(route('projects.store'), $base + ['delivery_site' => 'บางนา'])->assertSessionHasErrors(['delivery_from' => 'ใส่ช่วงวันส่งให้ครบ (ตั้งแต่ – ถึง)']);
+        $this->actingAs($this->pm)->post(route('projects.store'), $base + ['delivery_site' => 'บางนา'])->assertSessionHasErrors(['delivery_date' => 'ใส่วันส่งก่อน']);
+        $this->assertNull(Project::where('project_no', 'SO-9')->first(), 'nothing saved without the day');
         $this->actingAs($this->pm)->post(route('projects.store'), $base + ['fat_time' => '13:30'])->assertSessionHasErrors(['fat_date' => 'ใส่วัน FAT ก่อน']);
 
-        // the same fields as the project page's windows, for every cabinet; the delivery stays a draft
         $this->actingAs($this->pm)->post(route('projects.store'), $base + ['fat_date' => '2026-12-01', 'fat_end_date' => '2026-12-02', 'fat_time' => '13:30', 'fat_status' => 'scheduled', 'fat_note' => 'ลูกค้า 3 คน',
-            'delivery_method' => 'company', 'delivery_from' => '2026-12-10', 'delivery_to' => '2026-12-12', 'delivery_vehicle_type' => '6 ล้อเครน', 'delivery_crew_size' => '4',
+            'delivery_method' => 'company', 'delivery_date' => '2026-12-10', 'delivery_time' => '08:30', 'delivery_vehicle_types' => ['6 ล้อเครน', 'กระบะ'], 'delivery_crew_size' => '4',
             'delivery_carrier' => 'ไม่ใช้', 'delivery_site' => 'บางนา ประตู 2', 'delivery_contact_name' => 'คุณวิทยา', 'delivery_contact_phone' => '0812345678', 'delivery_note' => 'ต้องใช้เครน'])->assertSessionHasNoErrors();
         $p = Project::where('project_no', 'SO-9')->firstOrFail();
         $fat = $p->fats()->firstOrFail();
         $this->assertSame([1, '2026-12-01', '2026-12-02', '13:30', null, 'scheduled', 'ลูกค้า 3 คน'],
             [$fat->round, $fat->fat_date->format('Y-m-d'), $fat->fat_end_date->format('Y-m-d'), $fat->fat_time, $fat->cabinet_ids, $fat->status, $fat->note]);
         $d = $p->deliveries()->firstOrFail();
-        $this->assertSame(['draft', 1, '2026-12-10', '2026-12-12', [], 'company', '6 ล้อเครน', 4, null, 'บางนา ประตู 2', 'คุณวิทยา', '0812345678', 'ต้องใช้เครน'],
-            [$d->status, $d->round, $d->window_from->format('Y-m-d'), $d->window_to->format('Y-m-d'), $d->cabinet_ids, $d->method, $d->vehicle_type, $d->crew_size,
+        $this->assertSame(['draft', 1, '2026-12-10', '08:30', [], 'company', ['6 ล้อเครน', 'กระบะ'], 4, null, 'บางนา ประตู 2', 'คุณวิทยา', '0812345678', 'ต้องใช้เครน'],
+            [$d->status, $d->round, $d->delivery_date->format('Y-m-d'), $d->delivery_time, $d->cabinet_ids, $d->method, $d->vehicle_types, $d->crew_size,
                 $d->carrier, $d->site, $d->contact_name, $d->contact_phone, $d->note]);
         $this->assertSame(0, $this->clerk->notifications()->count());
-        // its window opens with them, the cabinets added since ticked
         $cab = Cabinet::forceCreate(['project_id' => $p->id, 'mo_no' => 'MO-9', 'cabinet_name' => 'A', 'quantity' => 1, 'status' => 'not_started', 'progress' => 0]);
         $this->actingAs($this->pm)->get(route('projects.deliveries.form', [$p, 'delivery' => $d->id]))
             ->assertViewHas('f', fn ($f) => $f['draft'] && $f['site'] === 'บางนา ประตู 2' && $f['crew_size'] === '4' && $f['cabinet_ids'] === [$cab->id]);
 
-        // an outside carrier: no kind of vehicle, its carrier kept
-        $this->actingAs($this->pm)->post(route('projects.store'), ['project_no' => 'SO-11'] + $base + ['delivery_method' => 'external', 'delivery_from' => '2026-12-10', 'delivery_to' => '2026-12-10',
-            'delivery_vehicle_type' => '6 ล้อเครน', 'delivery_carrier' => 'ไทยขนส่ง'])->assertSessionHasNoErrors();
+        // an outside carrier: no kinds of vehicle, its carrier and crew size kept
+        $this->actingAs($this->pm)->post(route('projects.store'), ['project_no' => 'SO-11'] + $base + ['delivery_method' => 'external', 'delivery_date' => '2026-12-10',
+            'delivery_vehicle_types' => ['6 ล้อเครน'], 'delivery_carrier' => 'ไทยขนส่ง', 'delivery_crew_size' => '2'])->assertSessionHasNoErrors();
         $d = Project::where('project_no', 'SO-11')->firstOrFail()->deliveries()->firstOrFail();
-        $this->assertSame(['external', null, 'ไทยขนส่ง', 'draft'], [$d->method, $d->vehicle_type, $d->carrier, $d->status]);
+        $this->assertSame(['external', null, 'ไทยขนส่ง', 2, 'draft'], [$d->method, $d->vehicle_types, $d->carrier, $d->crew_size, $d->status]);
 
-        // without the นัดหมาย fields: just the project
         $this->actingAs($this->pm)->post(route('projects.store'), ['project_no' => 'SO-10'] + $base)->assertSessionHasNoErrors();
         $p = Project::where('project_no', 'SO-10')->firstOrFail();
         $this->assertSame([0, 0], [$p->fats()->count(), $p->deliveries()->count()]);

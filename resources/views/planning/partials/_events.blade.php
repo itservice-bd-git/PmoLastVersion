@@ -4,7 +4,7 @@
 <div x-show="mode === 'fat' || mode === 'del'" x-cloak>
     <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-600">
         <span x-text="mode === 'fat' ? 'นัด FAT เดือนนี้ ' + evCount().fat + ' นัด' : 'รอบส่งเดือนนี้ ' + evCount().del + ' รอบ'"></span>
-        <button type="button" x-show="mode === 'del' && (evCount().wait || evNeed)" @click="evNeed = !evNeed" :aria-pressed="evNeed" title="เฉพาะรอบที่แผนกจัดส่งยังไม่ได้เลือกวัน / ไม่รับงาน"
+        <button type="button" x-show="mode === 'del' && (evCount().wait || evNeed)" @click="evNeed = !evNeed" :aria-pressed="evNeed" title="เฉพาะรอบที่แผนกจัดส่งยังไม่ได้จัดรถ / ไม่รับงาน"
                 :class="evNeed ? 'border-amber-700 bg-amber-700 text-white' : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'" class="inline-flex h-7 items-center gap-1.5 rounded-full border px-3">
             <span x-text="evState('delivery', 'waiting').name"></span> <span class="tabular-nums" x-text="evCount().wait"></span>
         </button>

@@ -343,6 +343,16 @@ html { color-scheme: light; }
 .dl-no { @apply w-11 shrink-0 font-bold tabular-nums text-teal-700; }
 .dl-chip { @apply inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-md border border-slate-300 bg-white px-1.5 text-[11px] font-semibold text-slate-700; }
 .dl-chip.dl-need { border-style: dashed; }
+.dl-chip.dl-packed { @apply border-emerald-500 text-emerald-700; }
+/* a round's four steps (ห่อ n/m → แจ้งเปิดบิล → ออกรถ → ส่งถึง) in Planning's project window */
+.dl-steps { @apply m-0 grid max-w-sm list-none grid-cols-4 gap-1 p-0; }
+.dl-steps li { @apply flex min-w-0 flex-col gap-0.5 text-[11px] text-slate-500; }
+.dl-steps i { @apply block h-1 overflow-hidden rounded-full bg-slate-200; }
+.dl-steps u { @apply block h-full bg-emerald-600 no-underline; }
+.dl-steps li.now u { @apply bg-sky-600; }
+.dl-steps li.now b { @apply text-slate-900; }
+.dl-steps li.done b { @apply text-emerald-700; }
+.dl-steps b { @apply truncate font-semibold; }
 .dl-pill { @apply whitespace-nowrap rounded-full px-2 text-[11px] font-bold; }
 
 /* the FAT / delivery states take their colour from Settings > สถานะงาน (App\Support\EventStatuses): the element carries it as

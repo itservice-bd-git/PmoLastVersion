@@ -207,32 +207,33 @@
                                 <input type="radio" name="delivery_method" value="{{ $key }}" x-model="method" class="sr-only">{{ \App\Models\ProjectDelivery::methodName($key) }}</label>
                         @endforeach
                     </div>
-                    <div x-show="method === 'company'" class="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
-                        <label class="block text-sm font-semibold text-slate-800">ประเภทรถ
-                            <select name="delivery_vehicle_type" :disabled="method !== 'company' || {{ $vehicleTypes ? 'false' : 'true' }}" class="{{ $box }}">
-                                <option value="">{{ $vehicleTypes ? 'เลือกประเภทรถ' : 'ยังไม่มีประเภทรถ (ตั้งค่า › รถขนส่ง)' }}</option>
-                                @foreach ($vehicleTypes as $t)
-                                    <option value="{{ $t }}" @selected(old('delivery_vehicle_type') === $t)>{{ $t }}</option>
-                                @endforeach
-                            </select>
+                    <div class="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
+                        <label class="block text-sm font-semibold text-slate-800">วันส่ง
+                            <input type="date" name="delivery_date" value="{{ old('delivery_date') }}" class="{{ $box }}">
                         </label>
-                        <label class="block text-sm font-semibold text-slate-800">จำนวนคน
-                            <input type="number" name="delivery_crew_size" value="{{ old('delivery_crew_size') }}" :disabled="method !== 'company'" min="1" max="20" inputmode="numeric" placeholder="เช่น 3" class="{{ $box }} tabular-nums">
+                        <label class="block text-sm font-semibold text-slate-800">เวลา
+                            <input type="text" name="delivery_time" value="{{ old('delivery_time') }}" placeholder="เช่น 09:00" inputmode="numeric" maxlength="5" autocomplete="off" class="{{ $box }} tabular-nums"
+                                   x-init="window.flatpickr($el, { enableTime: true, noCalendar: true, dateFormat: 'H:i', time_24hr: true, allowInput: true, defaultHour: 9 })">
                         </label>
                     </div>
-                    <p x-show="method === 'company'" class="-mt-2 text-xs text-slate-500">แผนกจัดส่งเลือกรถคันจริงและคนที่ไปเอง · จำนวนคนรวมคนขับ</p>
+                    <fieldset x-show="method === 'company'">
+                        <legend class="text-sm font-semibold text-slate-800">ประเภทรถที่ต้องใช้ <span class="font-normal text-slate-500">(เลือกได้หลายแบบ)</span></legend>
+                        <div class="mt-1.5 flex flex-wrap gap-2">
+                            @forelse ($vehicleTypes as $t)
+                                <label class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-700 has-[:checked]:border-teal-700 has-[:checked]:bg-teal-50 has-[:checked]:text-teal-800">
+                                    <input type="checkbox" name="delivery_vehicle_types[]" value="{{ $t }}" @checked(in_array($t, (array) old('delivery_vehicle_types', []), true)) :disabled="method !== 'company'" class="rounded text-teal-700">{{ $t }}</label>
+                            @empty
+                                <span class="text-sm text-slate-500">ยังไม่มีประเภทรถ (ตั้งค่า › รถขนส่ง)</span>
+                            @endforelse
+                        </div>
+                    </fieldset>
+                    <label x-show="method !== 'pickup'" class="block w-40 text-sm font-semibold text-slate-800">จำนวนคน
+                        <input type="number" name="delivery_crew_size" value="{{ old('delivery_crew_size') }}" :disabled="method === 'pickup'" min="1" max="20" inputmode="numeric" placeholder="เช่น 3" class="{{ $box }} tabular-nums">
+                    </label>
+                    <p x-show="method !== 'pickup'" class="-mt-2 text-xs text-slate-500">แผนกจัดส่งเลือกรถคันจริงและคนที่ไปเอง · จำนวนคนรวมคนขับ</p>
                     <label x-show="method === 'external'" class="block text-sm font-semibold text-slate-800">บริษัทขนส่ง / ทะเบียน
                         <input type="text" name="delivery_carrier" value="{{ old('delivery_carrier') }}" :disabled="method !== 'external'" maxlength="150" placeholder="เช่น ไทยขนส่ง · 70-1234" class="{{ $box }}">
                     </label>
-                    <div class="grid grid-cols-2 gap-3">
-                        <label class="block text-sm font-semibold text-slate-800">ส่งได้ตั้งแต่
-                            <input type="date" name="delivery_from" value="{{ old('delivery_from') }}" class="{{ $box }}">
-                        </label>
-                        <label class="block text-sm font-semibold text-slate-800">ถึง
-                            <input type="date" name="delivery_to" value="{{ old('delivery_to') }}" class="{{ $box }}">
-                        </label>
-                    </div>
-                    <p class="-mt-2 text-xs text-slate-500">ใส่ช่วงวันที่ลูกค้ารับของได้ แผนกจัดส่งเลือกวันส่งจริงกับเวลาเอง</p>
                     <label class="block text-sm font-semibold text-slate-800">สถานที่ส่ง
                         <input type="text" name="delivery_site" value="{{ old('delivery_site') }}" maxlength="255" placeholder="เช่น โรงงานบางนา ประตู 2" class="{{ $box }}">
                     </label>
@@ -248,7 +249,7 @@
                         <input type="text" name="delivery_note" value="{{ old('delivery_note') }}" maxlength="500" placeholder="เช่น ต้องใช้เครน · เข้าได้หลัง 8 โมง" class="{{ $box }}">
                     </label>
                 </div>
-                @foreach (['delivery_from', 'delivery_to', 'delivery_method', 'delivery_vehicle_type', 'delivery_crew_size', 'delivery_carrier', 'delivery_site', 'delivery_contact_name', 'delivery_contact_phone', 'delivery_note'] as $k)
+                @foreach (['delivery_date', 'delivery_time', 'delivery_method', 'delivery_vehicle_types', 'delivery_crew_size', 'delivery_carrier', 'delivery_site', 'delivery_contact_name', 'delivery_contact_phone', 'delivery_note'] as $k)
                     <x-input-error :messages="$errors->get($k)" class="mt-1" />
                 @endforeach
                 <p class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">บันทึกเป็น <b>ร่าง</b> รอบส่งที่ 1 (ทุกตู้) แผนกจัดส่งยังไม่เห็น · พอมีตู้แล้วกด "ตรวจแล้วส่งให้แผนกจัดส่ง" ที่หน้าโครงการ</p>

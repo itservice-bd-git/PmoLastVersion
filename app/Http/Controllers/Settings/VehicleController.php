@@ -5,13 +5,14 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\ProjectDelivery;
+use App\Models\ProjectDeliveryVehicle;
 use App\Models\Vehicle;
 use Illuminate\Http\Request;
 
 /**
  * Settings > รถขนส่ง (Access 'edit.delivery': the delivery department, Admin / PM): the company's vehicles - their kinds
  * are what PM asks for when a round is booked (ProjectDeliveryController), the vehicles what the delivery department
- * picks with the day (DeliveryController) - and the reasons "ไม่รับงาน" offers.
+ * puts on a round (DeliveryController) - and the reasons "ไม่รับงาน" offers.
  */
 class VehicleController extends Controller
 {
@@ -19,9 +20,11 @@ class VehicleController extends Controller
     {
         return view('settings.vehicles', [
             'vehicles' => Vehicle::orderByDesc('is_active')->orderBy('sequence')->orderBy('id')->get(),
-            'used' => ProjectDelivery::whereNotNull('vehicle_id')->selectRaw('vehicle_id, count(*) as n')->groupBy('vehicle_id')->pluck('n', 'vehicle_id'),
+            'used' => ProjectDeliveryVehicle::whereNotNull('vehicle_id')->selectRaw('vehicle_id, count(distinct project_delivery_id) as n')->groupBy('vehicle_id')->pluck('n', 'vehicle_id'),
             'reasons' => ProjectDelivery::rejectReasons(),
             'types' => Vehicle::whereNotNull('type')->distinct()->orderBy('type')->pluck('type'),
+            'departments' => \App\Models\Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'billing' => (int) AppSetting::get('delivery_billing_department'),
         ]);
     }
 
@@ -34,6 +37,15 @@ class VehicleController extends Controller
         AppSetting::put('delivery_reject_reasons', $list);
 
         return back()->with('success', 'บันทึกเหตุผลไม่รับงานแล้ว');
+    }
+
+    /** "แจ้งเปิดบิล" goes to this department (none = nobody besides PM). */
+    public function billing(Request $request)
+    {
+        $data = $request->validate(['department_id' => ['nullable', 'integer', 'exists:departments,id']]);
+        AppSetting::put('delivery_billing_department', $data['department_id'] ?? null);
+
+        return back()->with('success', 'บันทึกแผนกที่ได้แจ้งเปิดบิลแล้ว');
     }
 
     public function store(Request $request)

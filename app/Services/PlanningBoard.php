@@ -192,7 +192,9 @@ class PlanningBoard
         $this->dateChanges = $ids->isEmpty() ? collect() : ProjectDateChange::whereIn('project_id', $ids)->orderBy('id')->get()
             ->groupBy(fn ($c) => $c->cabinet_id ? 'c'.$c->cabinet_id : 'p'.$c->project_id);
         // การจัดส่ง (ProjectDeliveryController): each project's rounds, for the "ส่ง" line on its bar and its project window
-        $this->deliveries = $ids->isEmpty() ? collect() : ProjectDelivery::with('vehicle')->whereIn('project_id', $ids)->orderBy('round')->get()->groupBy('project_id');
+        // (PM's drafts only for those who book rounds: nobody else is meant to see them yet)
+        $this->deliveries = $ids->isEmpty() ? collect() : ProjectDelivery::with('vehicles.vehicle')->whereIn('project_id', $ids)
+            ->when(! DeliveryFlow::canBook($user), fn ($q) => $q->where('status', '!=', ProjectDelivery::DRAFT))->orderBy('round')->get()->groupBy('project_id');
         $cabinets = $builder ? Cabinet::with('boardStatus')->whereIn('project_id', $ids)->orderBy('sequence')->orderBy('id')->get()->groupBy('project_id') : null;
 
         $tasks = $byProject->map(fn (Collection $rows) => $this->task($rows->first()->cabinetTask->cabinet->project, $rows, $comments, $today, $user, $cabinets))
@@ -208,7 +210,7 @@ class PlanningBoard
         'departments' => 'id', 'department_fields' => 'id', 'department_field_options' => 'id', 'project_field_values' => 'id',
         'project_department_statuses' => 'id', 'department_links' => 'id', 'users' => 'id',
         // pivots: no id / timestamps - a swap (detach one, attach another) still changes the sum
-        'checklist_statuses' => 'id', 'cabinet_checklist_status' => 'id', 'project_fats' => 'id', 'project_date_changes' => 'id', 'project_deliveries' => 'id', 'vehicles' => 'id',
+        'checklist_statuses' => 'id', 'cabinet_checklist_status' => 'id', 'project_fats' => 'id', 'project_date_changes' => 'id', 'project_deliveries' => 'id', 'project_delivery_vehicles' => 'id', 'vehicles' => 'id',
         'project_user' => 'project_id * 100003 + user_id', 'board_label_project' => 'project_id * 100003 + board_label_id',
     ];
 
@@ -480,23 +482,27 @@ class PlanningBoard
     }
 
     /**
-     * A delivery round as Planning draws it: its days (wait = no day picked yet: date / end are PM's window, drawn dashed;
-     * why = the delivery department sent it back), its cabinets ('c'.id), on what (car = the short name on the bar's tab,
-     * carFull = with the plate, for the project window).
+     * A delivery round as Planning draws it: its day (date = end = PM's day; wait = no vehicle on it yet, drawn dashed;
+     * why = the delivery department sent it back), its cabinets ('c'.id) and which are packed, where it is in the four
+     * steps (step n / text: "ห่อ 4/6", "แจ้งเปิดบิลแล้ว"), on what (car = the short names on the bar's tab, carFull = with
+     * the plates, for the project window).
      */
     private static function delivery(ProjectDelivery $d): array
     {
         $car = match ($d->method) {
             ProjectDelivery::EXTERNAL => $d->carrier ?: ProjectDelivery::methodName(ProjectDelivery::EXTERNAL),
             ProjectDelivery::PICKUP => ProjectDelivery::methodName(ProjectDelivery::PICKUP),
-            default => $d->vehicle?->name ?? $d->vehicle_type,   // no vehicle picked yet: the kind PM asked for
+            default => $d->vehicles->isNotEmpty() ? $d->vehicles->map(fn ($v) => $v->vehicle?->name ?? $v->name())->implode(' + ') : $d->typesText(),   // none put on yet: the kinds PM asked for
         };
+        $step = $d->step();
 
         return [
-            'id' => $d->id, 'round' => $d->round, 'date' => $d->firstDay()->format('Y-m-d'), 'end' => $d->lastDay()->format('Y-m-d'), 'time' => (string) $d->delivery_time, 'status' => $d->status,
+            'id' => $d->id, 'round' => $d->round, 'date' => $d->delivery_date->format('Y-m-d'), 'end' => $d->delivery_date->format('Y-m-d'), 'time' => (string) $d->delivery_time, 'status' => $d->status,
             'wait' => $d->isOpen(), 'why' => $d->status === ProjectDelivery::REJECTED ? trim($d->rejected_reason.($d->rejected_note ? ' · '.$d->rejected_note : '')) : '',
             'cabs' => array_map(fn ($id) => 'c'.$id, $d->cabinet_ids ?? []), 'method' => $d->method,
-            'car' => $car, 'carFull' => $d->method === ProjectDelivery::COMPANY ? $d->transport() : $car, 'driver' => (string) $d->driver_name,
+            'packed' => array_values(array_map(fn ($id) => 'c'.$id, array_filter($d->cabinet_ids ?? [], fn ($id) => $d->isPacked((int) $id)))),
+            'step' => $step['n'], 'stepText' => $step['text'], 'billed' => (bool) $d->billed_at,
+            'car' => $car, 'carFull' => $d->method === ProjectDelivery::COMPANY ? $d->transport() : $car, 'driver' => (string) $d->vehicles->first()?->driver_name,
             'crew' => $d->crew_size ?: count($d->people()), 'people' => $d->peopleText(),
             'dep' => $d->departed_at?->format('H:i'), 'at' => $d->delivered_at?->format('Y-m-d H:i'),
         ];

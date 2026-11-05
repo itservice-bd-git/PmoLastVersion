@@ -174,7 +174,7 @@ class ChecklistStatuses
         // a status set to tick the item ("ของเข้าแล้ว") ticks it as a hand would - progress, the pair's source, Automation,
         // notices; taking the status off leaves the tick (the callers checked this user may edit, so may tick, the list)
         $ticked = false;
-        if (! $item->is_completed && $add->contains(fn ($id) => $all[$id]->ticks_item)) {
+        if (! $item->is_completed && $add->contains(fn ($id) => $all[$id]->ticks_item) && ! app(DeliveryChecklist::class)->lockedBy($item)) {   // a delivery round's item: the round ticks it
             $item->loadMissing('subtask.cabinetTask.cabinet');
             if (app(SubtaskAssignmentService::class)->acceptByTick($item->subtask, $user)) {
                 $item->setRelation('subtask', $item->subtask->fresh());

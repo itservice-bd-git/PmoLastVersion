@@ -6,16 +6,18 @@ use App\Models\Cabinet;
 use App\Models\ProjectDelivery;
 use App\Services\DeliveryFlow;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * "งานจัดส่ง": the delivery department's own page (Access 'edit.delivery'). Only the rounds PM sent (not its drafts) -
- * what goes, where, the kind of vehicle and how many people PM asked for, the window PM gave - not the rest of the
- * project. Tabs by step; each step goes through DeliveryFlow.
+ * "งานจัดส่ง": the delivery department's own page (Access 'edit.delivery') - the one place it works; the cabinets'
+ * Checklist and Planning follow it (DeliveryChecklist). Only the rounds PM sent (not its drafts): what goes, where, the
+ * day PM set, the kinds of vehicle and how many people PM asked for - not the rest of the project. Tabs by step; each step
+ * goes through DeliveryFlow.
  */
 class DeliveryController extends Controller
 {
-    public const TABS = ['waiting' => 'รอกำหนดวัน', 'today' => 'วันนี้', 'scheduled' => 'กำหนดวันแล้ว', 'departed' => 'ออกจากโรงงาน', 'delivered' => 'ส่งถึงแล้ว', 'rejected' => 'ไม่รับงาน'];
+    public const TABS = ['waiting' => 'รอจัดรถ', 'today' => 'วันนี้', 'scheduled' => 'จัดรถแล้ว', 'departed' => 'ออกจากโรงงาน', 'delivered' => 'ส่งถึงแล้ว', 'rejected' => 'ไม่รับงาน'];
 
     /** how far back "ส่งถึงแล้ว" lists */
     private const DELIVERED_DAYS = 30;
@@ -25,28 +27,27 @@ class DeliveryController extends Controller
     public function index(Request $request)
     {
         $today = today();
-        $all = ProjectDelivery::with('project', 'vehicle', 'sender', 'rejecter')->whereHas('project')
+        $all = ProjectDelivery::with('project', 'vehicles.vehicle', 'sender', 'rejecter', 'biller')->whereHas('project')
             ->where('status', '!=', ProjectDelivery::DRAFT)
             ->where(fn ($q) => $q->where('status', '!=', ProjectDelivery::DELIVERED)->orWhere('delivered_at', '>=', $today->copy()->subDays(self::DELIVERED_DAYS)))
             ->get();
-        $on = fn (ProjectDelivery $d) => in_array($d->status, [ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true);
+        $day = fn ($d) => $d->delivery_date->format('Ymd').($d->delivery_time ?: '99');
         $tabs = [
-            'waiting' => $all->where('status', ProjectDelivery::WAITING)->sortBy(fn ($d) => $d->window_to->format('Ymd').$d->window_from->format('Ymd')),
-            // its days include today, or it is past them and not there yet
-            'today' => $all->filter(fn ($d) => $on($d) && $d->delivery_date->lte($today))->sortBy(fn ($d) => $d->delivery_date->format('Ymd').($d->delivery_time ?: '99')),
-            'scheduled' => $all->where('status', ProjectDelivery::SCHEDULED)->sortBy(fn ($d) => $d->delivery_date->format('Ymd').($d->delivery_time ?: '99')),
-            'departed' => $all->where('status', ProjectDelivery::DEPARTED)->sortBy(fn ($d) => $d->delivery_date->format('Ymd')),
+            'waiting' => $all->where('status', ProjectDelivery::WAITING)->sortBy($day),
+            // its day is today, or it is past it and not there yet
+            'today' => $all->filter(fn ($d) => in_array($d->status, [ProjectDelivery::WAITING, ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true) && $d->delivery_date->lte($today))->sortBy($day),
+            'scheduled' => $all->where('status', ProjectDelivery::SCHEDULED)->sortBy($day),
+            'departed' => $all->where('status', ProjectDelivery::DEPARTED)->sortBy($day),
             'delivered' => $all->where('status', ProjectDelivery::DELIVERED)->sortByDesc('delivered_at'),
             'rejected' => $all->where('status', ProjectDelivery::REJECTED)->sortByDesc('rejected_at'),
         ];
         $round = $request->integer('round');
         $tab = $request->input('tab');
         if (! isset($tabs[$tab])) {   // a notice's round opens on its own tab; else the first tab with work in it
-            $tab = $round && ($d = $all->firstWhere('id', $round)) ? ($d->status === ProjectDelivery::WAITING ? 'waiting' : ($d->status === ProjectDelivery::REJECTED ? 'rejected'
-                : ($d->status === ProjectDelivery::DELIVERED ? 'delivered' : ($on($d) && $d->delivery_date->lte($today) ? 'today' : $d->status))))
-                : collect(['waiting', 'today', 'scheduled'])->first(fn ($k) => $tabs[$k]->isNotEmpty(), 'waiting');
+            $tab = $round && ($d = $all->firstWhere('id', $round)) ? ($tabs['today']->contains('id', $d->id) ? 'today' : $d->status)
+                : collect(['today', 'waiting', 'scheduled'])->first(fn ($k) => $tabs[$k]->isNotEmpty(), 'waiting');
         }
-        $vehicles = ProjectDeliveryController::vehicles($all->pluck('vehicle_id')->filter()->unique()->all());
+        $vehicles = ProjectDeliveryController::vehicles($all->flatMap(fn ($d) => $d->vehicles->pluck('vehicle_id'))->filter()->unique()->values()->all());
         $people = $all->flatMap(fn ($d) => $d->people())->merge(array_column($vehicles, 'driver'))->filter()->unique()->sort()->values();
         $names = Cabinet::whereIn('id', $all->flatMap(fn ($d) => $d->cabinet_ids ?? [])->unique())->get(['id', 'mo_no', 'cabinet_name'])
             ->mapWithKeys(fn ($c) => [$c->id => $c->mo_no ?: $c->cabinet_name]);
@@ -61,21 +62,22 @@ class DeliveryController extends Controller
         ]);
     }
 
-    public function schedule(Request $request, ProjectDelivery $delivery)
+    /** จัดรถ / คน (or a pickup's รับงาน). */
+    public function assign(Request $request, ProjectDelivery $delivery)
     {
         $data = $request->validate([
-            'delivery_date' => ['required', 'date'],
-            'delivery_time' => ['nullable', 'date_format:H:i'],
-            'vehicle_id' => ['nullable', 'integer'],
-            'driver_name' => ['nullable', 'string', 'max:100'],
-            'crew' => ['nullable', 'array', 'max:20'],
-            'crew.*' => ['nullable', 'string', 'max:100'],
+            'vehicles' => ['nullable', 'array', 'max:20'],
+            'vehicles.*.vehicle_id' => ['nullable', 'integer'],
+            'vehicles.*.label' => ['nullable', 'string', 'max:150'],
+            'vehicles.*.driver_name' => ['nullable', 'string', 'max:100'],
+            'vehicles.*.crew' => ['nullable', 'array', 'max:20'],
+            'vehicles.*.crew.*' => ['nullable', 'string', 'max:100'],
             'carrier' => ['nullable', 'string', 'max:150'],
-        ], ['delivery_date.required' => 'เลือกวันส่ง', 'delivery_time.date_format' => 'ใส่เวลาแบบ 09:00']);
-        $moved = $delivery->status === ProjectDelivery::SCHEDULED;
-        $this->flow->schedule($delivery, $data, $request->user());
+        ]);
+        $again = $delivery->status === ProjectDelivery::SCHEDULED;
+        $this->flow->assign($delivery, $data, $request->user());
 
-        return $this->done($request, $moved ? 'เลื่อนวันส่งแล้ว' : 'กำหนดวันส่งแล้ว');
+        return $this->done($request, $again ? 'บันทึกรถ / คนแล้ว' : ($delivery->method === ProjectDelivery::PICKUP ? 'รับงานแล้ว' : 'จัดรถแล้ว'));
     }
 
     public function reject(Request $request, ProjectDelivery $delivery)
@@ -84,6 +86,22 @@ class DeliveryController extends Controller
         $this->flow->reject($delivery, $data['reason'], $data['note'] ?? null, $request->user());
 
         return $this->done($request, 'ส่งกลับให้ PM แล้ว');
+    }
+
+    /** ห่อตู้เสร็จสิ้น: cabinet_ids packed (packed=1) or taken back (packed=0). */
+    public function pack(Request $request, ProjectDelivery $delivery)
+    {
+        $data = $request->validate(['cabinet_ids' => ['required', 'array', 'min:1'], 'cabinet_ids.*' => ['integer'], 'packed' => ['required', 'boolean']]);
+        $this->flow->pack($delivery, $data['cabinet_ids'], (bool) $data['packed'], $request->user());
+
+        return $this->done($request, $data['packed'] ? 'บันทึกห่อตู้แล้ว' : 'เอาการห่อออกแล้ว');
+    }
+
+    public function bill(Request $request, ProjectDelivery $delivery)
+    {
+        $this->flow->bill($delivery, $request->user());
+
+        return $this->done($request, 'แจ้งเปิดบิลแล้ว');
     }
 
     public function depart(Request $request, ProjectDelivery $delivery)
@@ -119,39 +137,41 @@ class DeliveryController extends Controller
     /** One round as the page shows it and its windows fill in. */
     private function row(ProjectDelivery $d, Collection $names, $today): array
     {
-        $left = (int) $today->diffInDays($d->lastDay(), false);
+        $left = (int) $today->diffInDays($d->delivery_date, false);
 
         return [
             'id' => $d->id, 'status' => $d->status, 'state' => $d->stateLabel(), 'color' => $d->stateColor(),
             'project' => $d->project->project_no, 'name' => $d->project->project_name, 'round' => $d->round,
-            'cabinets' => collect($d->cabinet_ids ?? [])->map(fn ($id) => ['id' => $id, 'name' => $names[$id] ?? 'ตู้ที่ลบแล้ว'])->values()->all(),
+            'cabinets' => collect($d->cabinet_ids ?? [])->map(fn ($id) => ['id' => (int) $id, 'name' => $names[$id] ?? 'ตู้ที่ลบแล้ว', 'packed' => $d->isPacked((int) $id),
+                'at' => isset(($d->packed ?? [])[$id]) ? Carbon::parse($d->packed[$id])->format('d/m H:i') : ''])->values()->all(),
             'site' => (string) $d->site, 'contact' => collect([$d->contact_name, $d->contact_phone])->filter()->implode(' '), 'note' => (string) $d->note,
-            'method' => $d->method, 'transport' => $d->transport() ?? 'ยังไม่มีรถ', 'vehicle_id' => $d->vehicle_id ? (string) $d->vehicle_id : '',
-            'driver_name' => (string) $d->driver_name, 'crew' => $d->crew ?? [], 'carrier' => (string) $d->carrier,
-            // what PM asked for, and whether the vehicle picked is of another kind
-            'vehicle_type' => (string) $d->vehicle_type, 'crew_size' => (int) $d->crew_size, 'request' => $d->request(), 'other' => $d->otherType(),
-            'people' => $d->peopleText(), 'short' => $d->crew_size && count($d->people()) < $d->crew_size,
-            'from' => $d->window_from->format('Y-m-d'), 'to' => $d->window_to->format('Y-m-d'),
-            'window' => ProjectDelivery::range($d->window_from, $d->window_to), 'sender' => (string) $d->sender?->name,
-            'date' => $d->delivery_date?->format('Y-m-d') ?? '', 'time' => (string) $d->delivery_time, 'when' => $d->when(),
-            // the window running out (a day not picked) / the day passed (not arrived)
-            'left' => $left, 'late' => $d->status !== ProjectDelivery::DELIVERED && $left < 0, 'soon' => $d->isOpen() && $left >= 0 && $left <= 2,
+            'method' => $d->method, 'transport' => $d->transport() ?? 'ยังไม่มีรถ', 'carrier' => (string) $d->carrier,
+            'vehicles' => $d->vehicles->map(fn ($v) => ['vehicle_id' => $v->vehicle_id ? (string) $v->vehicle_id : '', 'label' => (string) $v->label,
+                'name' => $v->name(), 'type' => (string) $v->vehicle?->type, 'driver_name' => (string) $v->driver_name, 'crew' => $v->crew ?? []])->values()->all(),
+            // what PM asked for, and what differs from it
+            'types' => $d->vehicle_types ?? [], 'crew_size' => (int) $d->crew_size, 'request' => $d->request(), 'other' => $d->otherTypes(),
+            'people' => $d->peopleText(), 'short' => $d->shortOfPeople(), 'sender' => (string) $d->sender?->name,
+            'date' => $d->delivery_date->format('Y-m-d'), 'when' => $d->when(),
+            'left' => $left, 'late' => $d->status !== ProjectDelivery::DELIVERED && $left < 0,
+            // the four steps
+            'step' => $d->step(), 'packedCount' => $d->packedCount(), 'allPacked' => $d->allPacked(),
+            'billed' => $d->billed_at ? $d->billed_at->format('d/m H:i').($d->biller ? ' · '.$d->biller->name : '') : '',
             'departed' => $d->departed_at?->format('d/m H:i'), 'delivered' => $d->delivered_at ? $d->delivered_at->thaiDate().($d->delivered_at->format('H:i') !== '00:00' ? ' '.$d->delivered_at->format('H:i').' น.' : '') : '',
             'delivered_date' => $d->delivered_at?->format('Y-m-d') ?? '', 'delivered_time' => $d->delivered_at && $d->delivered_at->format('H:i') !== '00:00' ? $d->delivered_at->format('H:i') : '',
             'receiver' => (string) $d->receiver, 'doc_no' => (string) $d->doc_no, 'issue' => (string) $d->issue,
             'rejected' => $d->status === ProjectDelivery::REJECTED ? trim($d->rejected_reason.($d->rejected_note ? ' · '.$d->rejected_note : '').' · โดย '.$d->rejecter?->name.' '.$d->rejected_at?->format('d/m H:i')) : '',
-            'urls' => ['schedule' => route('deliveries.schedule', $d), 'reject' => route('deliveries.reject', $d), 'depart' => route('deliveries.depart', $d),
-                'deliver' => route('deliveries.deliver', $d), 'back' => route('deliveries.back', $d)],
+            'urls' => ['assign' => route('deliveries.assign', $d), 'reject' => route('deliveries.reject', $d), 'pack' => route('deliveries.pack', $d), 'bill' => route('deliveries.bill', $d),
+                'depart' => route('deliveries.depart', $d), 'deliver' => route('deliveries.deliver', $d), 'back' => route('deliveries.back', $d)],
         ];
     }
 
-    /** vehicle id => day => what it already carries that day ("SO-690104 รอบ 1"), for the warning when picking a day. */
+    /** vehicle id => day => what it already carries that day ("SO-690104 รอบ 1"), for the warning when putting it on a round. */
     private function busy(Collection $all): array
     {
         $out = [];
-        foreach ($all->filter(fn ($d) => $d->vehicle_id && in_array($d->status, [ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true)) as $d) {
-            for ($day = $d->delivery_date->copy(); $day->lte($d->lastDay()); $day->addDay()) {
-                $out[$d->vehicle_id][$day->format('Y-m-d')][] = ['id' => $d->id, 'label' => $d->project->project_no.' รอบ '.$d->round];
+        foreach ($all->filter(fn ($d) => in_array($d->status, [ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true)) as $d) {
+            foreach ($d->vehicles->pluck('vehicle_id')->filter() as $vid) {
+                $out[$vid][$d->delivery_date->format('Y-m-d')][] = ['id' => $d->id, 'label' => $d->project->project_no.' รอบ '.$d->round];
             }
         }
 

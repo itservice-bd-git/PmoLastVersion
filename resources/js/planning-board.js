@@ -436,34 +436,43 @@ export default function registerPlanningBoard() {
             delNext(t) { return this.dels(t).filter((d) => d.status !== 'delivered').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0]; },
             delHead(t) {
                 const n = this.delNext(t);
-                return 'ส่งแล้ว ' + this.delDone(t) + '/' + t.subtasks.length + ' ตู้' + (n ? ' · รอบถัดไป ' + (n.wait ? this.delState(n) + ' ' + this.fatRange(n) : this.fmtShort(n.date) + (n.time ? ' · ' + n.time : '')) : '');
+                return 'ส่งแล้ว ' + this.delDone(t) + '/' + t.subtasks.length + ' ตู้' + (n ? ' · รอบถัดไป ' + this.fmtShort(n.date) + (n.time ? ' · ' + n.time : '') + ' · ' + (n.wait ? this.delState(n) : n.stepText) : '');
             },
-            // wait = the delivery department has not picked the day: date..end is PM's window (dashed), not the day it goes
+            // wait = no vehicle on it yet (ร่าง / รอจัดรถ / ไม่รับงาน): drawn dashed on PM's day
             delKey(d) { return d.status !== 'scheduled' ? d.status : ({ company: 'booked', external: 'external', pickup: 'pickup' }[d.method] || 'booked'); },
             delColor(d) { return this.evState('delivery', this.delKey(d)).color; },
             delState(d) { return this.evState('delivery', this.delKey(d)).name + (d.status === 'departed' && d.dep ? ' ' + d.dep : ''); },
             delCls() { return 'st-pill'; },
-            delWhen(d) { return d.status === 'delivered' && d.at ? this.fmtShort(d.at.slice(0, 10)) + ' · ถึง ' + d.at.slice(11) : (d.wait ? 'ช่วงส่งได้ ' + this.fatRange(d) : this.delRange(d) + (d.time ? ' · ' + d.time : '')); },
+            delWhen(d) { return d.status === 'delivered' && d.at ? this.fmtShort(d.at.slice(0, 10)) + ' · ถึง ' + d.at.slice(11) : this.delRange(d) + (d.time ? ' · ' + d.time : ''); },
+            // the four steps after the vehicles (ห่อ n/m → แจ้งเปิดบิล → ออกจากโรงงาน → ส่งถึง): [{ label, fill %, now, done }]
+            delSteps(d) {
+                const n = d.step || 0, all = d.cabs.length || 1;
+                return ['ห่อ ' + (d.packed || []).length + '/' + d.cabs.length, 'แจ้งเปิดบิล', 'ออกรถ', 'ส่งถึง'].map((label, i) => {
+                    const fill = i === 0 ? (n >= 1 ? 100 : Math.round(((d.packed || []).length / all) * 100)) : (n > i ? 100 : 0);
+                    return { label, fill, now: n === i, done: n > i };
+                });
+            },
             // "20/11", "20–22/11 (3 วัน)" (a round over several days, as fatRange)
             delRange(d) { return this.fatRange({ date: d.date, end: d.end }) + (d.end && d.end !== d.date ? ' (' + (diffDays(d.end, d.date) + 1) + ' วัน)' : ''); },
             delCar(d) { return (d.method === 'company' ? '🚚 ' : '') + (d.carFull || d.car || '-') + (d.people ? ' · ' + d.people : (d.crew ? ' · ' + d.crew + ' คน' : '')); },
             delCabs(d) { return d.cabs.length ? d.cabs.length + ' ตู้' : 'ทุกตู้'; },   // a draft from the new-project page: every cabinet
             delCabName(t, id) { const c = t.subtasks.find((x) => x.id === id); return c ? c.mo || c.text : '-'; },
-            // a cabinet row: "ส่ง 12/11 · 4 ล้อ" / "นัดส่ง 20/11 · 6 ล้อเครน" / "รอกำหนดวัน 18–22/11"
+            // a cabinet row: "ส่ง 12/11 · 4 ล้อ" / "นัดส่ง 20/11 · 6 ล้อเครน" / "รอจัดรถ 20/11 · ห่อแล้ว"
             delCab(t, c) {
                 const d = this.dels(t, c)[0];
+                const packed = d && d.status !== 'delivered' && (d.packed || []).includes(c.id) ? ' · ห่อแล้ว' : '';
                 return d ? { cls: d.wait ? 'dl-chip st-chip dl-need' : d.status === 'delivered' ? 'dl-chip st-chip' : 'dl-chip', style: d.wait || d.status === 'delivered' ? '--c:' + this.delColor(d) : '',
-                    text: d.wait ? this.delState(d) + ' ' + this.fatRange(d) : (d.status === 'delivered' ? 'ส่ง ' : 'นัดส่ง ') + this.fmtShort(d.status === 'delivered' && d.at ? d.at.slice(0, 10) : d.date) + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car } : null;
+                    text: d.wait ? this.delState(d) + ' ' + this.fmtShort(d.date) + packed : (d.status === 'delivered' ? 'ส่ง ' : 'นัดส่ง ') + this.fmtShort(d.status === 'delivered' && d.at ? d.at.slice(0, 10) : d.date) + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car + packed } : null;
             },
             delLabel(d) {
                 if (d.status === 'delivered') return this.evState('delivery', 'delivered').name + ' ' + this.delCabs(d);
-                if (d.wait) return 'ช่วงส่ง ' + this.fatRange(d) + ' · ' + this.delState(d);
-                return 'ส่ง' + (d.end && d.end !== d.date ? ' ' + (diffDays(d.end, d.date) + 1) + ' วัน' : '') + (d.time ? ' ' + d.time : '') + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car;
+                if (d.wait) return 'ส่ง' + (d.time ? ' ' + d.time : '') + ' · ' + this.delState(d);
+                return 'ส่ง' + (d.time ? ' ' + d.time : '') + ' · ' + (d.status === 'scheduled' ? d.stepText : this.delState(d)) + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car;
             },
             delBandCls(d) { return 'del-band' + (d.wait ? ' del-wait' : ''); },
             delTitle(t, d) {
-                return 'ส่งรอบที่ ' + d.round + ' · ' + t.so + ' · ' + (d.wait ? 'ช่วงส่งได้ ' : '') + this.fmtBE(d.date) + (d.end && d.end !== d.date ? ' – ' + this.fmtBE(d.end) : '') + (d.time ? ' ' + d.time + ' น.' : '')
-                    + ' · ' + this.delCabs(d) + ' · ' + this.delState(d) + ' · ' + (d.carFull || d.car || '-') + (d.crew ? ' · ' + d.crew + ' คน' : '') + (d.why ? ' · ' + d.why : '');
+                return 'ส่งรอบที่ ' + d.round + ' · ' + t.so + ' · ' + this.fmtBE(d.date) + (d.time ? ' ' + d.time + ' น.' : '')
+                    + ' · ' + this.delCabs(d) + ' · ' + this.delState(d) + (d.status === 'scheduled' ? ' · ' + d.stepText : '') + ' · ' + (d.carFull || d.car || '-') + (d.crew ? ' · ' + d.crew + ' คน' : '') + (d.why ? ' · ' + d.why : '');
             },
             // the month: each round on this bar's days (a cabinet's bar: the rounds it is in)
             delBands(b) {
@@ -481,7 +490,7 @@ export default function registerPlanningBoard() {
                 });
                 return out;
             },
-            evShown(e) { return !this.evNeed || e.kind !== 'del' || (e.d.wait && e.d.status !== 'draft'); },   // รอกำหนดวัน: sent, no day picked (not PM's drafts)
+            evShown(e) { return !this.evNeed || e.kind !== 'del' || (e.d.wait && e.d.status !== 'draft'); },   // รอจัดรถ / ไม่รับงาน: sent, no vehicle yet (not PM's drafts)
             evBars(week) {
                 const ws = week[0].date, we = week[week.length - 1].date, laneEnd = [], bars = [];
                 const list = this.evAll(this.mode).filter((e) => this.evShown(e) && e.from <= we && e.to >= ws)
@@ -510,14 +519,14 @@ export default function registerPlanningBoard() {
             evLegend() { return Object.values(this.evs[this.mode === 'fat' ? 'fat' : 'delivery'] || {}); },
             evHead(e) {
                 if (e.kind === 'fat') return 'FAT' + (e.time ? ' ' + e.time : '') + (e.to !== e.from ? ' · ' + this.fatRange(e.f) + ' (' + (diffDays(e.to, e.from) + 1) + ' วัน)' : '');
-                if (e.d.wait) return this.delState(e.d) + ' · ' + this.fatRange(e.d);
+                if (e.d.wait) return this.delState(e.d) + (e.time ? ' · ' + e.time : '');
                 return e.d.status === 'delivered' ? this.evState('delivery', 'delivered').name + (e.d.at ? ' ' + e.d.at.slice(11) : '') : 'ส่ง' + (e.time ? ' ' + e.time : '') + (e.to !== e.from ? ' · ' + this.delRange(e.d) : '');
             },
             evMeta(e) {
                 if (e.kind === 'fat') return (e.f.round > 1 ? 'รอบ ' + e.f.round + ' · ' : '') + (e.f.cabinets ? e.f.cabinets.length + ' ตู้' : 'ทุกตู้') + ' · ' + this.fatStatus(e.t) + (this.fatLate(e.t) ? ' · ' + this.evState('fat', 'late').name : '');
                 const d = e.d;
                 if (d.why) return 'รอบ ' + d.round + ' · ' + d.why;
-                return 'รอบ ' + d.round + ' · ' + (d.method === 'company' ? '🚚 ' : '') + (d.car || '-') + (d.crew ? ' · ' + d.crew + ' คน' : '') + ' · ' + this.delCabs(d) + (d.status === 'departed' ? ' · ' + this.delState(d) : '');
+                return 'รอบ ' + d.round + ' · ' + (d.status === 'scheduled' ? d.stepText + ' · ' : '') + (d.method === 'company' ? '🚚 ' : '') + (d.car || '-') + (d.crew ? ' · ' + d.crew + ' คน' : '') + ' · ' + this.delCabs(d) + (d.status === 'departed' ? ' · ' + this.delState(d) : '');
             },
             evTitle(e) { return e.kind === 'fat' ? this.fatTitle(e.t) : this.delTitle(e.t, e.d); },
             // Admin / PM open the FAT / delivery window itself (an open project, as the project window's buttons); others the project's window

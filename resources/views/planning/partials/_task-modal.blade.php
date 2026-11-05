@@ -105,8 +105,12 @@
                             <div class="dl-row"><span class="dl-tag">ส่ง</span><b x-text="dels(cur).length ? delHead(cur) : 'ยังไม่ได้นัดส่ง'"></b><button type="button" x-show="canFat(cur)" @click="openDelivery(cur)" class="res-btn ml-auto" aria-haspopup="dialog">นัด / แก้การส่ง</button></div>
                             <template x-for="d in dels(cur).slice().reverse()" :key="d.id">
                                 <div class="dl-row"><span class="dl-no" x-text="'รอบ ' + d.round"></span><span class="font-semibold tabular-nums" x-text="delWhen(d)"></span>
-                                    <span x-show="!d.cabs.length" class="dl-chip">ทุกตู้</span><template x-for="id in d.cabs" :key="id"><span :class="d.status === 'delivered' ? 'dl-chip st-chip' : 'dl-chip'" :style="d.status === 'delivered' ? '--c:' + delColor(d) : ''" x-text="delCabName(cur, id) + (d.status === 'delivered' ? ' ✓' : '')"></span></template>
+                                    <span x-show="!d.cabs.length" class="dl-chip">ทุกตู้</span><template x-for="id in d.cabs" :key="id"><span :class="d.status === 'delivered' ? 'dl-chip st-chip' : ((d.packed || []).includes(id) ? 'dl-chip dl-packed' : 'dl-chip')" :style="d.status === 'delivered' ? '--c:' + delColor(d) : ''" :title="(d.packed || []).includes(id) && d.status !== 'delivered' ? 'ห่อแล้ว' : ''" x-text="delCabName(cur, id) + (d.status === 'delivered' ? ' ✓' : '')"></span></template>
                                     <span class="dl-chip" x-text="delCar(d)"></span><span class="dl-pill" :class="delCls(d)" :style="'--c:' + delColor(d)" x-text="delState(d)"></span>
+                                    {{-- the four steps the delivery department records on "งานจัดส่ง" (a sent round with its cabinets) --}}
+                                    <ol x-show="!['draft', 'rejected'].includes(d.status) && d.cabs.length" class="dl-steps basis-full" :aria-label="'ขั้นการจัดส่ง: ' + d.stepText">
+                                        <template x-for="(st, i) in delSteps(d)" :key="i"><li :class="st.now ? 'now' : (st.done ? 'done' : '')"><i><u :style="'width:' + st.fill + '%'"></u></i><b x-text="st.label"></b></li></template>
+                                    </ol>
                                     <span x-show="d.why" class="basis-full text-red-700" x-text="'ไม่รับงาน · ' + d.why"></span></div>
                             </template>
                         </div>

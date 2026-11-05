@@ -110,7 +110,8 @@ class ProjectDeliveryController extends Controller
             'id' => $d?->id, 'status' => $d?->status ?? ProjectDelivery::WAITING, 'draft' => $d?->status === ProjectDelivery::DRAFT, 'all' => $d && ! $d->cabinet_ids,
             'url' => $d ? route('project-deliveries.update', $d) : route('projects.deliveries.store', $project), 'verb' => $d ? 'PUT' : 'POST',
             'title' => $d ? ($d->status === ProjectDelivery::DRAFT ? 'ร่างการจัดส่งรอบที่ ' : 'แก้การจัดส่งรอบที่ ').$d->round : 'นัดส่งรอบที่ '.$next,
-            'delivery_date' => $d?->delivery_date?->format('Y-m-d') ?? '', 'delivery_time' => (string) $d?->delivery_time, 'was_date' => $d?->delivery_date?->format('Y-m-d') ?? '',
+            'delivery_date' => $d?->delivery_date?->format('Y-m-d') ?? '', 'delivery_end_date' => $d && $d->lastDay()->gt($d->firstDay()) ? $d->lastDay()->format('Y-m-d') : '',
+            'delivery_time' => (string) $d?->delivery_time, 'was' => $d && $d->status !== ProjectDelivery::DRAFT ? $d->firstDay()->format('Y-m-d').'|'.$d->lastDay()->format('Y-m-d') : '', 'was_text' => $d ? $d->when() : '',
             'cabinet_ids' => $cabinets, 'method' => $d?->method ?? ProjectDelivery::COMPANY,
             'vehicle_types' => $d?->vehicle_types ?? [], 'crew_size' => $d?->crew_size ? (string) $d->crew_size : '', 'carrier' => (string) $d?->carrier,
             'types' => Vehicle::types($d?->vehicle_types ?? []),
@@ -146,6 +147,7 @@ class ProjectDeliveryController extends Controller
 
         return [
             'delivery_date' => ['required', 'date'],
+            'delivery_end_date' => ['nullable', 'date', 'after_or_equal:delivery_date'],
             'delivery_time' => ['nullable', 'date_format:H:i'],
             'cabinet_ids' => [$send ? 'required' : 'nullable', 'array', $send ? 'min:1' : 'min:0'],
             'cabinet_ids.*' => ['integer', Rule::exists('cabinets', 'id')->where('project_id', $project->id)->whereNull('deleted_at')],
@@ -158,6 +160,7 @@ class ProjectDeliveryController extends Controller
 
     public const MESSAGES = [
         'delivery_date.required' => 'เลือกวันส่ง',
+        'delivery_end_date.after_or_equal' => 'วันสุดท้ายที่ส่งต้องไม่ก่อนวันแรก',
         'delivery_time.date_format' => 'ใส่เวลาแบบ 09:00',
         'cabinet_ids.required' => 'เลือกตู้ที่ส่งรอบนี้อย่างน้อย 1 ตู้',
         'vehicle_types.required' => 'เลือกประเภทรถอย่างน้อย 1 แบบ',
@@ -192,7 +195,9 @@ class ProjectDeliveryController extends Controller
 
         // the vehicles and the people are the delivery department's (DeliveryFlow::assign)
         return [
-            'delivery_date' => $data['delivery_date'], 'delivery_time' => $text('delivery_time'),
+            'delivery_date' => $data['delivery_date'],
+            'delivery_end_date' => ! empty($data['delivery_end_date']) && $data['delivery_end_date'] > $data['delivery_date'] ? $data['delivery_end_date'] : null,
+            'delivery_time' => $text('delivery_time'),
             'cabinet_ids' => $ids,
             'method' => $method,
             'vehicle_types' => $company ? (array_values(array_unique(array_filter($data['vehicle_types'] ?? []))) ?: null) : null,

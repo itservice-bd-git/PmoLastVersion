@@ -207,9 +207,12 @@
                                 <input type="radio" name="delivery_method" value="{{ $key }}" x-model="method" class="sr-only">{{ \App\Models\ProjectDelivery::methodName($key) }}</label>
                         @endforeach
                     </div>
-                    <div class="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
+                    <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7rem] gap-3">
                         <label class="block text-sm font-semibold text-slate-800">วันส่ง
                             <input type="date" name="delivery_date" value="{{ old('delivery_date') }}" class="{{ $box }}">
+                        </label>
+                        <label class="block text-sm font-semibold text-slate-800">ถึงวันที่ <span class="font-normal text-slate-500">(ถ้าหลายวัน)</span>
+                            <input type="date" name="delivery_end_date" value="{{ old('delivery_end_date') }}" class="{{ $box }}">
                         </label>
                         <label class="block text-sm font-semibold text-slate-800">เวลา
                             <input type="text" name="delivery_time" value="{{ old('delivery_time') }}" placeholder="เช่น 09:00" inputmode="numeric" maxlength="5" autocomplete="off" class="{{ $box }} tabular-nums"
@@ -249,7 +252,7 @@
                         <input type="text" name="delivery_note" value="{{ old('delivery_note') }}" maxlength="500" placeholder="เช่น ต้องใช้เครน · เข้าได้หลัง 8 โมง" class="{{ $box }}">
                     </label>
                 </div>
-                @foreach (['delivery_date', 'delivery_time', 'delivery_method', 'delivery_vehicle_types', 'delivery_crew_size', 'delivery_carrier', 'delivery_site', 'delivery_contact_name', 'delivery_contact_phone', 'delivery_note'] as $k)
+                @foreach (['delivery_date', 'delivery_end_date', 'delivery_time', 'delivery_method', 'delivery_vehicle_types', 'delivery_crew_size', 'delivery_carrier', 'delivery_site', 'delivery_contact_name', 'delivery_contact_phone', 'delivery_note'] as $k)
                     <x-input-error :messages="$errors->get($k)" class="mt-1" />
                 @endforeach
                 <p class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">บันทึกเป็น <b>ร่าง</b> รอบส่งที่ 1 (ทุกตู้) แผนกจัดส่งยังไม่เห็น · พอมีตู้แล้วกด "ตรวจแล้วส่งให้แผนกจัดส่ง" ที่หน้าโครงการ</p>

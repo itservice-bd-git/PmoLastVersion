@@ -34,7 +34,7 @@ class DeliveryController extends Controller
         $day = fn ($d) => $d->delivery_date->format('Ymd').($d->delivery_time ?: '99');
         $tabs = [
             'waiting' => $all->where('status', ProjectDelivery::WAITING)->sortBy($day),
-            // its day is today, or it is past it and not there yet
+            // its days include today, or it is past them and not there yet
             'today' => $all->filter(fn ($d) => in_array($d->status, [ProjectDelivery::WAITING, ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true) && $d->delivery_date->lte($today))->sortBy($day),
             'scheduled' => $all->where('status', ProjectDelivery::SCHEDULED)->sortBy($day),
             'departed' => $all->where('status', ProjectDelivery::DEPARTED)->sortBy($day),
@@ -137,7 +137,8 @@ class DeliveryController extends Controller
     /** One round as the page shows it and its windows fill in. */
     private function row(ProjectDelivery $d, Collection $names, $today): array
     {
-        $left = (int) $today->diffInDays($d->delivery_date, false);
+        $left = (int) $today->diffInDays($d->delivery_date, false);   // to its first day
+        $end = (int) $today->diffInDays($d->lastDay(), false);
 
         return [
             'id' => $d->id, 'status' => $d->status, 'state' => $d->stateLabel(), 'color' => $d->stateColor(),
@@ -151,8 +152,8 @@ class DeliveryController extends Controller
             // what PM asked for, and what differs from it
             'types' => $d->vehicle_types ?? [], 'crew_size' => (int) $d->crew_size, 'request' => $d->request(), 'other' => $d->otherTypes(),
             'people' => $d->peopleText(), 'short' => $d->shortOfPeople(), 'sender' => (string) $d->sender?->name,
-            'date' => $d->delivery_date->format('Y-m-d'), 'when' => $d->when(),
-            'left' => $left, 'late' => $d->status !== ProjectDelivery::DELIVERED && $left < 0,
+            'date' => $d->delivery_date->format('Y-m-d'), 'days' => $d->days(), 'when' => $d->when(),
+            'left' => $left, 'late' => $d->status !== ProjectDelivery::DELIVERED && $end < 0, 'during' => $left <= 0 && $end >= 0,
             // the four steps
             'step' => $d->step(), 'packedCount' => $d->packedCount(), 'allPacked' => $d->allPacked(),
             'billed' => $d->billed_at ? $d->billed_at->format('d/m H:i').($d->biller ? ' · '.$d->biller->name : '') : '',
@@ -171,7 +172,9 @@ class DeliveryController extends Controller
         $out = [];
         foreach ($all->filter(fn ($d) => in_array($d->status, [ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true)) as $d) {
             foreach ($d->vehicles->pluck('vehicle_id')->filter() as $vid) {
-                $out[$vid][$d->delivery_date->format('Y-m-d')][] = ['id' => $d->id, 'label' => $d->project->project_no.' รอบ '.$d->round];
+                foreach ($d->days() as $day) {
+                    $out[$vid][$day][] = ['id' => $d->id, 'label' => $d->project->project_no.' รอบ '.$d->round];
+                }
             }
         }
 

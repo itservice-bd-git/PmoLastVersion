@@ -5,12 +5,14 @@
 <x-modal name="project-delivery" maxWidth="xl">
     <template x-if="f">
         <form method="POST" :action="f.url" class="space-y-4 p-6"
-              x-data="{ get unfinished() { return cabs.filter((c) => f.cabinet_ids.includes(c.id) && c.progress < 100); } }">
+              x-data="{ get unfinished() { return cabs.filter((c) => f.cabinet_ids.includes(c.id) && c.progress < 100); },
+                        // a sent round's days changed (from - to; no end = one day)
+                        get moved() { return !!f.was && (f.delivery_date + '|' + (f.delivery_end_date && f.delivery_end_date > f.delivery_date ? f.delivery_end_date : f.delivery_date)) !== f.was; } }">
             @csrf
             <input type="hidden" name="_method" :value="f.verb">
             <input type="hidden" name="_delivery" :value="f.id || ''">{{-- which round to reopen on a validation error (_delivery) --}}
             <h3 class="text-base font-semibold text-slate-900" x-text="f.title + ' · {{ $project->project_no }}'"></h3>
-            @if ($errors->hasAny(['delivery_date', 'delivery_time', 'cabinet_ids', 'method', 'vehicle_types', 'vehicle_types.0', 'crew_size', 'delivery']))
+            @if ($errors->hasAny(['delivery_date', 'delivery_end_date', 'delivery_time', 'cabinet_ids', 'method', 'vehicle_types', 'vehicle_types.0', 'crew_size', 'delivery']))
                 <p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">{{ $errors->first() }}</p>
             @endif
             {{-- sent back: why, to fix and send again --}}
@@ -22,7 +24,7 @@
             <p x-show="f.draft" class="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700" role="status"
                x-text="'ร่าง · แผนกจัดส่งยังไม่เห็นรอบนี้' + (f.all ? ' · ลงไว้เป็นทุกตู้ ตรวจตู้ที่ติ๊กไว้ก่อนส่ง' : '')"></p>
             <p x-show="f.picked && !f.locked" class="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-900" role="status"
-               x-text="'แผนกจัดส่งจัดรถแล้ว: ' + f.picked + (f.was_date && f.delivery_date !== f.was_date ? ' · เลื่อนวันแล้ว รถ / คนเดิมยังอยู่ แผนกจัดส่งจะได้แจ้งให้ตรวจว่าวันใหม่ยังว่าง' : '')"></p>
+               x-text="'แผนกจัดส่งจัดรถแล้ว: ' + f.picked + (moved ? ' · เลื่อนวันแล้ว รถ / คนเดิมยังอยู่ แผนกจัดส่งจะได้แจ้งให้ตรวจว่าวันใหม่ยังว่าง' : '')"></p>
             <p x-show="f.billed && !f.locked" class="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">แจ้งเปิดบิลแล้ว · เปลี่ยนตู้ไม่ได้ (เลื่อนวันได้)</p>
             <p x-show="f.locked" class="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">รอบนี้ออกจากโรงงานแล้ว แก้ไม่ได้ · ย้อนสถานะได้ที่หน้า "งานจัดส่ง"</p>
             <fieldset :disabled="f.locked" class="space-y-4">
@@ -53,10 +55,13 @@
                         @endforeach
                     </div>
                 </fieldset>
-                {{-- the day: PM's alone; the delivery department puts the vehicles and the people on it --}}
-                <div class="grid grid-cols-[minmax(0,1fr)_8rem] gap-3">
+                {{-- the days: PM's alone (one, or from - to for a round over several days); the delivery department puts the vehicles and the people on it --}}
+                <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7rem] gap-3">
                     <label class="block text-sm font-semibold text-slate-800">วันส่ง *
                         <input type="date" name="delivery_date" x-model="f.delivery_date" required class="mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal">
+                    </label>
+                    <label class="block text-sm font-semibold text-slate-800">ถึงวันที่ <span class="font-normal text-slate-500">(ถ้าหลายวัน)</span>
+                        <input type="date" name="delivery_end_date" x-model="f.delivery_end_date" :min="f.delivery_date" class="mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal">
                     </label>
                     <label class="block text-sm font-semibold text-slate-800">เวลาถึงหน้างาน
                         <input type="text" name="delivery_time" x-model="f.delivery_time" placeholder="เช่น 09:00" inputmode="numeric" maxlength="5" autocomplete="off"
@@ -64,8 +69,7 @@
                                class="mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal tabular-nums">
                     </label>
                 </div>
-                <p x-show="f.was_date && f.delivery_date !== f.was_date" class="-mt-2 text-xs font-semibold text-amber-800"
-                   x-text="'เลื่อนวันส่งจาก ' + f.was_date.split('-').reverse().join('/') + ' · บันทึกลงประวัติของโครงการ'"></p>
+                <p x-show="moved" class="-mt-2 text-xs font-semibold text-amber-800" x-text="'เลื่อนวันส่งจาก ' + f.was_text + ' · บันทึกลงประวัติของโครงการ'"></p>
                 {{-- the kinds of vehicle (several) and how many people --}}
                 <fieldset x-show="f.method === 'company'">
                     <legend class="text-sm font-semibold text-slate-800">ประเภทรถที่ต้องใช้<span x-show="f.types.length"> *</span> <span class="font-normal text-slate-500">(เลือกได้หลายแบบ)</span></legend>

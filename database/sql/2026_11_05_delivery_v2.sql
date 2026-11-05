@@ -7,11 +7,13 @@ create table `project_delivery_vehicles` (`id` bigint unsigned not null auto_inc
 alter table `project_delivery_vehicles` add constraint `project_delivery_vehicles_project_delivery_id_foreign` foreign key (`project_delivery_id`) references `project_deliveries` (`id`) on delete cascade;
 alter table `project_delivery_vehicles` add constraint `project_delivery_vehicles_vehicle_id_foreign` foreign key (`vehicle_id`) references `vehicles` (`id`) on delete set null;
 alter table `project_delivery_vehicles` add index `project_delivery_vehicles_vehicle_id_index`(`vehicle_id`);
+alter table `project_deliveries` add `delivery_end_date` date null after `delivery_date`;
 alter table `project_deliveries` add `vehicle_types` json null after `vehicle_type`;
 alter table `project_deliveries` add `packed` json null after `cabinet_ids`;
 alter table `project_deliveries` add `billed_at` datetime null after `packed`;
 alter table `project_deliveries` add `billed_by` bigint unsigned null after `billed_at`;
 alter table `project_deliveries` add constraint `project_deliveries_billed_by_foreign` foreign key (`billed_by`) references `users` (`id`) on delete set null;
+update project_deliveries set delivery_end_date = window_to where delivery_date is null and window_to > window_from;
 update project_deliveries set delivery_date = window_from where delivery_date is null;
 update project_deliveries set vehicle_types = json_array(vehicle_type) where vehicle_type is not null and vehicle_type <> '';
 insert into project_delivery_vehicles (project_delivery_id, vehicle_id, driver_name, crew, sequence, created_at, updated_at)

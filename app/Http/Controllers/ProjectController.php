@@ -315,7 +315,7 @@ class ProjectController extends Controller
         if (! $request->user()->canDispatchWork()) {
             return [];
         }
-        $delivery = ['delivery_time', 'delivery_vehicle_types', 'delivery_crew_size', 'delivery_carrier', 'delivery_site', 'delivery_contact_name', 'delivery_contact_phone', 'delivery_note'];
+        $delivery = ['delivery_end_date', 'delivery_time', 'delivery_vehicle_types', 'delivery_crew_size', 'delivery_carrier', 'delivery_site', 'delivery_contact_name', 'delivery_contact_phone', 'delivery_note'];
 
         return $request->validate([
             'fat_date' => ['nullable', 'date', 'required_with:fat_end_date,fat_time,fat_note'],
@@ -324,6 +324,7 @@ class ProjectController extends Controller
             'fat_status' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(\App\Models\ProjectFat::STATUS_LABELS))],
             'fat_note' => ['nullable', 'string', 'max:500'],
             'delivery_date' => ['nullable', 'date', 'required_with:'.implode(',', $delivery)],
+            'delivery_end_date' => ['nullable', 'date', 'after_or_equal:delivery_date'],
             'delivery_time' => ['nullable', 'date_format:H:i'],
             'delivery_method' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(\App\Models\ProjectDelivery::METHOD_LABELS))],
             'delivery_vehicle_types' => ['nullable', 'array', 'max:10'],
@@ -339,6 +340,7 @@ class ProjectController extends Controller
             'fat_end_date.after_or_equal' => 'วันสุดท้ายของ FAT ต้องไม่ก่อนวันแรก',
             'fat_time.date_format' => 'ใส่เวลา FAT แบบ 13:30',
             'delivery_date.required_with' => 'ใส่วันส่งก่อน',
+            'delivery_end_date.after_or_equal' => 'วันสุดท้ายที่ส่งต้องไม่ก่อนวันแรก',
             'delivery_time.date_format' => 'ใส่เวลาส่งแบบ 09:00',
             'delivery_vehicle_types.*.in' => 'ไม่มีรถประเภทนี้ · เพิ่มได้ที่ ตั้งค่า › รถขนส่ง',
             'delivery_crew_size.min' => 'จำนวนคนอย่างน้อย 1 คน',
@@ -360,7 +362,8 @@ class ProjectController extends Controller
             $method = $a['delivery_method'] ?? \App\Models\ProjectDelivery::COMPANY;
             $company = $method === \App\Models\ProjectDelivery::COMPANY;
             app(\App\Services\DeliveryFlow::class)->draft($project, [
-                'delivery_date' => $a['delivery_date'], 'delivery_time' => $text('delivery_time'), 'cabinet_ids' => [], 'method' => $method,
+                'delivery_date' => $a['delivery_date'], 'delivery_time' => $text('delivery_time'),
+                'delivery_end_date' => ! empty($a['delivery_end_date']) && $a['delivery_end_date'] > $a['delivery_date'] ? $a['delivery_end_date'] : null, 'cabinet_ids' => [], 'method' => $method,
                 'vehicle_types' => $company ? (array_values(array_unique(array_filter($a['delivery_vehicle_types'] ?? []))) ?: null) : null,
                 'crew_size' => $method !== \App\Models\ProjectDelivery::PICKUP && ! empty($a['delivery_crew_size']) ? (int) $a['delivery_crew_size'] : null,
                 'carrier' => $method === \App\Models\ProjectDelivery::EXTERNAL ? $text('delivery_carrier') : null,

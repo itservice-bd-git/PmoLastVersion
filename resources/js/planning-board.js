@@ -462,16 +462,17 @@ export default function registerPlanningBoard() {
                 const d = this.dels(t, c)[0];
                 const packed = d && d.status !== 'delivered' && (d.packed || []).includes(c.id) ? ' · ห่อแล้ว' : '';
                 return d ? { cls: d.wait ? 'dl-chip st-chip dl-need' : d.status === 'delivered' ? 'dl-chip st-chip' : 'dl-chip', style: d.wait || d.status === 'delivered' ? '--c:' + this.delColor(d) : '',
-                    text: d.wait ? this.delState(d) + ' ' + this.fmtShort(d.date) + packed : (d.status === 'delivered' ? 'ส่ง ' : 'นัดส่ง ') + this.fmtShort(d.status === 'delivered' && d.at ? d.at.slice(0, 10) : d.date) + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car + packed } : null;
+                    text: d.wait ? this.delState(d) + ' ' + this.fatRange(d) + packed : (d.status === 'delivered' ? 'ส่ง ' : 'นัดส่ง ') + (d.status === 'delivered' && d.at ? this.fmtShort(d.at.slice(0, 10)) : this.fatRange(d)) + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car + packed } : null;
             },
             delLabel(d) {
                 if (d.status === 'delivered') return this.evState('delivery', 'delivered').name + ' ' + this.delCabs(d);
-                if (d.wait) return 'ส่ง' + (d.time ? ' ' + d.time : '') + ' · ' + this.delState(d);
-                return 'ส่ง' + (d.time ? ' ' + d.time : '') + ' · ' + (d.status === 'scheduled' ? d.stepText : this.delState(d)) + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car;
+                const days = d.end && d.end !== d.date ? ' ' + (diffDays(d.end, d.date) + 1) + ' วัน' : '';
+                if (d.wait) return 'ส่ง' + days + (d.time ? ' ' + d.time : '') + ' · ' + this.delState(d);
+                return 'ส่ง' + days + (d.time ? ' ' + d.time : '') + ' · ' + (d.status === 'scheduled' ? d.stepText : this.delState(d)) + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car;
             },
             delBandCls(d) { return 'del-band' + (d.wait ? ' del-wait' : ''); },
             delTitle(t, d) {
-                return 'ส่งรอบที่ ' + d.round + ' · ' + t.so + ' · ' + this.fmtBE(d.date) + (d.time ? ' ' + d.time + ' น.' : '')
+                return 'ส่งรอบที่ ' + d.round + ' · ' + t.so + ' · ' + this.fmtBE(d.date) + (d.end && d.end !== d.date ? ' – ' + this.fmtBE(d.end) : '') + (d.time ? ' ' + d.time + ' น.' : '')
                     + ' · ' + this.delCabs(d) + ' · ' + this.delState(d) + (d.status === 'scheduled' ? ' · ' + d.stepText : '') + ' · ' + (d.carFull || d.car || '-') + (d.crew ? ' · ' + d.crew + ' คน' : '') + (d.why ? ' · ' + d.why : '');
             },
             // the month: each round on this bar's days (a cabinet's bar: the rounds it is in)
@@ -519,7 +520,7 @@ export default function registerPlanningBoard() {
             evLegend() { return Object.values(this.evs[this.mode === 'fat' ? 'fat' : 'delivery'] || {}); },
             evHead(e) {
                 if (e.kind === 'fat') return 'FAT' + (e.time ? ' ' + e.time : '') + (e.to !== e.from ? ' · ' + this.fatRange(e.f) + ' (' + (diffDays(e.to, e.from) + 1) + ' วัน)' : '');
-                if (e.d.wait) return this.delState(e.d) + (e.time ? ' · ' + e.time : '');
+                if (e.d.wait) return this.delState(e.d) + (e.time ? ' · ' + e.time : '') + (e.to !== e.from ? ' · ' + this.delRange(e.d) : '');
                 return e.d.status === 'delivered' ? this.evState('delivery', 'delivered').name + (e.d.at ? ' ' + e.d.at.slice(11) : '') : 'ส่ง' + (e.time ? ' ' + e.time : '') + (e.to !== e.from ? ' · ' + this.delRange(e.d) : '');
             },
             evMeta(e) {

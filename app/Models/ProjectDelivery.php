@@ -43,13 +43,13 @@ class ProjectDelivery extends Model
     /** "ไม่รับงาน": the reasons offered when Settings > รถขนส่ง has none of its own (AppSetting 'delivery_reject_reasons') */
     public const REJECT_REASONS = ['รถไม่ว่างวันนั้น', 'คนไม่พอวันนั้น', 'ตู้ยังไม่พร้อม', 'รถเข้าที่ส่งไม่ได้'];
 
-    protected $fillable = ['project_id', 'round', 'delivery_date', 'delivery_time', 'status',
+    protected $fillable = ['project_id', 'round', 'delivery_date', 'delivery_end_date', 'delivery_time', 'status',
         'cabinet_ids', 'packed', 'billed_at', 'billed_by', 'method', 'vehicle_types', 'crew_size', 'carrier', 'site', 'contact_name', 'contact_phone', 'note', 'departed_at', 'delivered_at',
         'receiver', 'doc_no', 'issue', 'sent_by', 'scheduled_by', 'scheduled_at', 'rejected_by', 'rejected_at', 'rejected_reason', 'rejected_note', 'created_by'];
 
     protected function casts(): array
     {
-        return ['delivery_date' => 'date', 'cabinet_ids' => 'array', 'packed' => 'array', 'vehicle_types' => 'array', 'crew_size' => 'integer',
+        return ['delivery_date' => 'date', 'delivery_end_date' => 'date', 'cabinet_ids' => 'array', 'packed' => 'array', 'vehicle_types' => 'array', 'crew_size' => 'integer',
             'billed_at' => 'datetime', 'departed_at' => 'datetime', 'delivered_at' => 'datetime', 'scheduled_at' => 'datetime', 'rejected_at' => 'datetime'];
     }
 
@@ -230,21 +230,33 @@ class ProjectDelivery extends Model
         };
     }
 
-    /** Past its day and not there yet (someone has to record what happened). */
+    /** Past its last day and not there yet (someone has to record what happened). */
     public function isOverdue(?Carbon $today = null): bool
     {
-        return $this->status !== self::DELIVERED && $this->delivery_date && $this->delivery_date->lt(($today ?? today())->copy()->startOfDay());
+        return $this->status !== self::DELIVERED && $this->delivery_date && $this->lastDay()->lt(($today ?? today())->copy()->startOfDay());
     }
 
-    /** Its day (PM's). */
+    /** Its first day (PM's). */
     public function firstDay(): Carbon
     {
         return $this->delivery_date;
     }
 
+    /** Its last day: a round over several days ends on delivery_end_date. */
     public function lastDay(): Carbon
     {
-        return $this->delivery_date;
+        return $this->delivery_end_date && $this->delivery_end_date->gt($this->delivery_date) ? $this->delivery_end_date : $this->delivery_date;
+    }
+
+    /** @return list<string> its days, 'Y-m-d' */
+    public function days(): array
+    {
+        $out = [];
+        for ($d = $this->firstDay()->copy(), $n = 0; $d->lte($this->lastDay()) && $n < 62; $d->addDay(), $n++) {
+            $out[] = $d->format('Y-m-d');
+        }
+
+        return $out;
     }
 
     /** "20/11/2569", "20–22/11/2569", "30/11/2569 – 02/12/2569" */
@@ -253,9 +265,9 @@ class ProjectDelivery extends Model
         return $a->eq($b) ? $a->thaiDate() : ($a->format('Y-m') === $b->format('Y-m') ? $a->format('d').'–'.$b->thaiDate() : $a->thaiDate().' – '.$b->thaiDate());
     }
 
-    /** "20/11/2569 · 09:00 น." */
+    /** "20/11/2569 · 09:00 น.", "20–22/11/2569 · 09:00 น." */
     public function when(): string
     {
-        return $this->delivery_date ? $this->delivery_date->thaiDate().($this->delivery_time ? ' · '.$this->delivery_time.' น.' : '') : '-';
+        return $this->delivery_date ? self::range($this->firstDay(), $this->lastDay()).($this->delivery_time ? ' · '.$this->delivery_time.' น.' : '') : '-';
     }
 }

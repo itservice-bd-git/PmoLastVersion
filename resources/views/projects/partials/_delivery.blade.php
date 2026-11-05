@@ -12,7 +12,7 @@
     $next = $rounds->where('status', '!=', \App\Models\ProjectDelivery::DELIVERED)->sortBy(fn ($d) => $d->firstDay()->format('Y-m-d').$d->delivery_time)->first();
     $form = fn (?\App\Models\ProjectDelivery $d) => \App\Http\Controllers\ProjectDeliveryController::formData($project, $d);
     $old = session()->getOldInput();
-    $errorKeys = ['delivery_date', 'delivery_time', 'cabinet_ids', 'method', 'vehicle_types', 'vehicle_types.0', 'crew_size', 'delivery'];
+    $errorKeys = ['delivery_date', 'delivery_end_date', 'delivery_time', 'cabinet_ids', 'method', 'vehicle_types', 'vehicle_types.0', 'crew_size', 'delivery'];
     $deliveryPage = auth()->user()->allows('edit.delivery');
 @endphp
 <section id="delivery" class="scroll-mt-20 rounded-xl border border-slate-200 bg-white p-5" aria-label="การจัดส่ง"

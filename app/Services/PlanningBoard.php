@@ -482,7 +482,7 @@ class PlanningBoard
     }
 
     /**
-     * A delivery round as Planning draws it: its day (date = end = PM's day; wait = no vehicle on it yet, drawn dashed;
+     * A delivery round as Planning draws it: its days (date..end, PM's; wait = no vehicle on it yet, drawn dashed;
      * why = the delivery department sent it back), its cabinets ('c'.id) and which are packed, where it is in the four
      * steps (step n / text: "ห่อ 4/6", "แจ้งเปิดบิลแล้ว"), on what (car = the short names on the bar's tab, carFull = with
      * the plates, for the project window).
@@ -497,7 +497,7 @@ class PlanningBoard
         $step = $d->step();
 
         return [
-            'id' => $d->id, 'round' => $d->round, 'date' => $d->delivery_date->format('Y-m-d'), 'end' => $d->delivery_date->format('Y-m-d'), 'time' => (string) $d->delivery_time, 'status' => $d->status,
+            'id' => $d->id, 'round' => $d->round, 'date' => $d->firstDay()->format('Y-m-d'), 'end' => $d->lastDay()->format('Y-m-d'), 'time' => (string) $d->delivery_time, 'status' => $d->status,
             'wait' => $d->isOpen(), 'why' => $d->status === ProjectDelivery::REJECTED ? trim($d->rejected_reason.($d->rejected_note ? ' · '.$d->rejected_note : '')) : '',
             'cabs' => array_map(fn ($id) => 'c'.$id, $d->cabinet_ids ?? []), 'method' => $d->method,
             'packed' => array_values(array_map(fn ($id) => 'c'.$id, array_filter($d->cabinet_ids ?? [], fn ($id) => $d->isPacked((int) $id)))),

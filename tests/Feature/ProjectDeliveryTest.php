@@ -290,9 +290,36 @@ class ProjectDeliveryTest extends TestCase
     public function test_a_round_is_late_after_its_day(): void
     {
         $d = $this->send(['delivery_date' => '2026-11-16', 'delivery_time' => '']);
-        $this->assertSame('16/11/2569', $d->when());
+        $this->assertSame(['16/11/2569', null], [$d->when(), $d->delivery_end_date]);
         $this->assertFalse($d->isOverdue(Carbon::parse('2026-11-16')));
         $this->assertTrue($d->isOverdue(Carbon::parse('2026-11-17')), 'past its day and not there yet');
+    }
+
+    public function test_a_round_may_go_over_several_days_of_pm(): void
+    {
+        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['delivery_end_date' => '2026-11-19']))
+            ->assertSessionHasErrors(['delivery_end_date' => 'วันสุดท้ายที่ส่งต้องไม่ก่อนวันแรก']);
+        $d = $this->send(['cabinet_ids' => [$this->cab1->id], 'delivery_end_date' => '2026-11-22']);
+        $this->assertSame(['20–22/11/2569 · 09:00 น.', ['2026-11-20', '2026-11-21', '2026-11-22']], [$d->when(), $d->days()]);
+        $this->assertFalse($d->isOverdue(Carbon::parse('2026-11-22')));
+        $this->assertTrue($d->isOverdue(Carbon::parse('2026-11-23')));
+        $this->assertSame('ส่งให้แผนกจัดส่ง รอบที่ 1: 20–22/11/2569 · 09:00 น. · 1 ตู้ (MO-1) · 6 ล้อเครน + กระบะ · 3 คน', $this->lastLog());
+        $task = collect(app(PlanningBoard::class)->tasks($this->pm))->firstWhere('id', 'p'.$this->project->id);
+        $this->assertSame(['2026-11-20', '2026-11-22'], [$task['deliveries'][0]['date'], $task['deliveries'][0]['end']]);
+
+        // the truck on it is busy every one of its days; a one-day round the same week is not on them
+        $this->assign($d);
+        $other = $this->send(['cabinet_ids' => [$this->cab2->id], 'delivery_date' => '2026-11-21']);
+        $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertViewHas('busy', fn ($b) => array_keys($b[$this->truck->id]) === ['2026-11-20', '2026-11-21', '2026-11-22']);
+
+        // moved: from - to in the log; the same days again (an end equal to the start = one day) is no move
+        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['cabinet_ids' => [$this->cab1->id], 'delivery_date' => '2026-11-24', 'delivery_end_date' => '2026-11-25']))->assertSessionHasNoErrors();
+        $this->assertSame('การจัดส่งรอบที่ 1: เลื่อนวันส่งจาก 20–22/11/2569 · 09:00 น. เป็น 24–25/11/2569 · 09:00 น.', $this->lastLog());
+        $this->actingAs($this->pm)->put(route('project-deliveries.update', $other), $this->data(['cabinet_ids' => [$this->cab2->id], 'delivery_date' => '2026-11-21', 'delivery_end_date' => '2026-11-21']))->assertSessionHasNoErrors();
+        $this->assertNull($other->fresh()->delivery_end_date);
+        $this->assertSame('การจัดส่งรอบที่ 2: แก้รายละเอียด', $this->lastLog());
+        $this->actingAs($this->pm)->get(route('projects.deliveries.form', [$this->project, 'delivery' => $d->id]))
+            ->assertViewHas('f', fn ($f) => $f['delivery_date'] === '2026-11-24' && $f['delivery_end_date'] === '2026-11-25' && $f['was'] === '2026-11-24|2026-11-25');
     }
 
     public function test_who_may_do_what_and_a_closed_project_refuses(): void
@@ -394,15 +421,15 @@ class ProjectDeliveryTest extends TestCase
         $this->actingAs($this->pm)->post(route('projects.store'), $base + ['fat_time' => '13:30'])->assertSessionHasErrors(['fat_date' => 'ใส่วัน FAT ก่อน']);
 
         $this->actingAs($this->pm)->post(route('projects.store'), $base + ['fat_date' => '2026-12-01', 'fat_end_date' => '2026-12-02', 'fat_time' => '13:30', 'fat_status' => 'scheduled', 'fat_note' => 'ลูกค้า 3 คน',
-            'delivery_method' => 'company', 'delivery_date' => '2026-12-10', 'delivery_time' => '08:30', 'delivery_vehicle_types' => ['6 ล้อเครน', 'กระบะ'], 'delivery_crew_size' => '4',
+            'delivery_method' => 'company', 'delivery_date' => '2026-12-10', 'delivery_end_date' => '2026-12-11', 'delivery_time' => '08:30', 'delivery_vehicle_types' => ['6 ล้อเครน', 'กระบะ'], 'delivery_crew_size' => '4',
             'delivery_carrier' => 'ไม่ใช้', 'delivery_site' => 'บางนา ประตู 2', 'delivery_contact_name' => 'คุณวิทยา', 'delivery_contact_phone' => '0812345678', 'delivery_note' => 'ต้องใช้เครน'])->assertSessionHasNoErrors();
         $p = Project::where('project_no', 'SO-9')->firstOrFail();
         $fat = $p->fats()->firstOrFail();
         $this->assertSame([1, '2026-12-01', '2026-12-02', '13:30', null, 'scheduled', 'ลูกค้า 3 คน'],
             [$fat->round, $fat->fat_date->format('Y-m-d'), $fat->fat_end_date->format('Y-m-d'), $fat->fat_time, $fat->cabinet_ids, $fat->status, $fat->note]);
         $d = $p->deliveries()->firstOrFail();
-        $this->assertSame(['draft', 1, '2026-12-10', '08:30', [], 'company', ['6 ล้อเครน', 'กระบะ'], 4, null, 'บางนา ประตู 2', 'คุณวิทยา', '0812345678', 'ต้องใช้เครน'],
-            [$d->status, $d->round, $d->delivery_date->format('Y-m-d'), $d->delivery_time, $d->cabinet_ids, $d->method, $d->vehicle_types, $d->crew_size,
+        $this->assertSame(['draft', 1, '10–11/12/2569 · 08:30 น.', [], 'company', ['6 ล้อเครน', 'กระบะ'], 4, null, 'บางนา ประตู 2', 'คุณวิทยา', '0812345678', 'ต้องใช้เครน'],
+            [$d->status, $d->round, $d->when(), $d->cabinet_ids, $d->method, $d->vehicle_types, $d->crew_size,
                 $d->carrier, $d->site, $d->contact_name, $d->contact_phone, $d->note]);
         $this->assertSame(0, $this->clerk->notifications()->count());
         $cab = Cabinet::forceCreate(['project_id' => $p->id, 'mo_no' => 'MO-9', 'cabinet_name' => 'A', 'quantity' => 1, 'status' => 'not_started', 'progress' => 0]);

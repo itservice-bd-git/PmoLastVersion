@@ -89,7 +89,13 @@
             ['จำนวนตู้', $s['total'].' ตู้', ''],
             $byLabel['วันเริ่ม'] ?? null,
             $byLabel['วันครบกำหนด'] ?? null,
+        ]));
+        // ติดต่อ: who looks after it and how to reach the customer (the same values as the full list)
+        $contacts = array_values(array_filter([
             $byLabel['ผู้จัดการโครงการ (PM)'] ?? null,
+            $byLabel['พนักงานขาย'] ?? null,
+            $byLabel['เจ้าของโครงการ'] ?? null,
+            $byLabel['เบอร์ติดต่อลูกค้า'] ?? null,
         ]));
 
         // สถานะโครงการ: เริ่ม → ผลิต (the bar) → FAT → ส่งมอบ → ปิดโครงการ, from what the page already has
@@ -143,18 +149,38 @@
         $dlText = $dlNode[0] === 'part' ? $sent->count().'/'.$tlRounds->count() : null;
         $go = fn (array $n, string $event) => $n[3] ? '@click="$dispatch(\''.$event.'\', \''.$n[3].'\')"' : '';
     @endphp
-    <section class="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+    <section class="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         {{-- folded by default (the facts above); the choice is remembered on this browser --}}
         <div class="flex min-w-0 flex-col rounded-[14px] border border-slate-200 bg-white px-5 pb-3.5 pt-4" aria-label="ข้อมูลโครงการ"
              x-data="{ more: (() => { try { return localStorage.getItem('pmo.projectDetails') === 'open'; } catch (e) { return false; } })() }"
              x-init="$watch('more', (v) => { try { localStorage.setItem('pmo.projectDetails', v ? 'open' : 'closed'); } catch (e) {} })">
             <h3 class="text-[15px] font-bold text-ae-navy">ข้อมูลโครงการ</h3>
-            <dl x-show="! more" class="mt-1 grid grid-cols-[8.5rem_minmax(0,1fr)] text-sm">
-                @foreach ($facts as [$label, $value, $class])
-                    <dt class="border-b border-slate-100 py-2.5 text-slate-600 last-of-type:border-0">{{ $label === 'ผู้จัดการโครงการ (PM)' ? 'PM' : ($label === 'เลขที่ใบสั่งซื้อ (PO)' ? 'เลขที่ PO' : $label) }}</dt>
-                    <dd class="min-w-0 break-words border-b border-slate-100 py-2.5 {{ $value === null ? 'text-slate-400' : 'font-semibold text-slate-900 '.$class }} {{ $loop->last ? 'border-0' : '' }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
-                @endforeach
-            </dl>
+            <div x-show="! more" class="mt-1 grid gap-x-8 sm:grid-cols-2">
+                <dl class="grid grid-cols-[7.5rem_minmax(0,1fr)] content-start text-sm">
+                    @foreach ($facts as [$label, $value, $class])
+                        <dt class="border-b border-slate-100 py-2.5 text-slate-600">{{ $label === 'เลขที่ใบสั่งซื้อ (PO)' ? 'เลขที่ PO' : $label }}</dt>
+                        <dd class="min-w-0 break-words border-b border-slate-100 py-2.5 {{ $value === null ? 'text-slate-400' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
+                    @endforeach
+                </dl>
+                <div class="content-start">
+                    <h4 class="mt-3 text-[13px] font-bold text-slate-600 sm:mt-1.5">ติดต่อ</h4>
+                    <dl class="grid grid-cols-[7.5rem_minmax(0,1fr)] text-sm">
+                        @foreach ($contacts as [$label, $value, $class])
+                            <dt class="border-b border-slate-100 py-2.5 text-slate-600">{{ $label === 'ผู้จัดการโครงการ (PM)' ? 'PM' : ($label === 'เบอร์ติดต่อลูกค้า' ? 'เบอร์ลูกค้า' : $label) }}</dt>
+                            <dd class="min-w-0 break-words border-b border-slate-100 py-2.5 {{ $value === null ? 'text-slate-400' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
+                        @endforeach
+                    </dl>
+                </div>
+                {{-- คำอธิบาย: the whole text, at reading size, under everything --}}
+                <div class="mt-3 sm:col-span-2">
+                    <h4 class="text-[13px] font-bold text-slate-600">คำอธิบาย</h4>
+                    @if ($project->description)
+                        <p class="mt-1 whitespace-pre-line text-[15px] leading-relaxed text-slate-800">{{ $project->description }}</p>
+                    @else
+                        <p class="mt-1 text-sm text-slate-400">ยังไม่มีคำอธิบาย</p>
+                    @endif
+                </div>
+            </div>
             <div id="project-details" x-show="more" x-cloak class="mt-3 grid gap-x-8 gap-y-5 2xl:grid-cols-2">
                 @foreach ($groups as $title => $fields)
                     @continue(! $fields)
@@ -180,21 +206,21 @@
             </button>
         </div>
 
-        <div class="flex min-w-0 flex-col gap-5 rounded-[14px] border border-slate-200 bg-white px-5 pb-5 pt-4 sm:px-6" aria-label="ภาพรวมการผลิต">
-            <div class="flex flex-wrap items-end gap-x-6 gap-y-3">
+        <div class="flex min-w-0 flex-col gap-4 rounded-[14px] border border-slate-200 bg-white px-5 pb-4 pt-4" aria-label="ภาพรวมการผลิต">
+            <div class="flex flex-col gap-3">
                 <div>
                     <h3 class="text-[15px] font-bold text-ae-navy">ความคืบหน้าการผลิต</h3>
                     <p class="flex flex-wrap items-baseline gap-x-2">
-                        <span class="text-[40px] font-bold leading-tight tracking-tight tabular-nums text-ae-navy">{{ $s['progress'] }}%</span>
+                        <span class="text-[30px] font-bold leading-tight tracking-tight tabular-nums text-ae-navy">{{ $s['progress'] }}%</span>
                         @if ($pace)<span class="text-[13px] font-semibold {{ $barText }}">{{ $pace[0] }}{{ $s['timeElapsed'] !== null ? ' · เวลาผ่านไป '.$s['timeElapsed'].'%' : '' }}</span>@endif
                     </p>
                 </div>
-                <dl class="flex flex-wrap gap-x-6 gap-y-2 text-[13px] sm:ml-auto sm:pb-1">
+                <dl class="flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
                     @foreach ([['เสร็จแล้ว', $s['completed'], 'bg-emerald-600'], ['กำลังดำเนินการ', $s['inProgress'], 'bg-blue-600'], ['พักไว้', $s['onHold'], 'bg-amber-400'], ['ยังไม่เริ่ม', $s['notStarted'], 'bg-slate-300']] as [$label, $n, $color])
                         @continue($label === 'พักไว้' && ! $n)
                         <div>
                             <dt class="flex items-center gap-1.5 text-slate-600"><span class="h-2 w-2 rounded-full {{ $color }}"></span>{{ $label }}</dt>
-                            <dd class="mt-0.5 text-xl font-bold tabular-nums {{ $n ? 'text-slate-900' : 'text-slate-400' }}">{{ $n }} <span class="text-[13px] font-medium text-slate-500">ตู้</span></dd>
+                            <dd class="text-base font-bold tabular-nums {{ $n ? 'text-slate-900' : 'text-slate-400' }}">{{ $n }} <span class="text-[13px] font-medium text-slate-500">ตู้</span></dd>
                         </div>
                     @endforeach
                 </dl>
@@ -202,49 +228,21 @@
 
             <div>
                 <h4 class="mb-2.5 text-[13px] font-bold text-slate-600">สถานะโครงการ</h4>
-                {{-- md and up: one line; the ผลิต stretch is the production bar (the tick = where time says it should be) --}}
-                <div class="hidden md:block" role="img"
-                     aria-label="เริ่มโครงการ {{ $short($project->start_date) ?: 'ยังไม่ระบุ' }} · ผลิต {{ $s['progress'] }}% · {{ $fatNode[1] }} {{ $fatNode[2] }} · {{ $dlNode[1] }} {{ $dlNode[2] }} · {{ $closed ? 'ปิดโครงการแล้ว' : 'ครบกำหนด '.$short($project->due_date) }}">
-                    <div class="grid grid-cols-[28px_minmax(0,2fr)_28px_minmax(0,1fr)_28px_minmax(0,1fr)_28px] items-center">
-                        <span class="flex justify-center">{!! $dot($project->start_date && $project->start_date->lte(today()) ? 'done' : 'wait') !!}</span>
-                        <span class="relative mx-1 h-1.5 rounded-full bg-slate-200">
-                            <span class="absolute inset-y-0 left-0 rounded-full {{ $barColor }}" style="width: {{ $s['progress'] }}%"></span>
-                            @if ($s['timeElapsed'] !== null && $s['progress'] < 100)
-                                <span class="absolute -top-2 h-[22px] w-0.5 -translate-x-1/2 rounded bg-slate-900" style="left: {{ $s['timeElapsed'] }}%" title="เวลาผ่านไป {{ $s['timeElapsed'] }}%"></span>
-                            @endif
-                        </span>
-                        <span class="flex justify-center">{!! $dot($fatNode[0], $fatText, ! empty($fatNode[4])) !!}</span>
-                        <span class="mx-1 h-0.5 {{ $fatNode[0] === 'done' ? 'bg-emerald-600' : 'bg-slate-200' }}"></span>
-                        <span class="flex justify-center">{!! $dot($dlNode[0], $dlText, ! empty($dlNode[4])) !!}</span>
-                        <span class="mx-1 h-0.5 {{ $dlNode[0] === 'done' ? 'bg-emerald-600' : 'bg-slate-200' }}"></span>
-                        <span class="flex justify-center">{!! $dot($closed ? 'done' : 'wait') !!}</span>
-                    </div>
-                    <div class="mt-2.5 grid grid-cols-[28px_minmax(0,2fr)_28px_minmax(0,1fr)_28px_minmax(0,1fr)_28px] text-[13px] leading-snug">
-                        <span class="justify-self-start whitespace-nowrap"><b class="block font-semibold text-slate-900">เริ่มโครงการ</b><span class="text-slate-600">{{ $short($project->start_date) ?: 'ยังไม่ระบุ' }}</span></span>
-                        <span class="justify-self-center whitespace-nowrap text-center"><b class="block font-semibold {{ $barText }}">ผลิต {{ $s['progress'] }}%</b>
-                            <span class="text-slate-600">{{ $s['timeElapsed'] !== null && $s['progress'] < 100 ? 'ควรได้ '.$s['timeElapsed'].'% ตามเวลา' : ($s['progress'] >= 100 ? 'ผลิตครบ' : $s['total'].' ตู้') }}</span></span>
-                        <button type="button" {!! $go($fatNode, 'pmo-fat') !!} @disabled(! $fatNode[3]) class="justify-self-center whitespace-nowrap text-center disabled:cursor-default">
-                            <b class="block font-semibold {{ $tone($fatNode) }}">{{ $fatNode[1] }}{{ ! empty($fatNode[4]) ? ' · ถัดไป' : '' }}</b><span class="{{ $fatNode[3] && $fatNode[0] === 'todo' ? 'font-semibold text-blue-700' : 'text-slate-600' }} tabular-nums">{{ $fatNode[2] }}</span></button>
-                        <span></span>
-                        <button type="button" {!! $go($dlNode, 'pmo-delivery') !!} @disabled(! $dlNode[3]) class="justify-self-center whitespace-nowrap text-center disabled:cursor-default">
-                            <b class="block font-semibold {{ $tone($dlNode) }}">{{ $dlNode[1] }}{{ ! empty($dlNode[4]) ? ' · ถัดไป' : '' }}</b><span class="{{ $dlNode[3] ? 'text-blue-700' : 'text-slate-600' }} tabular-nums">{{ $dlNode[2] }}</span></button>
-                        <span></span>
-                        <span class="justify-self-end whitespace-nowrap text-right"><b class="block font-semibold {{ $closed ? 'text-emerald-700' : 'text-slate-900' }}">ปิดโครงการ</b><span class="text-slate-600">{{ $closed ? 'ปิดแล้ว' : ($project->due_date ? 'ครบกำหนด '.$short($project->due_date) : 'ยังไม่มีวันครบกำหนด') }}</span></span>
-                    </div>
-                </div>
-                {{-- a phone: the same steps down the page --}}
-                <ol class="space-y-0 md:hidden">
+                {{-- the steps down the card; the ผลิต step is the production bar (the tick = where time says it should be) --}}
+                <ol aria-label="สถานะโครงการ">
                     <li class="flex gap-3"><span class="flex flex-col items-center">{!! $dot($project->start_date && $project->start_date->lte(today()) ? 'done' : 'wait') !!}<span class="w-0.5 flex-1 bg-slate-200"></span></span>
                         <span class="pb-3 text-[13px]"><b class="block">เริ่มโครงการ</b><span class="text-slate-600">{{ $short($project->start_date) ?: 'ยังไม่ระบุ' }}</span></span></li>
                     <li class="flex gap-3"><span class="flex w-7 flex-col items-center"><span class="w-0.5 flex-1 bg-slate-200"></span></span>
                         <span class="flex-1 pb-3 text-[13px]"><b class="block {{ $barText }}">ผลิต {{ $s['progress'] }}%</b>
-                            <span class="relative mt-1 block h-1.5 rounded-full bg-slate-200"><span class="absolute inset-y-0 left-0 rounded-full {{ $barColor }}" style="width: {{ $s['progress'] }}%"></span></span></span></li>
+                            <span class="relative mt-1.5 block h-1.5 rounded-full bg-slate-200"><span class="absolute inset-y-0 left-0 rounded-full {{ $barColor }}" style="width: {{ $s['progress'] }}%"></span>
+                                @if ($s['timeElapsed'] !== null && $s['progress'] < 100)<span class="absolute -top-1.5 h-[18px] w-0.5 -translate-x-1/2 rounded bg-slate-900" style="left: {{ $s['timeElapsed'] }}%" title="เวลาผ่านไป {{ $s['timeElapsed'] }}%"></span>@endif</span>
+                            <span class="mt-1 block text-slate-600">{{ $s['timeElapsed'] !== null && $s['progress'] < 100 ? 'ควรได้ '.$s['timeElapsed'].'% ตามเวลา' : ($s['progress'] >= 100 ? 'ผลิตครบ' : $s['total'].' ตู้') }}</span></span></li>
                     <li class="flex gap-3"><span class="flex flex-col items-center">{!! $dot($fatNode[0], $fatText, ! empty($fatNode[4])) !!}<span class="w-0.5 flex-1 bg-slate-200"></span></span>
-                        <button type="button" {!! $go($fatNode, 'pmo-fat') !!} @disabled(! $fatNode[3]) class="pb-3 text-left text-[13px]"><b class="block {{ $tone($fatNode) }}">{{ $fatNode[1] }}</b><span class="text-slate-600">{{ $fatNode[2] }}</span></button></li>
+                        <button type="button" {!! $go($fatNode, 'pmo-fat') !!} @disabled(! $fatNode[3]) class="pb-3 text-left text-[13px]"><b class="block {{ $tone($fatNode) }}">{{ $fatNode[1] }}{{ ! empty($fatNode[4]) ? ' · ถัดไป' : '' }}</b><span class="{{ $fatNode[3] && $fatNode[0] === 'todo' ? 'font-semibold text-blue-700' : 'text-slate-600' }} tabular-nums">{{ $fatNode[2] }}</span></button></li>
                     <li class="flex gap-3"><span class="flex flex-col items-center">{!! $dot($dlNode[0], $dlText, ! empty($dlNode[4])) !!}<span class="w-0.5 flex-1 bg-slate-200"></span></span>
-                        <button type="button" {!! $go($dlNode, 'pmo-delivery') !!} @disabled(! $dlNode[3]) class="pb-3 text-left text-[13px]"><b class="block {{ $tone($dlNode) }}">{{ $dlNode[1] }}</b><span class="text-blue-700">{{ $dlNode[2] }}</span></button></li>
+                        <button type="button" {!! $go($dlNode, 'pmo-delivery') !!} @disabled(! $dlNode[3]) class="pb-3 text-left text-[13px]"><b class="block {{ $tone($dlNode) }}">{{ $dlNode[1] }}{{ ! empty($dlNode[4]) ? ' · ถัดไป' : '' }}</b><span class="{{ $dlNode[3] ? 'text-blue-700' : 'text-slate-600' }} tabular-nums">{{ $dlNode[2] }}</span></button></li>
                     <li class="flex gap-3">{!! $dot($closed ? 'done' : 'wait') !!}
-                        <span class="text-[13px]"><b class="block">ปิดโครงการ</b><span class="text-slate-600">{{ $closed ? 'ปิดแล้ว' : 'ครบกำหนด '.$short($project->due_date) }}</span></span></li>
+                        <span class="text-[13px]"><b class="block {{ $closed ? 'text-emerald-700' : '' }}">ปิดโครงการ</b><span class="text-slate-600">{{ $closed ? 'ปิดแล้ว' : ($project->due_date ? 'ครบกำหนด '.$short($project->due_date) : 'ยังไม่มีวันครบกำหนด') }}</span></span></li>
                 </ol>
             </div>
         </div>

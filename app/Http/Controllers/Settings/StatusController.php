@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Models\BoardStatus;
+use App\Support\EventStatuses;
 use Illuminate\Http\Request;
 
 /**
@@ -14,7 +15,7 @@ class StatusController extends Controller
 {
     public function index()
     {
-        return view('settings.statuses', ['statuses' => BoardStatus::orderBy('sort')->orderBy('id')->get()]);
+        return view('settings.statuses', ['statuses' => BoardStatus::orderBy('sort')->orderBy('id')->get(), 'events' => EventStatuses::all()]);
     }
 
     public function update(Request $request)
@@ -36,6 +37,24 @@ class StatusController extends Controller
         }
 
         return back()->with('success', 'บันทึกสถานะแล้ว');
+    }
+
+    /** The FAT and delivery states: rename / recolour only ("คืนค่าเริ่มต้น" sends reset). */
+    public function updateEvents(Request $request)
+    {
+        if ($request->boolean('reset')) {
+            EventStatuses::save([]);
+
+            return back()->with('success', 'คืนชื่อและสีเริ่มต้นของสถานะ FAT / การจัดส่งแล้ว');
+        }
+        $data = $request->validate([
+            'events' => ['required', 'array'],
+            'events.*.*.name' => ['required', 'string', 'max:40'],
+            'events.*.*.color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+        ], [], ['events.*.*.name' => 'ชื่อสถานะ', 'events.*.*.color' => 'สี']);
+        EventStatuses::save($data['events']);
+
+        return back()->with('success', 'บันทึกสถานะ FAT / การจัดส่งแล้ว');
     }
 
     public function store(Request $request)

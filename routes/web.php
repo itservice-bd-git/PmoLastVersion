@@ -109,6 +109,27 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::post('projects/{project}/fats', [\App\Http\Controllers\ProjectFatController::class, 'store'])->name('projects.fats.store');
     Route::put('project-fats/{fat}', [\App\Http\Controllers\ProjectFatController::class, 'update'])->name('project-fats.update');
     Route::delete('project-fats/{fat}', [\App\Http\Controllers\ProjectFatController::class, 'destroy'])->name('project-fats.destroy');
+    // การจัดส่ง (Admin / PM, checked in the controller): PM sends a round to the delivery department; Planning opens the same window
+    Route::get('projects/{project}/delivery', [\App\Http\Controllers\ProjectDeliveryController::class, 'form'])->name('projects.deliveries.form');
+    Route::post('projects/{project}/deliveries', [\App\Http\Controllers\ProjectDeliveryController::class, 'store'])->name('projects.deliveries.store');
+    Route::put('project-deliveries/{delivery}', [\App\Http\Controllers\ProjectDeliveryController::class, 'update'])->name('project-deliveries.update');
+    Route::delete('project-deliveries/{delivery}', [\App\Http\Controllers\ProjectDeliveryController::class, 'destroy'])->name('project-deliveries.destroy');
+    // งานจัดส่ง: the delivery department's page and its steps (App\Services\DeliveryFlow); รถขนส่ง is theirs to keep too
+    Route::middleware('perm:edit.delivery')->group(function () {
+        $deliveries = \App\Http\Controllers\DeliveryController::class;
+        Route::get('deliveries', [$deliveries, 'index'])->name('deliveries.index');
+        Route::post('deliveries/{delivery}/schedule', [$deliveries, 'schedule'])->name('deliveries.schedule');
+        Route::post('deliveries/{delivery}/reject', [$deliveries, 'reject'])->name('deliveries.reject');
+        Route::post('deliveries/{delivery}/depart', [$deliveries, 'depart'])->name('deliveries.depart');
+        Route::post('deliveries/{delivery}/deliver', [$deliveries, 'deliver'])->name('deliveries.deliver');
+        Route::post('deliveries/{delivery}/back', [$deliveries, 'back'])->name('deliveries.back');
+        $vehicles = \App\Http\Controllers\Settings\VehicleController::class;
+        Route::get('settings/vehicles', [$vehicles, 'index'])->name('settings.vehicles.index');
+        Route::post('settings/vehicles', [$vehicles, 'store'])->name('settings.vehicles.store');
+        Route::put('settings/vehicles/reasons', [$vehicles, 'reasons'])->name('settings.vehicles.reasons');
+        Route::put('settings/vehicles/{vehicle}', [$vehicles, 'update'])->name('settings.vehicles.update');
+        Route::delete('settings/vehicles/{vehicle}', [$vehicles, 'destroy'])->name('settings.vehicles.destroy');
+    });
     Route::patch('projects/{project}/color', [ProjectController::class, 'updateColor'])->name('projects.color');
 
     Route::post('projects/{project}/tasks', [ProjectTaskController::class, 'store'])->middleware('pmo')->name('project-tasks.store');
@@ -192,6 +213,7 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
         Route::post('statuses', [\App\Http\Controllers\Settings\StatusController::class, 'store'])->name('settings.statuses.store');
         Route::delete('statuses/{status}', [\App\Http\Controllers\Settings\StatusController::class, 'destroy'])->name('settings.statuses.destroy');
         Route::patch('statuses/{status}/move', [\App\Http\Controllers\Settings\StatusController::class, 'move'])->name('settings.statuses.move');
+        Route::put('statuses/events', [\App\Http\Controllers\Settings\StatusController::class, 'updateEvents'])->name('settings.statuses.events');
         $boards = \App\Http\Controllers\Settings\BoardController::class;
         // สาเหตุการเลื่อน: the reasons a project's dates may be moved for (App\Services\ProjectDates)
         $reasons = \App\Http\Controllers\Settings\ProjectDateReasonController::class;

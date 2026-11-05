@@ -40,6 +40,33 @@
             </div>
         </x-card>
 
+        {{-- FAT / การจัดส่ง: fixed states (the app decides with them), renamed / recoloured only (App\Support\EventStatuses) --}}
+        <x-card title="สถานะ FAT และการจัดส่ง" subtitle="ใช้ทุกที่ที่สถานะนี้ขึ้น: หน้าเดือน / ไทม์ไลน์ / แท็บ FAT และจัดส่งใน Planning, หน้าต่างโครงการ และหน้าโครงการ — เปลี่ยนชื่อ/สีได้ แต่เพิ่มหรือลบไม่ได้ เพราะระบบใช้ตัดสินงาน · ประวัติที่บันทึกไปแล้วยังเป็นชื่อเดิม">
+            <form method="POST" action="{{ route('settings.statuses.events') }}" id="event-status-form">@csrf @method('PUT')</form>
+            <div class="grid gap-6 lg:grid-cols-2">
+                @foreach (\App\Support\EventStatuses::GROUPS as $group => $title)
+                    <div class="space-y-2">
+                        <p class="text-sm font-bold text-slate-700">{{ $title }}</p>
+                        @foreach ($events[$group] as $key => $s)
+                            <div class="flex flex-wrap items-center gap-2">
+                                <input form="event-status-form" type="color" name="events[{{ $group }}][{{ $key }}][color]" value="{{ old("events.$group.$key.color", $s['color']) }}" class="h-9 w-12 rounded border-slate-300" aria-label="สี {{ $s['name'] }}">
+                                <input form="event-status-form" type="text" name="events[{{ $group }}][{{ $key }}][name]" value="{{ old("events.$group.$key.name", $s['name']) }}" maxlength="40" required class="min-w-0 flex-1 rounded-lg border-slate-300 text-sm" aria-label="ชื่อสถานะ (เดิม: {{ $s['defaultName'] }})">
+                                <span class="st-pill rounded-full px-2.5 py-0.5 text-xs font-bold" style="--c: {{ $s['color'] }}">{{ $s['name'] }}</span>
+                                @if ($s['hint'] || $s['name'] !== $s['defaultName'])
+                                    <p class="w-full pl-14 text-[12px] text-slate-500">{{ collect([$s['hint'], $s['name'] !== $s['defaultName'] ? 'ชื่อเดิม: '.$s['defaultName'] : null])->filter()->implode(' · ') }}</p>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
+                @endforeach
+            </div>
+            <div class="mt-4 flex flex-wrap justify-end gap-2">
+                <button form="event-status-form" type="submit" name="reset" value="1" onclick="return confirm('คืนชื่อและสีเริ่มต้นของสถานะ FAT / การจัดส่งทั้งหมด?')" formnovalidate
+                        class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">คืนค่าเริ่มต้น</button>
+                <button form="event-status-form" type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">บันทึก</button>
+            </div>
+        </x-card>
+
         <x-card title="เพิ่มสถานะ">
             <form method="POST" action="{{ route('settings.statuses.store') }}" class="flex flex-wrap items-center gap-2">
                 @csrf

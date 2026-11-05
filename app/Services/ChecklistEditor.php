@@ -407,11 +407,11 @@ class ChecklistEditor
             : ['name' => $item->name, 'remark' => (string) $item->remark, 'date' => $item->expected_date?->format('Y-m-d')];
     }
 
-    /** A date can be given only where another Sub Task compares with this one and its department has a date (Settings > แผนก). */
+    /** A date can be given only where the Sub Task's department has a date (Settings > แผนก). */
     private function checkDates(string $kind, Model $owner, bool $any): void
     {
         if ($any && ($kind === 'template' || ! app(HandoffService::class)->dateLabelFor($owner))) {
-            throw new PlanningRejected('รายการของ Sub Task นี้ไม่มีช่องวันที่ (ตั้งค่า › แผนก และคู่เทียบในเทมเพลต)');
+            throw new PlanningRejected('รายการของ Sub Task นี้ไม่มีช่องวันที่ (ตั้งชื่อวันที่ให้แผนกได้ที่ ตั้งค่า › แผนก)');
         }
     }
 

@@ -330,6 +330,58 @@ class NotificationService
         return ($people->isNotEmpty() ? $people : $this->pmoPeople($actor))->merge($this->projectFollowers($project, $actor))->unique('id')->values();
     }
 
+    /** การจัดส่ง (DeliveryFlow): the delivery department = the active people of every department allowed "จัดการการจัดส่ง" (Access). */
+    public function deliveryDepartment(?User $except = null): Collection
+    {
+        $ids = Department::where('is_active', true)->pluck('id')->filter(fn ($id) => \App\Support\Access::departmentAllows($id, 'edit.delivery'))->values()->all();
+
+        return $ids ? User::ofDepartment($ids)->where('is_active', true)->when($except, fn ($q) => $q->where('id', '!=', $except->id))->get() : collect();
+    }
+
+    /**
+     * A round for the delivery department to act on (sent / sent again / its window moved): "ต้องทำ" until they pick a day.
+     * $todo false = only news (PM changed a round that already has its day).
+     */
+    public function deliveryForDepartment(\App\Models\ProjectDelivery $d, User $actor, string $title, bool $todo = true): int
+    {
+        $project = $d->project;
+
+        return $this->send($this->deliveryDepartment($actor), new PmoNotice(
+            $todo ? 'delivery_todo' : 'delivery',
+            $title,
+            $this->deliveryText($d),
+            route('deliveries.index', ['tab' => $d->isOpen() ? 'waiting' : 'scheduled', 'round' => $d->id]),
+            projectId: $project->id,
+            group: $todo ? null : "delivery:{$d->id}",
+        ));
+    }
+
+    /**
+     * The delivery department moved a round on (picked its day, changed the vehicle, sent it back, it left, it arrived): the
+     * project's people in charge and whoever sent it hear it (nobody = every Admin / PM). Sent back / a problem on site = "ต้องทำ".
+     */
+    public function deliveryForManager(\App\Models\ProjectDelivery $d, User $actor, string $title, ?string $extra = null, bool $todo = false): int
+    {
+        $project = $d->project;
+        $people = $this->peopleInCharge($project, $actor)
+            ->merge(User::where('id', $d->sent_by)->where('is_active', true)->where('id', '!=', $actor->id)->get())->unique('id')->values();
+
+        return $this->send($people->isNotEmpty() ? $people : $this->pmoPeople($actor), new PmoNotice(
+            $todo ? 'delivery_rejected' : 'delivery',
+            $title,
+            $this->deliveryText($d).($extra ? ' — '.$extra : ''),
+            route('projects.show', $project).'#delivery',
+            projectId: $project->id,
+            group: $todo ? null : "delivery:{$d->id}",
+        ));
+    }
+
+    /** "SO-690112 MDB โรงงานบางนา · รอบ 2 · 3 ตู้ · ส่งได้ 18–22/11/2569" */
+    private function deliveryText(\App\Models\ProjectDelivery $d): string
+    {
+        return "{$d->project->project_no} {$d->project->project_name} · รอบ {$d->round} · ".$d->cabinetsText().' · '.$d->when();
+    }
+
     /** The people following the project (ProjectFollowers) who can see it, active, not $except. */
     private function projectFollowers(Project $project, ?User $except = null): Collection
     {
@@ -660,7 +712,7 @@ class NotificationService
         'accepted' => 'progress', 'started' => 'progress', 'completed' => 'completed',
         'due_soon' => 'reminders', 'overdue' => 'reminders', 'undated' => 'reminders', 'waiting' => 'reminders',
         'comment' => 'comments', 'due_changed' => 'due_changes', 'project_rescheduled' => 'due_changes', 'project_done' => 'completed',
-        'handoff' => 'progress', 'handoff_due' => 'reminders',
+        'handoff' => 'progress', 'handoff_due' => 'reminders', 'delivery' => 'progress',
     ];
 
     /** @param  int|null  $departmentId  the department the news is about, for "only my department's work" */

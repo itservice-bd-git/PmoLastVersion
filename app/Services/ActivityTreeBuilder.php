@@ -26,7 +26,7 @@ class ActivityTreeBuilder
     /** Filter value => actions it matches (null = decided by entity type). */
     private const CATEGORIES = [
         'create' => ['created', 'copied_from_cabinet', 'template_applied'],
-        'edit' => ['updated', 'extended', 'fat', 'rescheduled'],
+        'edit' => ['updated', 'extended', 'fat', 'rescheduled', 'delivery'],
         'status' => ['accepted', 'started', 'completed'],
         'assignment' => ['assigned', 'department_changed', 'accepted', 'started', 'completed'],
         'checklist' => ['checked', 'unchecked', 'checklists_copied', 'checklist_status'],
@@ -47,6 +47,7 @@ class ActivityTreeBuilder
         'checklists_copied' => 'คัดลอก Checklist',
         'checklist_status' => 'สถานะ Checklist',
         'fat' => 'วัน FAT',
+        'delivery' => 'การจัดส่ง',
         'assigned' => 'มอบหมายงานให้แผนก',
         'department_changed' => 'เปลี่ยนแผนกที่รับผิดชอบ',
         'accepted' => 'แผนกรับงาน',
@@ -69,6 +70,7 @@ class ActivityTreeBuilder
         'checklists_copied' => 'copy',
         'checklist_status' => 'edit',
         'fat' => 'edit',
+        'delivery' => 'edit',
         'attachment_uploaded' => 'clip', 'attachment_deleted' => 'clip',
         'deleted' => 'trash',
     ];
@@ -354,7 +356,7 @@ class ActivityTreeBuilder
         // The tree already says WHICH entity; only keep the sentence where it
         // carries information nothing else shows (counts, file names, deletions).
         $known = isset(self::ACTION_LABELS[$log->action]);
-        $detail = (! $changes && (! $known || in_array($log->action, ['deleted', 'checklists_copied', 'checklist_status', 'fat', 'attachment_uploaded', 'attachment_deleted', 'template_applied', 'copied_from_cabinet', 'accepted', 'started', 'completed'], true)))
+        $detail = (! $changes && (! $known || in_array($log->action, ['deleted', 'checklists_copied', 'checklist_status', 'fat', 'delivery', 'attachment_uploaded', 'attachment_deleted', 'template_applied', 'copied_from_cabinet', 'accepted', 'started', 'completed'], true)))
             ? $description : null;
 
         $name = $log->user?->name;

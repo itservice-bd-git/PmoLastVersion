@@ -106,9 +106,9 @@
                     </div>
                 </div>
                 <div>
-                    <x-input-label value="วันที่ที่แผนกนี้ลงให้งานที่เทียบด้วย (ไม่บังคับ)" />
+                    <x-input-label value="วันที่ที่แผนกนี้ลงในเช็คลิสต์ (ไม่บังคับ)" />
                     <x-text-input name="handoff_date_label" maxlength="40" placeholder="เช่น วันของเข้า" class="mt-1 block w-full" :value="$department->handoff_date_label" />
-                    <p class="mt-1 text-xs text-slate-500">เมื่อ Sub Task ของแผนกนี้ถูกเลือกเป็นคู่เทียบในเทมเพลต แต่ละรายการจะมีช่องวันที่นี้ ฝั่งที่เทียบจะได้แจ้งเตือนเมื่อถึงวันหรือเลยวัน</p>
+                    <p class="mt-1 text-xs text-slate-500">ใส่ชื่อแล้ว ทุกรายการในเช็คลิสต์ของแผนกนี้มีช่องวันที่นี้ · ถึงวันหรือเลยวันแล้วยังไม่ติ๊ก แผนกนี้ได้แจ้งเตือน (เลยวัน PM ได้ด้วย) · ถ้ามีงานแผนกอื่นเทียบด้วย ฝั่งที่เทียบได้แจ้งเตือนแทน</p>
                 </div>
                 <label class="flex items-start gap-2 text-sm text-slate-600">
                     <input type="checkbox" name="sees_all" value="1" @checked($department->sees_all) class="mt-0.5 rounded border-slate-300 text-blue-600">

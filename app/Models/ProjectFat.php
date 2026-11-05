@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Models\Concerns\GuardsClosedProject;
+use App\Support\EventStatuses;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /** วัน FAT: one round of a project's factory acceptance test (App\Http\Controllers\ProjectFatController). */
 class ProjectFat extends Model
@@ -35,9 +37,21 @@ class ProjectFat extends Model
         return $this->project_id;
     }
 
+    /** Its status as Settings > สถานะงาน names it (EventStatuses 'fat'). */
     public function statusLabel(): string
     {
-        return self::STATUS_LABELS[$this->status] ?? $this->status;
+        return EventStatuses::name('fat', $this->status);
+    }
+
+    /** What it shows: passed / failed, else late when it runs past the project's due date, else scheduled. */
+    public function stateKey(?Project $project = null): string
+    {
+        return $this->status !== self::SCHEDULED ? $this->status : ($this->isAfterDue($project) ? 'late' : self::SCHEDULED);
+    }
+
+    public function stateColor(?Project $project = null): string
+    {
+        return EventStatuses::color('fat', $this->stateKey($project));
     }
 
     /** After the project's due date and not passed yet: the delivery date should move, or the FAT. */
@@ -49,7 +63,7 @@ class ProjectFat extends Model
     }
 
     /** The FAT's last day: its end date when it runs over several days, else its one day. */
-    public function lastDay(): \Illuminate\Support\Carbon
+    public function lastDay(): Carbon
     {
         return $this->fat_end_date ?? $this->fat_date;
     }

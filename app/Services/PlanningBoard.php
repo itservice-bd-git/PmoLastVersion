@@ -13,6 +13,7 @@ use App\Models\CabinetSubtask;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\ProjectDateChange;
+use App\Models\ProjectDelivery;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -190,6 +191,8 @@ class PlanningBoard
         // เลื่อน / แก้วัน (ProjectDates): each project's and cabinet's changes, for the "เลื่อน n" chips
         $this->dateChanges = $ids->isEmpty() ? collect() : ProjectDateChange::whereIn('project_id', $ids)->orderBy('id')->get()
             ->groupBy(fn ($c) => $c->cabinet_id ? 'c'.$c->cabinet_id : 'p'.$c->project_id);
+        // การจัดส่ง (ProjectDeliveryController): each project's rounds, for the "ส่ง" line on its bar and its project window
+        $this->deliveries = $ids->isEmpty() ? collect() : ProjectDelivery::with('vehicle')->whereIn('project_id', $ids)->orderBy('round')->get()->groupBy('project_id');
         $cabinets = $builder ? Cabinet::with('boardStatus')->whereIn('project_id', $ids)->orderBy('sequence')->orderBy('id')->get()->groupBy('project_id') : null;
 
         $tasks = $byProject->map(fn (Collection $rows) => $this->task($rows->first()->cabinetTask->cabinet->project, $rows, $comments, $today, $user, $cabinets))
@@ -205,7 +208,7 @@ class PlanningBoard
         'departments' => 'id', 'department_fields' => 'id', 'department_field_options' => 'id', 'project_field_values' => 'id',
         'project_department_statuses' => 'id', 'department_links' => 'id', 'users' => 'id',
         // pivots: no id / timestamps - a swap (detach one, attach another) still changes the sum
-        'checklist_statuses' => 'id', 'cabinet_checklist_status' => 'id', 'project_fats' => 'id', 'project_date_changes' => 'id',
+        'checklist_statuses' => 'id', 'cabinet_checklist_status' => 'id', 'project_fats' => 'id', 'project_date_changes' => 'id', 'project_deliveries' => 'id', 'vehicles' => 'id',
         'project_user' => 'project_id * 100003 + user_id', 'board_label_project' => 'project_id * 100003 + board_label_id',
     ];
 
@@ -337,6 +340,8 @@ class PlanningBoard
     /** @var Collection<string, Collection> 'p<project id>' / 'c<cabinet id>' => its date changes, oldest first (filled per tasks() call) */
     private Collection $dateChanges;
 
+    private Collection $deliveries;
+
     /** @var Collection<int, Collection> project id => department id => page id of the status Admin / PM set for it (filled per tasks() call) */
     private Collection $deptStatuses;
 
@@ -428,6 +433,7 @@ class PlanningBoard
             'owners' => $project->assignees->pluck('id')->values()->all(),
             'followers' => $project->followers->pluck('id')->values()->all(),   // "ติดตามโครงการ" (ProjectFollowers)
             'fat' => self::fat($project),
+            'deliveries' => ($this->deliveries->get($project->id) ?? collect())->map(fn (ProjectDelivery $d) => self::delivery($d))->values()->all(),
             'reschedule' => ProjectDates::brief($this->dateChanges->get('p'.$project->id, collect()), $project->due_date, route('projects.show', $project)),   // "เลื่อน n" (null = never postponed)   // วัน FAT: the latest round (ProjectFatController), on the calendar and the timeline
             // the project's own record (shown / edited in "ข้อมูลโครงการ"; editing it is for Admin / PM)
             'info' => [
@@ -470,6 +476,29 @@ class PlanningBoard
             'createdAt' => ($project->created_at ?? $today)->getTimestampMs(),
             'updatedAt' => ($project->updated_at ?? $today)->getTimestampMs(),
             'pmoUrl' => route('projects.show', $project),
+        ];
+    }
+
+    /**
+     * A delivery round as Planning draws it: its days (wait = no day picked yet: date / end are PM's window, drawn dashed;
+     * why = the delivery department sent it back), its cabinets ('c'.id), on what (car = the short name on the bar's tab,
+     * carFull = with the plate, for the project window).
+     */
+    private static function delivery(ProjectDelivery $d): array
+    {
+        $car = match ($d->method) {
+            ProjectDelivery::EXTERNAL => $d->carrier ?: ProjectDelivery::methodName(ProjectDelivery::EXTERNAL),
+            ProjectDelivery::PICKUP => ProjectDelivery::methodName(ProjectDelivery::PICKUP),
+            default => $d->vehicle?->name ?? $d->vehicle_type,   // no vehicle picked yet: the kind PM asked for
+        };
+
+        return [
+            'id' => $d->id, 'round' => $d->round, 'date' => $d->firstDay()->format('Y-m-d'), 'end' => $d->lastDay()->format('Y-m-d'), 'time' => (string) $d->delivery_time, 'status' => $d->status,
+            'wait' => $d->isOpen(), 'why' => $d->status === ProjectDelivery::REJECTED ? trim($d->rejected_reason.($d->rejected_note ? ' · '.$d->rejected_note : '')) : '',
+            'cabs' => array_map(fn ($id) => 'c'.$id, $d->cabinet_ids ?? []), 'method' => $d->method,
+            'car' => $car, 'carFull' => $d->method === ProjectDelivery::COMPANY ? $d->transport() : $car, 'driver' => (string) $d->driver_name,
+            'crew' => $d->crew_size ?: count($d->people()), 'people' => $d->peopleText(),
+            'dep' => $d->departed_at?->format('H:i'), 'at' => $d->delivered_at?->format('Y-m-d H:i'),
         ];
     }
 

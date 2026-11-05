@@ -37,8 +37,11 @@
                         </div>
                         {{-- วัน FAT: a striped band over its days, on the bar --}}
                         <template x-if="tlFat(r)">
-                            <button type="button" @click="openModal(r.t.id)" :style="'grid-column:' + tlFat(r).col + ' / span ' + tlFat(r).span + ';grid-row:1'" :title="fatTitle(r.t)"
+                            <button type="button" @click="openModal(r.t.id)" :style="'grid-column:' + tlFat(r).col + ' / span ' + tlFat(r).span + ';grid-row:1;--fat:' + fatColor(r.t)" :title="fatTitle(r.t)"
                                     class="relative z-[6] h-8" :class="fatBandCls(r.t)"><span x-text="tlFat(r).label"></span></button>
+                        </template>
+                        <template x-for="g in tlDels(r)" :key="g.id">
+                            <button type="button" @click="openModal(r.t.id)" :style="'grid-column:' + g.col + ' / span ' + g.span + ';grid-row:1;--del:' + g.color" :title="g.title" class="relative z-[6]" :class="g.cls"><span x-text="g.label"></span></button>
                         </template>
                     </div>
                 </div>

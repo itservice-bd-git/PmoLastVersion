@@ -147,6 +147,7 @@ class PlanningController extends Controller
             'mine' => $board->mineProjectIds($user),         // project ids for the "ของฉัน" button
             'me' => ['id' => $user->id, 'name' => $user->name, 'avatar' => $user->avatar_url, 'deptId' => $user->department_id ? PlanningBoard::deptKey($user->department_id) : ''],
             'canTrash' => $user->canManageTrash(),
+            'eventStatuses' => \App\Support\EventStatuses::forPage(),   // Settings > สถานะงาน: the FAT / delivery states' names and colours
             // Settings > สิทธิ์การใช้งาน: what the page offers (the server leaves the data out and refuses the change anyway)
             'perms' => ['finance' => $user->allows('data.finance'), 'contact' => $user->allows('data.contact'),
                 'comments' => $user->allows('data.comments'), 'export' => $user->allows('page.export'), 'projects' => $user->allows('page.projects')],

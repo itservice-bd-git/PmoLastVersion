@@ -18,6 +18,7 @@
         $u?->isAdmin() ? ['ฟิลด์เพิ่มเติม', route('settings.fields.index'), 'settings.fields.*'] : null,
         $u?->isAdmin() ? ['กฎการทำงาน', route('settings.rules.edit'), 'settings.rules.*'] : null,
         $u?->isAdmin() ? ['สาเหตุการเลื่อน', route('settings.date-reasons.index'), 'settings.date-reasons.*'] : null,
+        $u?->allows('edit.delivery') ? ['รถขนส่ง', route('settings.vehicles.index'), 'settings.vehicles.*'] : null,   // the delivery department keeps its vehicles
         ['การแจ้งเตือน', route('settings.notifications.edit'), 'settings.notifications.*'],
         $u?->canManageTrash() ? ['ถังขยะ', route('trash.index'), 'trash.*'] : null,
     ]);

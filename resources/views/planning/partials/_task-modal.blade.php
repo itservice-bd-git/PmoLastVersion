@@ -90,15 +90,26 @@
                             <div x-show="cur.fat || canFat(cur)" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                                 <template x-if="cur.fat">
                                     <span class="contents">
-                                        <span :class="fatTag(cur)">FAT</span>
+                                        <span :class="fatTag(cur)" :style="'--c:' + fatColor(cur)">FAT</span>
                                         <span class="font-semibold tabular-nums text-slate-700" x-text="fatRange(cur.fat) + (cur.fat.time ? ' · ' + cur.fat.time : '')"></span>
-                                        <span class="rounded-full px-2 font-bold" :class="fatPill(cur)" x-text="(cur.fat.round > 1 ? 'รอบที่ ' + cur.fat.round + ' · ' : '') + fatStatus(cur)"></span>
+                                        <span class="rounded-full px-2 font-bold" :class="fatPill(cur)" :style="'--c:' + fatColor(cur)" x-text="(cur.fat.round > 1 ? 'รอบที่ ' + cur.fat.round + ' · ' : '') + fatStatus(cur)"></span>
                                     </span>
                                 </template>
                                 <button type="button" x-show="canFat(cur)" @click="openFat(cur)" class="res-btn" aria-haspopup="dialog">ลง / แก้วัน FAT</button>
                             </div>
                         </div>
                         <div class="hidden border-slate-200 sm:block sm:border-l sm:border-t"></div>
+                        {{-- การจัดส่ง: each round and what it went on (ProjectDeliveryController); "นัด / แก้การส่ง" opens หน้าโครงการ's window (openDelivery) --}}
+                        <div x-show="dels(cur).length || canFat(cur)" class="dl-box">
+                            <span class="dl-h">การจัดส่ง</span>
+                            <div class="dl-row"><span class="dl-tag">ส่ง</span><b x-text="dels(cur).length ? delHead(cur) : 'ยังไม่ได้นัดส่ง'"></b><button type="button" x-show="canFat(cur)" @click="openDelivery(cur)" class="res-btn ml-auto" aria-haspopup="dialog">นัด / แก้การส่ง</button></div>
+                            <template x-for="d in dels(cur).slice().reverse()" :key="d.id">
+                                <div class="dl-row"><span class="dl-no" x-text="'รอบ ' + d.round"></span><span class="font-semibold tabular-nums" x-text="delWhen(d)"></span>
+                                    <span x-show="!d.cabs.length" class="dl-chip">ทุกตู้</span><template x-for="id in d.cabs" :key="id"><span :class="d.status === 'delivered' ? 'dl-chip st-chip' : 'dl-chip'" :style="d.status === 'delivered' ? '--c:' + delColor(d) : ''" x-text="delCabName(cur, id) + (d.status === 'delivered' ? ' ✓' : '')"></span></template>
+                                    <span class="dl-chip" x-text="delCar(d)"></span><span class="dl-pill" :class="delCls(d)" :style="'--c:' + delColor(d)" x-text="delState(d)"></span>
+                                    <span x-show="d.why" class="basis-full text-red-700" x-text="'ไม่รับงาน · ' + d.why"></span></div>
+                            </template>
+                        </div>
                     </div>
 
                     {{-- tags + the people in charge (= the departments that hold work on the project) + which board --}}
@@ -253,6 +264,7 @@
                                             <span class="min-w-[44px] flex-1 truncate" :class="cabDone(c) ? '' : 'text-slate-500'" x-text="c.mo"></span>
                                             <span class="flex-[4] truncate" :class="cabDone(c) ? '' : 'text-slate-800'" x-text="c.text"></span>
                                         </div>
+                                        <template x-if="delCab(cur, c)"><span :class="delCab(cur, c).cls" :style="delCab(cur, c).style" x-text="delCab(cur, c).text"></span></template>
                                         <button type="button" x-show="cabRemarkCount(cur, c)" @click.stop="openRemarks(cur.id, c.id)" class="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-px text-[12px] font-semibold text-amber-800 hover:bg-amber-100"
                                                 :title="'หมายเหตุของตู้นี้ ' + cabRemarkCount(cur, c) + ' รายการ'" :aria-label="'หมายเหตุของตู้นี้ ' + cabRemarkCount(cur, c) + ' รายการ'"><svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4h16v12H8l-4 4z"/></svg><span x-text="cabRemarkCount(cur, c)"></span></button>
                                         <template x-for="s in ckTally(c).slice(0, 3)" :key="'ct' + s.id"><button type="button" @click.stop="openChecklistTag(cur, c, s.id, $event)" class="inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-px text-[12px] font-semibold" :style="ckChip(s)" :title="s.name + ' ' + s.n + ' รายการ · เปิด Checklist เฉพาะสถานะนี้'"><span class="h-1.5 w-1.5 rounded-full" :style="'background:' + s.dot"></span><span x-text="s.name + ' ' + s.n"></span></button></template>

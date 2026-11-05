@@ -173,6 +173,12 @@ class Project extends Model
         return $this->hasOne(ProjectFat::class)->ofMany('round', 'max');
     }
 
+    /** การจัดส่ง: its delivery rounds, oldest first (ProjectDeliveryController). */
+    public function deliveries()
+    {
+        return $this->hasMany(ProjectDelivery::class)->orderBy('round');
+    }
+
     public function followers()
     {
         return $this->belongsToMany(User::class, 'project_followers')->withPivot('source')->withTimestamps();

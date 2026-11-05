@@ -20,6 +20,8 @@
             <button type="button" @click="mode = 'month'" :class="mode === 'month' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'" class="px-3 h-8">เดือน</button>
             <button type="button" @click="timeline()" :class="mode === 'timeline' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'" class="px-3 h-8 border-l border-slate-300">ไทม์ไลน์</button>
             <button type="button" @click="mode = 'dashboard'" :class="mode === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'" class="px-3 h-8 border-l border-slate-300">แดชบอร์ด</button>
+            <button type="button" @click="mode = 'fat'" :class="mode === 'fat' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'" class="px-3 h-8 border-l border-slate-300" title="นัด FAT ของเดือน แยกจากแถบโครงการ">FAT</button>
+            <button type="button" @click="mode = 'del'" :class="mode === 'del' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'" class="px-3 h-8 border-l border-slate-300" title="รอบส่งของเดือน แยกจากแถบโครงการ">จัดส่ง</button>
         </div>
 
         <div class="relative flex-1 min-w-[12rem] max-w-md">
@@ -72,14 +74,6 @@
                         </template>
                     </ul>
                     <p class="mt-1 text-[12px] text-slate-400">(PMO) = ยังไม่ได้ตั้งสถานะโครงการ จึงแสดงสถานะ PMO · แถบจาง + ขีดฆ่า = เสร็จแล้ว · "เลย n วัน" = เกินกำหนด</p>
-
-                    <p class="mb-1.5 mt-3 font-bold text-slate-800">เส้นสีใต้แถบ = ช่วงงานของแต่ละแผนก</p>
-                    <ul class="grid grid-cols-2 gap-x-3 gap-y-1">
-                        <template x-for="d in legendDepartments()" :key="'lgd' + d.id">
-                            <li class="flex items-center gap-1.5 text-slate-700"><span class="h-1 w-5 shrink-0 rounded-full" :style="'background-color:' + d.color"></span><span class="truncate" x-text="d.name"></span></li>
-                        </template>
-                        <li class="flex items-center gap-1.5 text-slate-700"><span class="h-1 w-5 shrink-0 rounded-full" :style="'background-color:' + lateColor()"></span><span>แผนกที่เกินกำหนด</span></li>
-                    </ul>
 
                     <p class="mb-1.5 mt-3 font-bold text-slate-800">ป้ายสถานะงานของแผนก (ในหน้าต่างโครงการ)</p>
                     <ul class="flex flex-wrap gap-1">

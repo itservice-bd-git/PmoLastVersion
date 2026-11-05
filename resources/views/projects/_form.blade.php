@@ -148,6 +148,113 @@
         <x-input-error :messages="$errors->get('margin')" class="mt-1" />
     </div>
     @endif
+    {{-- a new project (Admin / PM): its FAT and its delivery, with the same fields as the project page's windows (_fat-form,
+         _delivery-form) except the cabinets - there are none yet, so both are for every cabinet. FAT round 1 is saved as
+         it is; delivery round 1 always as a draft, sent to the delivery department later from the project page, once its
+         cabinets are there (ProjectController::storeAppointments). --}}
+    @if (! $p && auth()->user()->canDispatchWork())
+        @php
+            $vehicleTypes = \App\Models\Vehicle::types();
+            $box = 'mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal';
+        @endphp
+        <div class="space-y-4 md:col-span-2"
+             x-data="{ fat: @js((string) old('fat_date')), fatEnd: @js((string) old('fat_end_date')), fatTime: @js((string) old('fat_time')),
+                       fatStatus: @js(old('fat_status', 'scheduled')), method: @js(old('delivery_method', 'company')), due: '' }"
+             x-init="$nextTick(() => { const d = document.getElementById('due_date'); if (d) { due = d.value; d.addEventListener('change', () => { due = d.value; }); } })">
+            {{-- วัน FAT: as the FAT window --}}
+            <fieldset class="rounded-xl border border-slate-200 p-4">
+                <legend class="px-1 text-sm font-semibold text-slate-800">วัน FAT <span class="font-normal text-slate-500">(ไม่บังคับ · ทุกตู้)</span></legend>
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7rem]">
+                    <label class="block text-sm font-semibold text-slate-800">วันที่
+                        <input type="date" name="fat_date" x-model="fat" class="{{ $box }}">
+                    </label>
+                    <label class="block text-sm font-semibold text-slate-800">ถึงวันที่ <span class="font-normal text-slate-500">(ถ้าหลายวัน)</span>
+                        <input type="date" name="fat_end_date" x-model="fatEnd" :min="fat" class="{{ $box }}">
+                    </label>
+                    <label class="block text-sm font-semibold text-slate-800">เวลา
+                        <input type="text" name="fat_time" x-model="fatTime" placeholder="เช่น 13:30" inputmode="numeric" maxlength="5" autocomplete="off"
+                               x-init="window.flatpickr($el, { enableTime: true, noCalendar: true, dateFormat: 'H:i', time_24hr: true, allowInput: true, defaultHour: 9, defaultDate: fatTime || null, onChange: (d, v) => { fatTime = v; } })"
+                               class="{{ $box }} tabular-nums">
+                    </label>
+                </div>
+                <p x-show="due && fat && (fatEnd || fat) > due && fatStatus !== 'passed'" class="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
+                    FAT หลังวันครบกำหนดของโครงการ · บันทึกได้ แต่ควรเลื่อนวันส่งมอบด้วย</p>
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                    <span class="text-sm font-semibold text-slate-800">สถานะ</span>
+                    @foreach (array_keys(\App\Models\ProjectFat::STATUS_LABELS) as $key)
+                        <label class="inline-flex h-10 cursor-pointer items-center rounded-full border px-3.5 text-sm font-semibold"
+                               :class="fatStatus === '{{ $key }}' ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-300 bg-white text-slate-700'">
+                            <input type="radio" name="fat_status" value="{{ $key }}" x-model="fatStatus" class="sr-only">{{ \App\Support\EventStatuses::name('fat', $key) }}</label>
+                    @endforeach
+                </div>
+                <label class="mt-3 block text-sm font-semibold text-slate-800">หมายเหตุ
+                    <input type="text" name="fat_note" value="{{ old('fat_note') }}" maxlength="500" placeholder="เช่น ลูกค้า 3 คน" class="{{ $box }}">
+                </label>
+                @foreach (['fat_date', 'fat_end_date', 'fat_time', 'fat_status', 'fat_note'] as $k)
+                    <x-input-error :messages="$errors->get($k)" class="mt-1" />
+                @endforeach
+            </fieldset>
+
+            {{-- การจัดส่ง: as PM's delivery window; kept as a draft --}}
+            <fieldset class="rounded-xl border border-slate-200 p-4">
+                <legend class="px-1 text-sm font-semibold text-slate-800">การจัดส่ง <span class="font-normal text-slate-500">(ไม่บังคับ · ทุกตู้ · บันทึกเป็นร่าง)</span></legend>
+                <div class="space-y-4">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm font-semibold text-slate-800">การขนส่ง</span>
+                        @foreach (array_keys(\App\Models\ProjectDelivery::METHOD_LABELS) as $key)
+                            <label class="inline-flex h-9 cursor-pointer items-center rounded-full border px-3.5 text-sm font-semibold"
+                                   :class="method === '{{ $key }}' ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-300 bg-white text-slate-700'">
+                                <input type="radio" name="delivery_method" value="{{ $key }}" x-model="method" class="sr-only">{{ \App\Models\ProjectDelivery::methodName($key) }}</label>
+                        @endforeach
+                    </div>
+                    <div x-show="method === 'company'" class="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
+                        <label class="block text-sm font-semibold text-slate-800">ประเภทรถ
+                            <select name="delivery_vehicle_type" :disabled="method !== 'company' || {{ $vehicleTypes ? 'false' : 'true' }}" class="{{ $box }}">
+                                <option value="">{{ $vehicleTypes ? 'เลือกประเภทรถ' : 'ยังไม่มีประเภทรถ (ตั้งค่า › รถขนส่ง)' }}</option>
+                                @foreach ($vehicleTypes as $t)
+                                    <option value="{{ $t }}" @selected(old('delivery_vehicle_type') === $t)>{{ $t }}</option>
+                                @endforeach
+                            </select>
+                        </label>
+                        <label class="block text-sm font-semibold text-slate-800">จำนวนคน
+                            <input type="number" name="delivery_crew_size" value="{{ old('delivery_crew_size') }}" :disabled="method !== 'company'" min="1" max="20" inputmode="numeric" placeholder="เช่น 3" class="{{ $box }} tabular-nums">
+                        </label>
+                    </div>
+                    <p x-show="method === 'company'" class="-mt-2 text-xs text-slate-500">แผนกจัดส่งเลือกรถคันจริงและคนที่ไปเอง · จำนวนคนรวมคนขับ</p>
+                    <label x-show="method === 'external'" class="block text-sm font-semibold text-slate-800">บริษัทขนส่ง / ทะเบียน
+                        <input type="text" name="delivery_carrier" value="{{ old('delivery_carrier') }}" :disabled="method !== 'external'" maxlength="150" placeholder="เช่น ไทยขนส่ง · 70-1234" class="{{ $box }}">
+                    </label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="block text-sm font-semibold text-slate-800">ส่งได้ตั้งแต่
+                            <input type="date" name="delivery_from" value="{{ old('delivery_from') }}" class="{{ $box }}">
+                        </label>
+                        <label class="block text-sm font-semibold text-slate-800">ถึง
+                            <input type="date" name="delivery_to" value="{{ old('delivery_to') }}" class="{{ $box }}">
+                        </label>
+                    </div>
+                    <p class="-mt-2 text-xs text-slate-500">ใส่ช่วงวันที่ลูกค้ารับของได้ แผนกจัดส่งเลือกวันส่งจริงกับเวลาเอง</p>
+                    <label class="block text-sm font-semibold text-slate-800">สถานที่ส่ง
+                        <input type="text" name="delivery_site" value="{{ old('delivery_site') }}" maxlength="255" placeholder="เช่น โรงงานบางนา ประตู 2" class="{{ $box }}">
+                    </label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="block text-sm font-semibold text-slate-800">ผู้ติดต่อหน้างาน
+                            <input type="text" name="delivery_contact_name" value="{{ old('delivery_contact_name') }}" maxlength="100" class="{{ $box }}">
+                        </label>
+                        <label class="block text-sm font-semibold text-slate-800">เบอร์โทร
+                            <input type="text" name="delivery_contact_phone" value="{{ old('delivery_contact_phone') }}" maxlength="30" inputmode="tel" class="{{ $box }} tabular-nums">
+                        </label>
+                    </div>
+                    <label class="block text-sm font-semibold text-slate-800">หมายเหตุถึงแผนกจัดส่ง / คนขับ
+                        <input type="text" name="delivery_note" value="{{ old('delivery_note') }}" maxlength="500" placeholder="เช่น ต้องใช้เครน · เข้าได้หลัง 8 โมง" class="{{ $box }}">
+                    </label>
+                </div>
+                @foreach (['delivery_from', 'delivery_to', 'delivery_method', 'delivery_vehicle_type', 'delivery_crew_size', 'delivery_carrier', 'delivery_site', 'delivery_contact_name', 'delivery_contact_phone', 'delivery_note'] as $k)
+                    <x-input-error :messages="$errors->get($k)" class="mt-1" />
+                @endforeach
+                <p class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">บันทึกเป็น <b>ร่าง</b> รอบส่งที่ 1 (ทุกตู้) แผนกจัดส่งยังไม่เห็น · พอมีตู้แล้วกด "ตรวจแล้วส่งให้แผนกจัดส่ง" ที่หน้าโครงการ</p>
+            </fieldset>
+        </div>
+    @endif
     <div class="md:col-span-2">
         <x-input-label for="description" value="คำอธิบาย" />
         <textarea id="description" name="description" rows="3" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">{{ old('description', $p?->description) }}</textarea>

@@ -121,7 +121,7 @@
                                 <td class="whitespace-nowrap px-4 py-3">
                                     @if ($fat = $project->latestFat)
                                         <div class="tabular-nums text-slate-700">{{ $fat->dateRange() }}</div>
-                                        <span class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold {{ ['passed' => 'bg-emerald-50 text-emerald-800', 'failed' => 'bg-red-50 text-red-800'][$fat->status] ?? 'bg-fuchsia-50 text-fuchsia-800' }}">{{ $fat->statusLabel() }}</span>
+                                        <span class="st-pill mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold" style="--c: {{ $fat->stateColor($project) }}">{{ $fat->statusLabel() }}</span>
                                         @if ($fat->fat_time || $fat->round > 1 || $fat->days() > 1)<span class="text-[12px] tabular-nums text-slate-500">{{ collect([$fat->days() > 1 ? $fat->days().' วัน' : null, $fat->fat_time, $fat->round > 1 ? 'รอบ '.$fat->round : null])->filter()->implode(' · ') }}</span>@endif
                                         @if ($fat->isAfterDue($project))<div class="mt-0.5 text-[12px] font-semibold text-amber-700">หลังวันกำหนดส่ง</div>@endif
                                     @else

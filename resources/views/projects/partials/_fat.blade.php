@@ -7,8 +7,7 @@
     $canFat = auth()->user()->canDispatchWork() && ! $project->isLocked();
     $fatCabinets = $project->cabinets()->orderBy('sequence')->orderBy('id')->get(['id', 'mo_no', 'cabinet_name']);
     $cabName = fn ($c) => $c->mo_no ?: $c->cabinet_name;
-    $tag = fn (?string $status, bool $late = false) => $late ? 'bg-orange-600' : ['passed' => 'bg-emerald-600', 'failed' => 'bg-slate-400'][$status] ?? 'bg-fuchsia-700';
-    $chip = ['scheduled' => 'bg-fuchsia-50 text-fuchsia-800', 'passed' => 'bg-emerald-50 text-emerald-800', 'failed' => 'bg-red-50 text-red-800'];
+    $colour = fn (?\App\Models\ProjectFat $f) => \App\Support\EventStatuses::color('fat', $f ? $f->stateKey($project) : 'scheduled');   // Settings > สถานะงาน
     $days = $fat ? (int) today()->diffInDays($fat->fat_date, false) : null;
     $daysLeft = $fat ? (int) today()->diffInDays($fat->lastDay(), false) : null;   // a FAT over several days: still running until its last day
     $late = $fat?->isAfterDue($project);
@@ -22,11 +21,11 @@
              x-init="f = { ...@js($form($fat && ($old['_method'] ?? '') === 'PUT' ? $fat : null)), ...@js(\Illuminate\Support\Arr::only($old, ['fat_date', 'fat_end_date', 'fat_time', 'status', 'scope', 'note'])), cabinet_ids: (@js($old['cabinet_ids'] ?? [])).map(Number) }; $nextTick(() => $dispatch('open-modal', 'project-fat'))"
          @endif>
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span class="inline-flex h-6 items-center rounded px-2 text-xs font-extrabold tracking-wide text-white {{ $tag($fat?->status, (bool) $late) }}">FAT</span>
+        <span class="st-tag inline-flex h-6 items-center rounded px-2 text-xs font-extrabold tracking-wide" style="--c: {{ $colour($fat) }}">FAT</span>
         <h3 class="text-base font-bold text-ae-navy">วัน FAT</h3>
         @if ($fat)
             <span class="text-base font-bold tabular-nums text-slate-900">{{ $fat->when() }}</span>
-            <span class="rounded-full px-2.5 py-0.5 text-xs font-bold {{ $chip[$fat->status] ?? '' }}">{{ $fat->round > 1 ? 'รอบที่ '.$fat->round.' · ' : '' }}{{ $fat->statusLabel() }}</span>
+            <span class="st-pill rounded-full px-2.5 py-0.5 text-xs font-bold" style="--c: {{ $colour($fat) }}">{{ $fat->round > 1 ? 'รอบที่ '.$fat->round.' · ' : '' }}{{ $fat->statusLabel() }}</span>
             @if ($fat->status === 'scheduled')
                 <span class="text-sm {{ $daysLeft < 0 ? 'font-semibold text-red-700' : 'text-slate-600' }}">{{ $days > 0 ? 'อีก '.$days.' วัน' : ($daysLeft >= 0 ? ($fat->days() > 1 ? 'กำลัง FAT วันที่ '.(1 - $days).' จาก '.$fat->days() : 'วันนี้') : 'ผ่านมา '.abs($daysLeft).' วัน · ยังไม่ได้บันทึกผล') }}</span>
             @endif
@@ -60,7 +59,7 @@
                 @foreach ($history as $h)
                     <p class="mt-1 flex flex-wrap items-baseline gap-x-2 text-slate-600">
                         <span class="tabular-nums {{ $h->status === 'failed' ? 'line-through' : '' }}">รอบที่ {{ $h->round }} · {{ $h->when() }}</span>
-                        <span class="rounded-full px-2 text-xs font-bold {{ $chip[$h->status] ?? '' }}">{{ $h->statusLabel() }}</span>
+                        <span class="st-pill rounded-full px-2 text-xs font-bold" style="--c: {{ $colour($h) }}">{{ $h->statusLabel() }}</span>
                         @if ($h->note)<span class="text-slate-500">{{ $h->note }}</span>@endif
                     </p>
                 @endforeach

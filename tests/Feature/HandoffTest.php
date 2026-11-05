@@ -118,7 +118,8 @@ class HandoffTest extends TestCase
         $editor = app(\App\Services\ChecklistEditor::class);
         $this->assertSame('วันของเข้า', $editor->state('subtask', $order, $this->user(null, 'admin'))['dateLabel'], 'a date where something compares with it');
         $quotes = CabinetSubtask::where('name', 'ติดตามใบเสนอราคา')->first();
-        $this->assertNull($editor->state('subtask', $quotes, $this->user(null, 'admin'))['dateLabel'], 'not on the other work of the same department');
+        $this->assertSame('วันของเข้า', $editor->state('subtask', $quotes, $this->user(null, 'admin'))['dateLabel'], 'the department\'s other work has it too, nobody comparing');
+        $this->assertNull($editor->state('subtask', $this->work($this->store, ['X'])[0], $this->user(null, 'admin'))['dateLabel'], 'a department without a date has none');
     }
 
     public function test_a_sub_task_can_compare_with_several_and_the_cabinet_page_shows_both_sides(): void
@@ -301,6 +302,30 @@ class HandoffTest extends TestCase
         $keeper->notifications()->update(['read_at' => now()]);
         app(NotificationService::class)->sendReminders();
         $this->assertStringContainsString('📦 เลยวันของเข้า 1 รายการ', $keeper->notifications()->latest()->first()->data['body'], 'only Busbar is still outstanding');
+    }
+
+    public function test_a_dated_item_nobody_compares_with_reminds_its_own_department_and_pm_when_late(): void
+    {
+        $pm = $this->user(null, 'project_manager');
+        $this->project->update(['project_manager_id' => $pm->id]);
+        [, [$a, $b, $c]] = $this->work($this->purchasing, ['Breaker', 'Busbar', 'CT']);   // no pair
+        $a->update(['expected_date' => '2026-10-07']);   // today
+        $b->update(['expected_date' => '2026-10-05']);   // late
+        $c->update(['expected_date' => '2026-10-05', 'is_completed' => true]);   // late but ticked: done
+        [, [$qc]] = $this->work($this->other, ['X']);
+        $qc->update(['expected_date' => '2026-10-05']);   // a department without a date: nothing
+        $buyer = $this->user($this->purchasing);
+        $checker = $this->user($this->other);
+
+        app(NotificationService::class)->sendReminders();
+        $body = $buyer->notifications()->first()->data['body'];
+        $this->assertStringContainsString('📦 เลยวันของเข้า 1 รายการ', $body);
+        $this->assertStringContainsString('📦 วันของเข้าวันนี้ 1 รายการ', $body);
+        $this->assertStringContainsString('📦 เลยวันของเข้า 1 รายการ', $pm->notifications()->first()->data['body']);
+        $this->assertSame(0, $checker->notifications()->where('data', 'like', '%handoff%')->count());
+
+        app(NotificationService::class)->sendReminders();
+        $this->assertSame(1, $buyer->notifications()->count(), 'once a day');
     }
 
     public function test_the_date_label_is_set_on_the_department_and_the_old_settings_page_is_gone(): void

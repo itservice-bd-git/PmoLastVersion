@@ -34,7 +34,7 @@ class PmoNotice extends Notification
     ) {}
 
     /** Kinds that ask the person to do something: they stay under "ต้องทำ" with a "รับทราบ" button until acknowledged. */
-    public const TODO_KINDS = ['assigned', 'rejected', 'alert', 'mention', 'overdue'];
+    public const TODO_KINDS = ['assigned', 'rejected', 'alert', 'mention', 'overdue', 'delivery_todo', 'delivery_rejected'];   // delivery_*: DeliveryFlow
 
     /** "ต้องทำ" or "ความเคลื่อนไหว": a project's notice by what it holds, any other by its kind. */
     public static function isTodo(string $kind, array $parts = []): bool

@@ -33,6 +33,8 @@ class AppSetting extends Model
         'tick_accepts' => true,                 // a department ticking an item of work still "รอรับ" accepts that work first
         'waiting_reminder_days' => 2,          // work still "รอรับ" after this many days: the department + PM are reminded (0 = off)
         'department_permissions' => [],       // Settings > สิทธิ์การใช้งาน: department id | 'none' => permission => bool (missing = App\Support\Access defaults)
+        'event_statuses' => [],               // Settings > สถานะงาน: renamed / recoloured FAT and delivery states (App\Support\EventStatuses)
+        'delivery_reject_reasons' => [],   // Settings > รถขนส่ง: the reasons "ไม่รับงาน" offers (empty = ProjectDelivery::REJECT_REASONS)
     ];
 
     private static ?array $memo = null;

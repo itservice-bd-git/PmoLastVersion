@@ -27,6 +27,7 @@
             @include('planning.partials._month')
             @include('planning.partials._timeline')
             @include('planning.partials._dashboard')
+            @include('planning.partials._events')
         </div>
 
         @include('planning.partials._task-modal')

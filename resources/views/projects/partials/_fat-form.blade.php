@@ -29,10 +29,10 @@
             <fieldset>
                 <legend class="text-sm font-semibold text-slate-800">สถานะ</legend>
                 <div class="mt-1.5 flex flex-wrap gap-2">
-                    @foreach (\App\Models\ProjectFat::STATUS_LABELS as $key => $label)
+                    @foreach (array_keys(\App\Models\ProjectFat::STATUS_LABELS) as $key)
                         <label class="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-sm font-semibold"
                                :class="f.status === '{{ $key }}' ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-300 bg-white text-slate-700'">
-                            <input type="radio" name="status" value="{{ $key }}" x-model="f.status" class="sr-only">{{ $key === 'failed' ? 'ไม่ผ่าน · ต้องนัดใหม่' : $label }}</label>
+                            <input type="radio" name="status" value="{{ $key }}" x-model="f.status" class="sr-only">{{ \App\Support\EventStatuses::name('fat', $key) }}{{ $key === 'failed' ? ' · ต้องนัดใหม่' : '' }}</label>
                     @endforeach
                 </div>
             </fieldset>

@@ -16,7 +16,7 @@ use App\Models\User;
  *  - data.*  parts of a project; left out of the page, Planning's JSON and the CSV - not just hidden on screen
  *  - edit.*  the PM-level powers (edit.manage is what canDispatchWork() and the 'pmo' middleware mean); edit.work is a
  *            department doing anything at all - off = "ดูได้อย่างเดียว" (e.g. ขาย): every write is refused (EnsureCanWork)
- *            and no work can be handed to it
+ *            and no work can be handed to it; edit.delivery is the delivery department (App\Services\DeliveryFlow)
  */
 final class Access
 {
@@ -49,6 +49,7 @@ final class Access
         'data.comments' => ['data', '💬 คอมเมนต์และประวัติ', 'อ่านและเขียนคอมเมนต์ ดูประวัติการแก้ไข', true],
         'data.other_fields' => ['data', 'ฟิลด์เพิ่มเติมของแผนกอื่น', 'ไม่ติ๊ก = เห็นเฉพาะฟิลด์ของแผนกตัวเอง', false],
         'edit.work' => ['edit', 'ทำงานของแผนก', 'ติ๊ก Checklist, รับ / ไม่รับงาน, ลงวันที่, คอมเมนต์ — ไม่ติ๊ก = ดูได้อย่างเดียว กดแก้อะไรไม่ได้ และจ่ายงานให้แผนกนี้ไม่ได้', true],
+        'edit.delivery' => ['edit', 'จัดการการจัดส่ง', 'หน้า "งานจัดส่ง": เลือกวันส่งในช่วงที่ PM ให้, ไม่รับงาน, บันทึกออกจากโรงงาน / ส่งถึงแล้ว และจัดการรถขนส่ง', false],
         'edit.manage' => ['edit', 'จัดการโครงการและจ่ายงาน', 'สร้าง / แก้โครงการ ตู้ งาน วันที่ จ่ายงาน (สิทธิ์ระดับ PM — เห็นทุกโครงการด้วย)', false],
         'edit.templates' => ['edit', 'แก้เทมเพลตตู้ / เช็คลิสต์', '', false],
         'edit.trash' => ['edit', 'ลบ / กู้คืน (ถังขยะ)', '', false],

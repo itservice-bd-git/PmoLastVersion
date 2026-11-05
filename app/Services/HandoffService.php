@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
+use App\Models\Project;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -33,10 +34,10 @@ class HandoffService
         return $deptId ? ($this->labels[$deptId] ?? null) : null;
     }
 
-    /** The date label a Sub Task's items carry: its department's, while another Sub Task compares with it. */
+    /** The date label a Sub Task's items carry: its department's (Settings > แผนก), whether or not another Sub Task compares with it. */
     public function dateLabelFor(CabinetSubtask $subtask): ?string
     {
-        return $this->receiverIds($subtask)->isNotEmpty() ? $this->dateLabel($subtask->department_id) : null;
+        return $this->dateLabel($subtask->department_id);
     }
 
     /** @return list<int> the departments whose Sub Tasks compare with $deptId's somewhere in a template (Planning) */
@@ -137,6 +138,7 @@ class HandoffService
     {
         $this->pairs = [];
         $this->targets = null;
+        $this->labels = null;
     }
 
     private static function order(CabinetSubtask $s): string
@@ -341,13 +343,16 @@ class HandoffService
 
     /**
      * The daily round: dated items due today or past that a Sub Task comparing with them has not dealt with yet. Its
-     * department gets "today" and "late"; the source department gets "late" (to chase it). One notice per department per
-     * project per day.
+     * department gets "today" and "late"; the source department gets "late" (to chase it). An item nobody takes (its
+     * department has a date but no Sub Task compares with it) is the department's own: it hears "today" / "late" while the
+     * item is not ticked, and the project's PM hears "late". One notice per department per project per day.
      */
     public function reminders(NotificationService $notices, Carbon $today): int
     {
+        $dated = $this->labels ??= Department::whereNotNull('handoff_date_label')->where('handoff_date_label', '!=', '')->pluck('handoff_date_label', 'id');
         $items = CabinetChecklist::query()->whereNotNull('expected_date')->whereDate('expected_date', '<=', $today)
-            ->whereIn('cabinet_subtask_id', DB::table('cabinet_subtask_pairs')->select('source_subtask_id'))
+            ->where(fn ($q) => $q->whereIn('cabinet_subtask_id', DB::table('cabinet_subtask_pairs')->select('source_subtask_id'))
+                ->orWhere(fn ($own) => $own->where('is_completed', false)->whereHas('subtask', fn ($s) => $s->whereIn('department_id', $dated->keys()))))
             ->whereHas('subtask', fn ($q) => $q->whereIn('assignment_status', WorkScope::ACTIVE_STATUSES))
             ->with('subtask.cabinetTask.cabinet.project', 'subtask.department')->get()
             ->filter(fn ($i) => ($p = $i->subtask->cabinetTask?->cabinet?->project) && ! $p->isLocked());
@@ -363,15 +368,21 @@ class HandoffService
             $sub = $group->first()->subtask;
             $project = $sub->cabinetTask->cabinet->project;
             $label = $this->dateLabel($sub->department_id) ?? 'วันที่';
-            // each item against the Sub Tasks comparing with its own one, grouped by their department
+            // each item against the Sub Tasks comparing with its own one, grouped by their department; nobody takes it: its own
             $pending = [];
+            $own = collect();
             foreach ($group as $item) {
-                foreach ($this->load($this->receiverIds($item->subtask, 'take')) as $r) {
+                $takers = $this->load($this->receiverIds($item->subtask, 'take'));
+                if ($takers->isEmpty() && ! $item->is_completed && $this->dateLabel($sub->department_id)) {
+                    $own->push($item);
+                }
+                foreach ($takers as $r) {
                     if ($r->department_id && ! self::received($item, $r->checklists)) {
                         $pending[$r->department_id][$item->id] = $item;
                     }
                 }
             }
+            $sent += $this->ownReminders($notices, $own, $sub, $project, $label, $today);
             $lateForSender = 0;
             foreach ($pending as $to => $list) {
                 $list = collect($list);
@@ -391,6 +402,29 @@ class HandoffService
                 $sent += $notices->handoff($people, $project, "📦 เลย{$label} {$lateForSender} รายการ · {$project->project_no}", "{$project->project_name} · ปลายทางยังไม่ได้รับ",
                     ['handoff_late' => ['n' => $lateForSender, 'label' => $label]], "handoff-sender:{$sub->department_id}:{$project->id}:".$today->toDateString(), 'handoff_due');
             }
+        }
+
+        return $sent;
+    }
+
+    /** The department's own dated items (nobody compares with them): it hears "today" / "late", the project's PM "late". */
+    private function ownReminders(NotificationService $notices, Collection $items, CabinetSubtask $sub, Project $project, string $label, Carbon $today): int
+    {
+        if ($items->isEmpty()) {
+            return 0;
+        }
+        $late = $items->filter(fn ($i) => $i->expected_date->lt($today))->count();
+        $now = $items->count() - $late;
+        $dept = $sub->department->name;
+        $parts = array_filter(['handoff_today' => $now ? ['n' => $now, 'label' => $label] : null, 'handoff_late' => $late ? ['n' => $late, 'label' => $label] : null]);
+        $day = $today->toDateString();
+        $sent = $notices->handoff(User::ofDepartment($sub->department_id)->where('is_active', true)->get(), $project,
+            $late ? "📦 เลย{$label} {$late} รายการ · {$project->project_no}" : "📦 {$label}วันนี้ {$now} รายการ · {$project->project_no}",
+            "{$project->project_name}".($late && $now ? " · วันนี้อีก {$now} รายการ" : '').' · ยังไม่ได้ติ๊ก', $parts, "handoff-own:{$sub->department_id}:{$project->id}:{$day}", 'handoff_due');
+        if ($late && $project->project_manager_id) {
+            $sent += $notices->handoff(User::whereKey($project->project_manager_id)->where('is_active', true)->get(), $project,
+                "📦 {$dept} เลย{$label} {$late} รายการ · {$project->project_no}", "{$project->project_name} · ยังไม่ได้ติ๊ก",
+                ['handoff_late' => ['n' => $late, 'label' => $label]], "handoff-pm:{$sub->department_id}:{$project->id}:{$day}", 'handoff_due');
         }
 
         return $sent;

@@ -101,11 +101,10 @@ class ChecklistEditorTest extends TestCase
 
     public function test_dates_only_where_the_handoff_asks_and_pasted_thai_dates_are_read(): void
     {
-        // the date shows where the department has one (Settings > แผนก) AND another Sub Task compares with this one
-        $this->busbar->update(['handoff_date_label' => 'วันของเข้า']);
+        // the date shows where the department has one (Settings > แผนก), with or without another Sub Task comparing
         $this->op($this->user($this->busbar), ['type' => 'add', 'items' => [['name' => 'Y', 'date' => '20/10/2569']]])->assertStatus(422);
-        $this->other->pairSources()->attach($this->sub->id);
-        app(\App\Services\HandoffService::class)->forgetPairs();   // set straight in the table here, not through SubtaskPairs
+        $this->busbar->update(['handoff_date_label' => 'วันของเข้า']);
+        app(\App\Services\HandoffService::class)->forgetPairs();   // it read the departments' dates in the request above
         $this->op($this->user($this->busbar), ['type' => 'add', 'items' => [['name' => 'Breaker', 'date' => '20/10/2569'], ['name' => 'CT', 'date' => '2026-11-01']]])->assertOk();
         $this->assertSame(['2026-10-20', '2026-11-01'], CabinetChecklist::where('cabinet_subtask_id', $this->sub->id)->whereIn('name', ['Breaker', 'CT'])->orderBy('sequence')->get()->map(fn ($c) => $c->expected_date->format('Y-m-d'))->all());
         $this->op($this->user($this->busbar), ['type' => 'add', 'items' => [['name' => 'X', 'date' => '31/02/2569']]])->assertStatus(422);

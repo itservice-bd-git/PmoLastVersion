@@ -195,6 +195,7 @@
     {{-- วัน FAT: the latest round, its history, and (Admin / PM) the form --}}
     @include('projects.partials._dates', ['subject' => $project])
     @include('projects.partials._fat')
+    @include('projects.partials._delivery')
 
     {{-- ===== 2. what needs following up: worded chips, each opening a short list; the empty ones are listed quietly ===== --}}
     <section aria-label="เรื่องที่ต้องตาม" class="flex flex-wrap items-center gap-2" @click.outside="alert = null">

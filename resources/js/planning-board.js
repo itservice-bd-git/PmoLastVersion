@@ -89,7 +89,10 @@ export default function registerPlanningBoard() {
             priorities: PRIORITIES,
 
             // ---- view state ----
-            mode: 'month',                    // 'month' | 'timeline' | 'dashboard'
+            mode: 'month',                    // 'month' | 'timeline' | 'dashboard' | 'fat' | 'del' (the FAT / จัดส่ง tabs)
+            evs: config.eventStatuses || {},  // Settings > สถานะงาน: FAT / delivery state => { name, color } (App\Support\EventStatuses)
+            evNeed: false,                    // จัดส่ง: only the rounds with no vehicle yet
+            evOpen: {},                       // FAT / จัดส่ง: weeks opened by "+ อีก n" (first day => true)
             year: t0.getFullYear(),
             month: t0.getMonth(),
             focusDate: config.today,          // the left panel's day
@@ -178,11 +181,7 @@ export default function registerPlanningBoard() {
             statusOf(t) { return this.statuses.find((s) => s.id === t.statusId) || this.pmoStatusList.find((s) => s.id === t.statusId) || this.pmoStatusList[0] || this.statuses[0]; },
             statusColor(t) { return this.statusOf(t).color; },
             // the bar colours in use (the calendar colours bars by project status): Settings' list, then PMO's ones shown by a project
-            // the departments whose stripes can be on the calendar now (they have work on a project in view)
-            legendDepartments() { const used = new Set(this.visible().flatMap((t) => (t.deptStages || []).map((s) => s.deptId))); return this.departments.filter((d) => used.has(d.id)); },
             legendStatuses() { const used = new Set(this.tasks.map((t) => this.statusOf(t).id)); return this.statuses.concat(this.pmoStatusList.filter((s) => used.has(s.id))); },
-            // "เกินกำหนด" bars use that status's colour (Settings > สถานะงาน), not a fixed red
-            lateColor() { const s = this.statuses.find((x) => x.id === 's_fail'); return s ? s.color : '#ef4444'; },
             isDone(t) { return !!this.statusOf(t).isDone; },
             deptOf(id) { return this.departments.find((d) => d.id === id) || { id, name: id, color: '#98a2b3', icon: '' }; },
             stageOf(t, deptId) { return (t.deptStages || []).find((s) => s.deptId === deptId) || null; },
@@ -300,26 +299,17 @@ export default function registerPlanningBoard() {
                 }
                 return out;
             },
-            // a bar runs over its FAT days too (a FAT after the due date / before the start), so the FAT band always sits on its own
+            // a bar runs over its FAT and delivery days too (a FAT after the due date / before the start), so the band always sits on its own
             // project; the due date (end) stays, only the drawn range grows
             withFat(t, c, r) {
-                const f = t.fat;
-                if (!r || !f || (c && f.cabinets && !f.cabinets.includes(c.id))) return r;
-                const fe = f.end || f.date;
-                return { ...r, from: f.date < r.from ? f.date : r.from, to: fe > r.to ? fe : r.to };
+                if (!r) return r;
+                const f = t.fat, days = this.dels(t, c).flatMap((d) => [d.date, d.end || d.date]);   // its delivery days too (a round after the due date)
+                if (f && !(c && f.cabinets && !f.cabinets.includes(c.id))) days.push(f.date, f.end || f.date);
+                if (!days.length) return r;
+                days.sort();
+                return { ...r, from: days[0] < r.from ? days[0] : r.from, to: days[days.length - 1] > r.to ? days[days.length - 1] : r.to };
             },
             setByCabinet(on) { this.byCabinet = on; try { localStorage.setItem('planning.byCabinet', on ? '1' : ''); } catch (e) { /* not remembered */ } },
-            // the "ทุกแผนก" bar of a project: each department's own range as a coloured stripe along its bottom (mine stands out)
-            stripes(b, week) {
-                if (this.dept || b.c) return [];
-                const days = week.length ? diffDays(b.ce, b.cs) + 1 : 1;
-                return (b.t.deptStages || []).filter((s) => s.end).map((s) => {
-                    const late = !this.stageDone(s) && s.end < this.today, from = s.start && s.start <= s.end ? s.start : s.end, to = late ? this.today : s.end;
-                    if (to < b.cs || from > b.ce) return null;
-                    const a = diffDays(from < b.cs ? b.cs : from, b.cs), e = diffDays(to > b.ce ? b.ce : to, b.cs) + 1;
-                    return { id: s.deptId, left: (a / days) * 100, width: ((e - a) / days) * 100, color: late ? this.lateColor() : this.deptOf(s.deptId).color, mine: this.myDepts.includes(s.deptId), name: this.deptOf(s.deptId).name };
-                }).filter(Boolean);
-            },
             // how much is going on that day (unfinished entries running through it) and whether any of it is late - the badge on the day
             weekBars(week) {
                 const ws = week[0].date, we = week[week.length - 1].date;
@@ -340,10 +330,14 @@ export default function registerPlanningBoard() {
             // ---- วัน FAT (the latest round of a project, set on the project page): a "FAT" tag on its day ----
             fatOn(date) { return this.visible().filter((t) => t.fat && t.fat.date <= date && date <= (t.fat.end || t.fat.date)); },
             fatLate(t) { return t.fat.status !== 'passed' && !!t.date && (t.fat.end || t.fat.date) > t.date; },
-            fatTag(t) { return 'shrink-0 rounded px-1 text-[11px] font-extrabold tracking-wide text-white ' + (this.fatLate(t) ? 'bg-orange-600' : { passed: 'bg-emerald-600', failed: 'bg-slate-400' }[t.fat.status] || 'bg-fuchsia-700'); },
-            fatStatus(t) { return { scheduled: 'นัดแล้ว', passed: 'ผ่าน', failed: 'ไม่ผ่าน' }[t.fat.status] || ''; },
-            fatPill(t) { return { passed: 'bg-emerald-50 text-emerald-800', failed: 'bg-red-50 text-red-800' }[t.fat.status] || 'bg-fuchsia-50 text-fuchsia-800'; },
-            fatChip(t) { return 'flex h-6 w-full min-w-0 items-center gap-1 rounded-md border pl-0.5 pr-1.5 text-left text-[12px] font-semibold ' + ({ passed: 'border-emerald-200 bg-emerald-50 text-emerald-900', failed: 'border-slate-200 bg-white text-slate-500 line-through' }[t.fat.status] || 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-900'); },
+            // the FAT / delivery states' names and colours (Settings > สถานะงาน): '--c' / '--fat' / '--del' on the element, app.css does the rest
+            evState(group, key) { return (this.evs[group] || {})[key] || { name: key, color: '#64748b' }; },
+            fatState(t) { return t.fat.status !== 'scheduled' ? t.fat.status : this.fatLate(t) ? 'late' : 'scheduled'; },
+            fatColor(t) { return this.evState('fat', this.fatState(t)).color; },
+            fatTag() { return 'st-tag shrink-0 rounded px-1 text-[11px] font-extrabold tracking-wide'; },
+            fatStatus(t) { return this.evState('fat', t.fat.status).name; },
+            fatPill() { return 'st-pill'; },
+            fatChip(t) { return 'st-chip flex h-6 w-full min-w-0 items-center gap-1 rounded-md border pl-0.5 pr-1.5 text-left text-[12px] font-semibold' + (t.fat.status === 'failed' ? ' line-through' : ''); },
             // "29/10", "29–31/10", "30/10–02/11"
             fatRange(f) {
                 const [, m1, d1] = f.date.split('-'), [, m2, d2] = (f.end || f.date).split('-');
@@ -351,7 +345,7 @@ export default function registerPlanningBoard() {
             },
             // the tab on every FAT line (month and timeline alike): the line sits on its days, so how many and the time
             fatLabel(f) { return 'FAT' + (f.end && f.end !== f.date ? ' ' + (diffDays(f.end, f.date) + 1) + ' วัน' : '') + (f.time ? ' · ' + f.time : ''); },
-            fatBandCls(t) { return 'fat-band' + (this.fatLate(t) ? ' fat-late' : { passed: ' fat-passed', failed: ' fat-failed' }[t.fat.status] || ''); },
+            fatBandCls() { return 'fat-band'; },
             // the FAT days as a striped band over a bar of the month (a cabinet's bar only when that cabinet is in the round)
             fatBand(b) {
                 const f = b.t.fat;
@@ -359,7 +353,7 @@ export default function registerPlanningBoard() {
                 const from = f.date > b.cs ? f.date : b.cs, to = (f.end || f.date) < b.ce ? (f.end || f.date) : b.ce;
                 if (from > to) return null;
                 const days = diffDays(b.ce, b.cs) + 1, a = diffDays(from, b.cs), e = diffDays(to, b.cs) + 1;
-                return { left: (a / days) * 100, width: ((e - a) / days) * 100, cls: this.fatBandCls(b.t), label: this.fatLabel(f) };
+                return { left: (a / days) * 100, width: ((e - a) / days) * 100, cls: this.fatBandCls(b.t), color: this.fatColor(b.t), label: this.fatLabel(f) };
             },
             // "+n โครงการ": does a project hidden that day have its FAT on it
             hiddenFat(week, date) { return this.weekBars(week).some((b) => b.lane >= MAX_LANES && b.cs <= date && date <= b.ce && this.fatBand({ ...b, cs: date, ce: date })); },
@@ -383,6 +377,7 @@ export default function registerPlanningBoard() {
             canFat(t) { return this.isPmo && !['completed', 'cancelled'].includes(t.pmoStatus); },   // Admin / PM, an open project
             openDates(t) { return this.openPmoWindow(t.pmoUrl + '/dates', 'project-dates', 'เลื่อนวัน'); },
             openFat(t) { return this.openPmoWindow(t.pmoUrl + '/fat', 'project-fat', 'วัน FAT'); },
+            openDelivery(t, d) { return this.openPmoWindow(t.pmoUrl + '/delivery' + (d ? '?delivery=' + d.id : ''), 'project-delivery', 'การจัดส่ง'); },   // d = that round, else a new one
             async openPmoWindow(url, modal, what) {
                 const host = document.getElementById('pb-dates');
                 try {
@@ -402,10 +397,11 @@ export default function registerPlanningBoard() {
             },
             async savePmoWindow(e) {
                 e.preventDefault();
-                const form = e.target, btn = form.querySelector('[type=submit]') || e.submitter;
+                const form = e.target, btn = e.submitter || form.querySelector('[type=submit]');   // the button pressed (การจัดส่ง: บันทึกร่าง / ส่ง)
+                const body = new FormData(form, e.submitter && e.submitter.name ? e.submitter : undefined);
                 if (btn) btn.disabled = true;
                 try {
-                    const res = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'Accept': 'application/json' } });
+                    const res = await fetch(form.action, { method: 'POST', body, headers: { 'Accept': 'application/json' } });
                     const data = await res.json().catch(() => ({}));
                     if (!res.ok) {
                         const msg = data.errors ? Object.values(data.errors)[0][0] : (data.message || 'บันทึกไม่สำเร็จ');
@@ -431,7 +427,105 @@ export default function registerPlanningBoard() {
             fatTitle(t) {
                 const f = t.fat;
                 return 'FAT' + (f.round > 1 ? ' รอบที่ ' + f.round : '') + ' · ' + t.so + ' ' + t.title + ' · ' + this.fmtBE(f.date) + (f.end && f.end !== f.date ? ' – ' + this.fmtBE(f.end) : '') + (f.time ? ' ' + f.time + ' น.' : '')
-                    + ' · ' + ({ scheduled: 'นัดแล้ว', passed: 'ผ่าน', failed: 'ไม่ผ่าน' }[f.status] || '') + (this.fatLate(t) ? ' · หลังวันครบกำหนด' : '') + (f.note ? ' · ' + f.note : '');
+                    + ' · ' + this.fatStatus(t) + (this.fatLate(t) ? ' · ' + this.evState('fat', 'late').name : '') + (f.note ? ' · ' + f.note : '');
+            },
+            // ---- การจัดส่ง (ProjectDeliveryController via PlanningBoard::delivery): a "ส่ง" line along the bottom of the bar on each
+            // round's day, its tab at the right end; the project window lists the rounds and each cabinet's ----
+            dels(t, c) { return (t.deliveries || []).filter((d) => !c || d.cabs.includes(c.id)); },
+            delDone(t) { return this.dels(t).filter((d) => d.status === 'delivered').reduce((n, d) => n + d.cabs.length, 0); },
+            delNext(t) { return this.dels(t).filter((d) => d.status !== 'delivered').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0]; },
+            delHead(t) {
+                const n = this.delNext(t);
+                return 'ส่งแล้ว ' + this.delDone(t) + '/' + t.subtasks.length + ' ตู้' + (n ? ' · รอบถัดไป ' + (n.wait ? this.delState(n) + ' ' + this.fatRange(n) : this.fmtShort(n.date) + (n.time ? ' · ' + n.time : '')) : '');
+            },
+            // wait = the delivery department has not picked the day: date..end is PM's window (dashed), not the day it goes
+            delKey(d) { return d.status !== 'scheduled' ? d.status : ({ company: 'booked', external: 'external', pickup: 'pickup' }[d.method] || 'booked'); },
+            delColor(d) { return this.evState('delivery', this.delKey(d)).color; },
+            delState(d) { return this.evState('delivery', this.delKey(d)).name + (d.status === 'departed' && d.dep ? ' ' + d.dep : ''); },
+            delCls() { return 'st-pill'; },
+            delWhen(d) { return d.status === 'delivered' && d.at ? this.fmtShort(d.at.slice(0, 10)) + ' · ถึง ' + d.at.slice(11) : (d.wait ? 'ช่วงส่งได้ ' + this.fatRange(d) : this.delRange(d) + (d.time ? ' · ' + d.time : '')); },
+            // "20/11", "20–22/11 (3 วัน)" (a round over several days, as fatRange)
+            delRange(d) { return this.fatRange({ date: d.date, end: d.end }) + (d.end && d.end !== d.date ? ' (' + (diffDays(d.end, d.date) + 1) + ' วัน)' : ''); },
+            delCar(d) { return (d.method === 'company' ? '🚚 ' : '') + (d.carFull || d.car || '-') + (d.people ? ' · ' + d.people : (d.crew ? ' · ' + d.crew + ' คน' : '')); },
+            delCabs(d) { return d.cabs.length ? d.cabs.length + ' ตู้' : 'ทุกตู้'; },   // a draft from the new-project page: every cabinet
+            delCabName(t, id) { const c = t.subtasks.find((x) => x.id === id); return c ? c.mo || c.text : '-'; },
+            // a cabinet row: "ส่ง 12/11 · 4 ล้อ" / "นัดส่ง 20/11 · 6 ล้อเครน" / "รอกำหนดวัน 18–22/11"
+            delCab(t, c) {
+                const d = this.dels(t, c)[0];
+                return d ? { cls: d.wait ? 'dl-chip st-chip dl-need' : d.status === 'delivered' ? 'dl-chip st-chip' : 'dl-chip', style: d.wait || d.status === 'delivered' ? '--c:' + this.delColor(d) : '',
+                    text: d.wait ? this.delState(d) + ' ' + this.fatRange(d) : (d.status === 'delivered' ? 'ส่ง ' : 'นัดส่ง ') + this.fmtShort(d.status === 'delivered' && d.at ? d.at.slice(0, 10) : d.date) + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car } : null;
+            },
+            delLabel(d) {
+                if (d.status === 'delivered') return this.evState('delivery', 'delivered').name + ' ' + this.delCabs(d);
+                if (d.wait) return 'ช่วงส่ง ' + this.fatRange(d) + ' · ' + this.delState(d);
+                return 'ส่ง' + (d.end && d.end !== d.date ? ' ' + (diffDays(d.end, d.date) + 1) + ' วัน' : '') + (d.time ? ' ' + d.time : '') + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car;
+            },
+            delBandCls(d) { return 'del-band' + (d.wait ? ' del-wait' : ''); },
+            delTitle(t, d) {
+                return 'ส่งรอบที่ ' + d.round + ' · ' + t.so + ' · ' + (d.wait ? 'ช่วงส่งได้ ' : '') + this.fmtBE(d.date) + (d.end && d.end !== d.date ? ' – ' + this.fmtBE(d.end) : '') + (d.time ? ' ' + d.time + ' น.' : '')
+                    + ' · ' + this.delCabs(d) + ' · ' + this.delState(d) + ' · ' + (d.carFull || d.car || '-') + (d.crew ? ' · ' + d.crew + ' คน' : '') + (d.why ? ' · ' + d.why : '');
+            },
+            // the month: each round on this bar's days (a cabinet's bar: the rounds it is in)
+            delBands(b) {
+                const days = diffDays(b.ce, b.cs) + 1;
+                return this.dels(b.t, b.c).filter((d) => d.date <= b.ce && (d.end || d.date) >= b.cs)   // a round over several days: its days on this bar
+                    .map((d) => { const a = d.date < b.cs ? b.cs : d.date, z = (d.end || d.date) > b.ce ? b.ce : (d.end || d.date); return { a, z, d }; })
+                    .map(({ a, z, d }) => ({ id: d.id, left: (diffDays(a, b.cs) / days) * 100, width: ((diffDays(z, a) + 1) / days) * 100, cls: this.delBandCls(d), color: this.delColor(d), label: this.delLabel(d), title: this.delTitle(b.t, d) }));
+            },
+            // ---- FAT / จัดส่ง (_events): the tab's appointments alone, laid out as เดือน is (one bar over its days, lanes per week) ----
+            evAll(kind) {
+                const out = [];
+                this.visible().forEach((t) => {
+                    if (kind === 'fat' && t.fat) out.push({ key: 'f' + t.id, kind, from: t.fat.date, to: t.fat.end || t.fat.date, time: t.fat.time, t, f: t.fat });
+                    if (kind === 'del') this.dels(t).forEach((d) => out.push({ key: 'd' + d.id, kind, from: d.date, to: d.end || d.date, time: d.time, t, d }));
+                });
+                return out;
+            },
+            evShown(e) { return !this.evNeed || e.kind !== 'del' || (e.d.wait && e.d.status !== 'draft'); },   // รอกำหนดวัน: sent, no day picked (not PM's drafts)
+            evBars(week) {
+                const ws = week[0].date, we = week[week.length - 1].date, laneEnd = [], bars = [];
+                const list = this.evAll(this.mode).filter((e) => this.evShown(e) && e.from <= we && e.to >= ws)
+                    .sort((a, b) => a.from.localeCompare(b.from) || (a.time || '99').localeCompare(b.time || '99') || a.t.so.localeCompare(b.t.so));
+                for (const e of list) {
+                    const cs = e.from < ws ? ws : e.from, ce = e.to > we ? we : e.to;
+                    const a = week.findIndex((d) => d.date === cs), z = week.findIndex((d) => d.date === ce);
+                    let lane = laneEnd.findIndex((end) => end < a);
+                    if (lane === -1) { lane = laneEnd.length; laneEnd.push(-1); }
+                    laneEnd[lane] = z;
+                    bars.push({ ...e, lane, col: a + 1, span: z - a + 1, before: e.from < ws, after: e.to > we });
+                }
+                return bars;
+            },
+            evShownBars(week) { return this.evOpen[week[0].date] ? this.evBars(week) : this.evBars(week).filter((b) => b.lane < MAX_LANES); },
+            evHidden(week, date) { return this.evOpen[week[0].date] ? 0 : this.evBars(week).filter((b) => b.lane >= MAX_LANES && b.from <= date && date <= b.to).length; },
+            // the header's numbers: the month on screen only
+            evCount() {
+                const m1 = this.year + '-' + pad(this.month + 1) + '-01', m2 = this.year + '-' + pad(this.month + 1) + '-31', inMonth = (e) => e.from <= m2 && e.to >= m1;
+                const fat = this.mode === 'fat' ? this.evAll('fat').filter(inMonth) : [], del = this.mode === 'del' ? this.evAll('del').filter(inMonth) : [];
+                return { fat: fat.length, del: del.length, wait: del.filter((e) => e.d.wait && e.d.status !== 'draft').length, shown: [...fat, ...del].filter((e) => this.evShown(e)).length };
+            },
+            evCls(e) { return 'ev-card' + (e.kind === 'fat' ? (e.f.status === 'failed' ? ' line-through' : '') : (e.d.wait ? ' ev-need' : '')); },
+            evColor(e) { return e.kind === 'fat' ? this.fatColor(e.t) : this.delColor(e.d); },
+            // the tab's legend: every state of its group, as Settings > สถานะงาน names and colours them
+            evLegend() { return Object.values(this.evs[this.mode === 'fat' ? 'fat' : 'delivery'] || {}); },
+            evHead(e) {
+                if (e.kind === 'fat') return 'FAT' + (e.time ? ' ' + e.time : '') + (e.to !== e.from ? ' · ' + this.fatRange(e.f) + ' (' + (diffDays(e.to, e.from) + 1) + ' วัน)' : '');
+                if (e.d.wait) return this.delState(e.d) + ' · ' + this.fatRange(e.d);
+                return e.d.status === 'delivered' ? this.evState('delivery', 'delivered').name + (e.d.at ? ' ' + e.d.at.slice(11) : '') : 'ส่ง' + (e.time ? ' ' + e.time : '') + (e.to !== e.from ? ' · ' + this.delRange(e.d) : '');
+            },
+            evMeta(e) {
+                if (e.kind === 'fat') return (e.f.round > 1 ? 'รอบ ' + e.f.round + ' · ' : '') + (e.f.cabinets ? e.f.cabinets.length + ' ตู้' : 'ทุกตู้') + ' · ' + this.fatStatus(e.t) + (this.fatLate(e.t) ? ' · ' + this.evState('fat', 'late').name : '');
+                const d = e.d;
+                if (d.why) return 'รอบ ' + d.round + ' · ' + d.why;
+                return 'รอบ ' + d.round + ' · ' + (d.method === 'company' ? '🚚 ' : '') + (d.car || '-') + (d.crew ? ' · ' + d.crew + ' คน' : '') + ' · ' + this.delCabs(d) + (d.status === 'departed' ? ' · ' + this.delState(d) : '');
+            },
+            evTitle(e) { return e.kind === 'fat' ? this.fatTitle(e.t) : this.delTitle(e.t, e.d); },
+            // Admin / PM open the FAT / delivery window itself (an open project, as the project window's buttons); others the project's window
+            evGo(e) { if (!this.canFat(e.t)) return this.openModal(e.t.id); return e.kind === 'fat' ? this.openFat(e.t) : this.openDelivery(e.t, e.d); },
+            tlDels(r) {
+                const days = this.tlDays();
+                return this.dels(r.t, r.c).map((d) => ({ d, i: days.findIndex((x) => x.date >= d.date), z: days.findLastIndex((x) => x.date <= (d.end || d.date)) })).filter((x) => x.i >= 0 && x.z >= x.i)
+                    .map(({ d, i, z }) => ({ id: d.id, col: i + 1, span: z - i + 1, cls: this.delBandCls(d), color: this.delColor(d), label: this.delLabel(d), title: this.delTitle(r.t, d) }));
             },
             // the timeline: the day column of a row's FAT (a cabinet row only when that cabinet is in the round), else 0
             tlFat(r) {

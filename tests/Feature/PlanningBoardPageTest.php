@@ -58,7 +58,7 @@ class PlanningBoardPageTest extends TestCase
         // the app layout (sidebar etc.), not a stand-alone page
         $this->assertStringContainsString('Avatar Electric', $html);
         $this->assertStringContainsString('x-data="planningBoard(', $html);
-        foreach (['งานที่ต้องเสร็จ', 'ไทม์ไลน์', 'แดชบอร์ด', 'ส่งต่อแผนก', 'Activity', 'ลบโครงการ'] as $needle) {
+        foreach (['งานที่ต้องเสร็จ', 'ไทม์ไลน์', 'แดชบอร์ด', "mode = 'fat'", "mode = 'del'", 'evCount().wait', 'ส่งต่อแผนก', 'Activity', 'ลบโครงการ'] as $needle) {
             $this->assertStringContainsString($needle, $html, "missing: $needle");
         }
         $this->assertStringContainsString("Alpine.data('planningBoard'", file_get_contents(resource_path('js/planning-board.js')), 'the component lives in the bundle');
@@ -69,8 +69,8 @@ class PlanningBoardPageTest extends TestCase
         // the page's own templates only (~90 KB of Blade + the app layout), not the 600 KB single-file SPA, and not its script:
         // the Alpine component moved into the cached bundle (resources/js/planning-board.js), so the page dropped from ~290 KB.
         // gzip (GzipResponse) sends a small fraction of it. (240 -> 256 KB with the project window's "หมายเหตุ" tab, 2026-10;
-        // 256 -> 260 KB with "เลื่อน n" and "เลื่อน / แก้วัน", 2026-11.)
-        $this->assertLessThan(260 * 1024, strlen($html));
+        // 256 -> 260 KB with "เลื่อน n" and "เลื่อน / แก้วัน", 2026-11; 260 -> 270 KB with การจัดส่ง, 2026-11.)
+        $this->assertLessThan(270 * 1024, strlen($html));
     }
 
     public function test_pmo_roles_can_edit_and_department_users_start_on_their_own_department(): void

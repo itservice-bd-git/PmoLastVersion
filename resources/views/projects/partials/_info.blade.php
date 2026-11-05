@@ -209,43 +209,67 @@
             </button>
         </div>
 
+        @php
+            // the pace as a word with its colour and icon (never the colour alone), and how far from "on time" it is
+            $paceTag = ['on_track' => ['ทันตามเวลา', 'bg-emerald-50 text-emerald-800', 'M5 12l5 5L20 7'],
+                'watch' => ['เฝ้าระวัง', 'bg-orange-50 text-orange-800', 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z'],
+                'behind' => ['ช้ากว่าเวลา', 'bg-red-50 text-red-800', 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z']][$s['pace']] ?? null;
+            $gap = $s['timeElapsed'] !== null && $s['progress'] < 100 ? $s['timeElapsed'] - $s['progress'] : null;
+        @endphp
         <div class="flex min-w-0 flex-col gap-4 rounded-[14px] border border-slate-200 bg-white px-5 pb-4 pt-4" aria-label="ภาพรวมการผลิต">
-            <div class="flex flex-col gap-3">
-                <div>
+            <div>
+                <div class="flex items-start justify-between gap-3">
                     <h3 class="text-[15px] font-bold text-ae-navy">ความคืบหน้าการผลิต</h3>
-                    <p class="flex flex-wrap items-baseline gap-x-2">
-                        <span class="text-[30px] font-bold leading-tight tracking-tight tabular-nums text-ae-navy">{{ $s['progress'] }}%</span>
-                        @if ($pace)<span class="text-[13px] font-semibold {{ $barText }}">{{ $pace[0] }}{{ $s['timeElapsed'] !== null ? ' · เวลาผ่านไป '.$s['timeElapsed'].'%' : '' }}</span>@endif
-                    </p>
+                    @if ($paceTag)
+                        <span class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-bold {{ $paceTag[1] }}">
+                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ $paceTag[2] }}"/></svg>{{ $paceTag[0] }}</span>
+                    @endif
                 </div>
-                <dl class="flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
-                    @foreach ([['เสร็จแล้ว', $s['completed'], 'bg-emerald-600'], ['กำลังดำเนินการ', $s['inProgress'], 'bg-blue-600'], ['พักไว้', $s['onHold'], 'bg-amber-400'], ['ยังไม่เริ่ม', $s['notStarted'], 'bg-slate-300']] as [$label, $n, $color])
+                <div class="mt-1 flex items-end justify-between gap-3">
+                    <p class="text-[34px] font-bold leading-none tracking-tight tabular-nums text-ae-navy">{{ $s['progress'] }}<span class="text-xl">%</span></p>
+                    <p class="pb-0.5 text-right text-[13px] text-slate-600">ตู้ผลิตเสร็จ <b class="text-base tabular-nums text-slate-900">{{ $s['completed'] }}</b> / {{ $s['total'] }}</p>
+                </div>
+                {{-- the one bar: what is made; the dark tick = where it should be by now, at an even pace from start to due --}}
+                <div class="relative mt-3 h-2.5 rounded-full bg-slate-100" role="img"
+                     aria-label="ผลิตแล้ว {{ $s['progress'] }}%{{ $s['timeElapsed'] !== null ? ' ตามเวลาควรได้ '.$s['timeElapsed'].'%' : '' }}">
+                    <div class="h-2.5 rounded-full {{ $barColor }}" style="width: {{ $s['progress'] }}%"></div>
+                    @if ($gap !== null)
+                        <div class="absolute -top-1 h-[18px] w-0.5 -translate-x-1/2 rounded bg-slate-900" style="left: {{ $s['timeElapsed'] }}%"></div>
+                    @endif
+                </div>
+                <p class="mt-1.5 flex flex-wrap justify-between gap-x-3 text-[13px] text-slate-600">
+                    @if ($gap !== null)
+                        <span><span class="mr-1 inline-block h-3 w-0.5 translate-y-0.5 rounded bg-slate-900" aria-hidden="true"></span>ตามเวลาควรได้ {{ $s['timeElapsed'] }}%</span>
+                        <span class="font-semibold {{ $gap > 0 ? $barText : 'text-emerald-700' }}">{{ $gap > 0 ? 'ช้ากว่า '.$gap.'%' : ($gap < 0 ? 'เร็วกว่า '.abs($gap).'%' : 'ตรงตามเวลา') }}</span>
+                    @elseif ($s['progress'] >= 100)
+                        <span class="font-semibold text-emerald-700">ผลิตครบทุกตู้</span>
+                    @else
+                        <span>ยังไม่มีวันเริ่ม / วันครบกำหนด จึงยังเทียบกับเวลาไม่ได้</span>
+                    @endif
+                </p>
+                {{-- where the cabinets are --}}
+                <ul class="mt-3 flex flex-wrap gap-1.5 text-[13px]" aria-label="ตู้แยกตามสถานะ">
+                    @foreach ([['กำลังทำ', $s['inProgress'], 'bg-blue-600'], ['ยังไม่เริ่ม', $s['notStarted'], 'bg-slate-400'], ['พักไว้', $s['onHold'], 'bg-amber-500']] as [$label, $n, $color])
                         @continue($label === 'พักไว้' && ! $n)
-                        <div>
-                            <dt class="flex items-center gap-1.5 text-slate-600"><span class="h-2 w-2 rounded-full {{ $color }}"></span>{{ $label }}</dt>
-                            <dd class="text-base font-bold tabular-nums {{ $n ? 'text-slate-900' : 'text-slate-500' }}">{{ $n }} <span class="text-[13px] font-medium text-slate-500">ตู้</span></dd>
-                        </div>
+                        <li class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-0.5 {{ $n ? 'text-slate-800' : 'text-slate-500' }}">
+                            <span class="h-2 w-2 rounded-full {{ $color }}" aria-hidden="true"></span>{{ $label }} <b class="tabular-nums">{{ $n }}</b></li>
                     @endforeach
-                </dl>
+                </ul>
             </div>
 
-            <div>
+            <div class="border-t border-slate-100 pt-3.5">
                 <h4 class="mb-2.5 text-[13px] font-bold text-slate-600">สถานะโครงการ</h4>
-                {{-- the steps down the card; the ผลิต step is the production bar (the tick = where time says it should be) --}}
                 <ol aria-label="สถานะโครงการ">
                     <li class="flex gap-3"><span class="flex flex-col items-center">{!! $dot($project->start_date && $project->start_date->lte(today()) ? 'done' : 'wait') !!}<span class="w-0.5 flex-1 bg-slate-200"></span></span>
-                        <span class="pb-3 text-[13px]"><b class="block">เริ่มโครงการ</b><span class="text-slate-600">{{ $short($project->start_date) ?: 'ยังไม่ระบุ' }}</span></span></li>
-                    <li class="flex gap-3"><span class="flex w-7 flex-col items-center"><span class="w-0.5 flex-1 bg-slate-200"></span></span>
-                        <span class="flex-1 pb-3 text-[13px]"><b class="block {{ $barText }}">ผลิต {{ $s['progress'] }}%</b>
-                            <span class="relative mt-1.5 block h-1.5 rounded-full bg-slate-200"><span class="absolute inset-y-0 left-0 rounded-full {{ $barColor }}" style="width: {{ $s['progress'] }}%"></span>
-                                @if ($s['timeElapsed'] !== null && $s['progress'] < 100)<span class="absolute -top-1.5 h-[18px] w-0.5 -translate-x-1/2 rounded bg-slate-900" style="left: {{ $s['timeElapsed'] }}%" title="เวลาผ่านไป {{ $s['timeElapsed'] }}%"></span>@endif</span>
-                            <span class="mt-1 block text-slate-600">{{ $s['timeElapsed'] !== null && $s['progress'] < 100 ? 'ควรได้ '.$s['timeElapsed'].'% ตามเวลา' : ($s['progress'] >= 100 ? 'ผลิตครบ' : $s['total'].' ตู้') }}</span></span></li>
-                    <li class="flex gap-3"><span class="flex flex-col items-center">{!! $dot($fatNode[0], $fatText, ! empty($fatNode[4])) !!}<span class="w-0.5 flex-1 bg-slate-200"></span></span>
+                        <span class="pb-3 text-[13px]"><b class="block">เริ่มโครงการ</b><span class="text-slate-600 tabular-nums">{{ $short($project->start_date) ?: 'ยังไม่ระบุ' }}</span></span></li>
+                    <li class="flex gap-3"><span class="flex flex-col items-center">{!! $dot($s['progress'] >= 100 ? 'done' : 'wait') !!}<span class="w-0.5 flex-1 {{ $s['progress'] >= 100 ? 'bg-emerald-600' : 'bg-slate-200' }}"></span></span>
+                        <span class="pb-3 text-[13px]"><b class="block {{ $s['progress'] >= 100 ? 'text-emerald-700' : $barText }}">{{ $s['progress'] >= 100 ? 'ผลิตครบ' : 'กำลังผลิต' }}</b><span class="text-slate-600 tabular-nums">{{ $s['progress'] }}% · ตู้เสร็จ {{ $s['completed'] }} / {{ $s['total'] }}</span></span></li>
+                    <li class="flex gap-3"><span class="flex flex-col items-center">{!! $dot($fatNode[0], $fatText, ! empty($fatNode[4])) !!}<span class="w-0.5 flex-1 {{ $fatNode[0] === 'done' ? 'bg-emerald-600' : 'bg-slate-200' }}"></span></span>
                         <button type="button" {!! $go($fatNode, 'pmo-fat') !!} @disabled(! $fatNode[3]) class="-mx-1.5 -mt-1 mb-2 min-h-11 flex-1 rounded-lg px-1.5 pt-1 text-left text-[13px] enabled:hover:bg-slate-50 disabled:cursor-default"><b class="block {{ $tone($fatNode) }}">{{ $fatNode[1] }}{{ ! empty($fatNode[4]) ? ' · ถัดไป' : '' }}</b><span class="{{ $fatNode[3] && $fatNode[0] === 'todo' ? 'font-semibold text-blue-700' : 'text-slate-600' }} tabular-nums">{{ $fatNode[2] }}</span></button></li>
-                    <li class="flex gap-3"><span class="flex flex-col items-center">{!! $dot($dlNode[0], $dlText, ! empty($dlNode[4])) !!}<span class="w-0.5 flex-1 bg-slate-200"></span></span>
+                    <li class="flex gap-3"><span class="flex flex-col items-center">{!! $dot($dlNode[0], $dlText, ! empty($dlNode[4])) !!}<span class="w-0.5 flex-1 {{ $dlNode[0] === 'done' ? 'bg-emerald-600' : 'bg-slate-200' }}"></span></span>
                         <button type="button" {!! $go($dlNode, 'pmo-delivery') !!} @disabled(! $dlNode[3]) class="-mx-1.5 -mt-1 mb-2 min-h-11 flex-1 rounded-lg px-1.5 pt-1 text-left text-[13px] enabled:hover:bg-slate-50 disabled:cursor-default"><b class="block {{ $tone($dlNode) }}">{{ $dlNode[1] }}{{ ! empty($dlNode[4]) ? ' · ถัดไป' : '' }}</b><span class="{{ $dlNode[3] ? 'text-blue-700' : 'text-slate-600' }} tabular-nums">{{ $dlNode[2] }}</span></button></li>
                     <li class="flex gap-3">{!! $dot($closed ? 'done' : 'wait') !!}
-                        <span class="text-[13px]"><b class="block {{ $closed ? 'text-emerald-700' : '' }}">ปิดโครงการ</b><span class="text-slate-600">{{ $closed ? 'ปิดแล้ว' : ($project->due_date ? 'ครบกำหนด '.$short($project->due_date) : 'ยังไม่มีวันครบกำหนด') }}</span></span></li>
+                        <span class="text-[13px]"><b class="block {{ $closed ? 'text-emerald-700' : '' }}">ปิดโครงการ</b><span class="text-slate-600 tabular-nums">{{ $closed ? 'ปิดแล้ว' : ($project->due_date ? 'ครบกำหนด '.$short($project->due_date) : 'ยังไม่มีวันครบกำหนด') }}</span></span></li>
                 </ol>
             </div>
         </div>

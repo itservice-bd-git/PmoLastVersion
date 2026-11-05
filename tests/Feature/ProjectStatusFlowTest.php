@@ -97,7 +97,7 @@ class ProjectStatusFlowTest extends TestCase
             CabinetChecklist::forceCreate(['cabinet_subtask_id' => $s->id, 'name' => 'x', 'is_completed' => true, 'sequence' => 1]);
         }
         $page = $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk();
-        $page->assertSee('Checklist ครบแล้ว 2 งาน แต่ยังไม่ได้ปิดงาน')->assertDontSee('งานครบทุกแผนกแล้ว');
+        $page->assertSee('Checklist ครบแล้วแต่ยังไม่ได้ปิดใบงาน')->assertSee('2 รายการ</b>', false)->assertDontSee('งานครบทุกแผนกแล้ว');
 
         // not allowed to act for departments: refused, said why
         $this->actingAs($this->pm)->post(route('projects.finish-ticked', $this->project))->assertSessionHas('error');

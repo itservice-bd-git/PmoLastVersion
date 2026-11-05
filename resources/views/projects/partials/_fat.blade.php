@@ -14,12 +14,16 @@
     $form = fn (?\App\Models\ProjectFat $f) => \App\Models\ProjectFat::formData($project, $f, $fat);   // edit the latest round, or a new one
     $old = session()->getOldInput();
 @endphp
-<section class="rounded-xl border border-slate-200 bg-white p-5" aria-label="วัน FAT"
-         x-data="{ due: @js($project->due_date?->format('Y-m-d')), f: null,
+{{-- Shown when asked (หัวโครงการ › "รายละเอียด", สถานะโครงการ › FAT: the pmo-fat event, 'show'); 'edit' opens the
+     form of the latest round, or of a new one when there is none / it failed. The form's window stays in the page. --}}
+<section aria-label="วัน FAT" id="fat"
+         x-data="{ due: @js($project->due_date?->format('Y-m-d')), f: null, shown: false,
                    open(v) { this.f = JSON.parse(JSON.stringify(v)); this.$dispatch('open-modal', 'project-fat'); } }"
+         @pmo-fat.window="if ($event.detail === 'edit') { @if ($canFat) open(@js($form($fat && $fat->status !== 'failed' ? $fat : null))) @endif } else { shown = true; $nextTick(() => $el.scrollIntoView({ behavior: 'smooth', block: 'center' })) }"
          @if ($errors->hasAny(['fat_date', 'fat_end_date', 'fat_time', 'status', 'cabinet_ids', 'note']) && $old)
              x-init="f = { ...@js($form($fat && ($old['_method'] ?? '') === 'PUT' ? $fat : null)), ...@js(\Illuminate\Support\Arr::only($old, ['fat_date', 'fat_end_date', 'fat_time', 'status', 'scope', 'note'])), cabinet_ids: (@js($old['cabinet_ids'] ?? [])).map(Number) }; $nextTick(() => $dispatch('open-modal', 'project-fat'))"
          @endif>
+  <div x-show="shown" x-cloak x-transition.opacity class="rounded-2xl border border-slate-200 bg-white p-5">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span class="st-tag inline-flex h-6 items-center rounded px-2 text-xs font-extrabold tracking-wide" style="--c: {{ $colour($fat) }}">FAT</span>
         <h3 class="text-base font-bold text-ae-navy">วัน FAT</h3>
@@ -66,6 +70,9 @@
             </div>
         @endif
     @endif
+
+    <div class="mt-3 text-right"><button type="button" @click="shown = false" class="text-sm font-semibold text-slate-500 hover:text-slate-800">ซ่อน</button></div>
+  </div>
 
     @if ($canFat)
         @include('projects.partials._fat-form')

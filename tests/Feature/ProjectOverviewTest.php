@@ -170,7 +170,7 @@ class ProjectOverviewTest extends TestCase
             $html = $this->actingAs($admin)->get(route('projects.show', array_filter([$this->project, 'tab' => $tab])))->assertOk()
                 ->assertSee("tab: 'info'", false)
                 ->assertSeeInOrder(['ข้อมูลโครงการ', 'Comment', 'Activity Log'])->assertDontSee("tab = 'attachments'", false)
-                ->assertSeeInOrder(['รายละเอียดโครงการ', 'โครงการ', 'กำหนดการ', 'ทีมและการติดต่อ', 'สัญญาและการเงิน'])
+                ->assertSeeInOrder(['ข้อมูลโครงการ', 'โครงการ', 'กำหนดการ', 'ทีมและการติดต่อ', 'สัญญาและการเงิน'])
                 ->assertSee('ความคืบหน้าการผลิต')->assertSee('เวลาผ่านไป 80%')->assertSee('ต้องตาม')->assertSee('ตู้ / ใบสั่งผลิต')
                 ->assertSee('ไม่มี: ตู้ล่าช้ากว่ากำหนด', false)   // a zero alert is named quietly, not shown as a chip
                 ->assertDontSee('งานบริหารโครงการ')->assertDontSee('ยังไม่กรอก')

@@ -13,67 +13,148 @@
         $asked = in_array(request('tab'), ['project', 'cabinets', 'overview'], true) ? 'info' : request('tab');
         $initialTab = in_array($asked, $tabs, true) ? $asked : 'info';
     @endphp
-    <div class="max-w-screen-2xl mx-auto space-y-5" x-data="{ tab: '{{ $initialTab }}' }" x-init="$watch('tab', (t) => keepTabInUrl(t, 'info'))">
+    <div class="max-w-screen-2xl mx-auto space-y-4" x-data="{ tab: '{{ $initialTab }}' }" x-init="$watch('tab', (t) => keepTabInUrl(t, 'info'))">
 
         <x-closed-project-banner :project="$project" />
 
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <h1 class="text-xl font-bold text-ae-navy">{{ $project->project_name }}</h1>
-                    <x-priority-flag :priority="$project->priority" />
-                </div>
-                <p class="mt-0.5 flex flex-wrap gap-x-2 text-sm text-slate-500">
-                    <span class="font-semibold text-slate-700">{{ $project->project_no }}</span>
-                    @if ($project->customer_name)<span class="text-slate-300" aria-hidden="true">·</span><span>{{ $project->customer_name }}</span>@endif
-                </p>
-                {{-- "ติดตามโครงการ": anyone who sees the project (ProjectFollowers); its พนักงานขาย follow it already --}}
-                @php $followers = $project->followers()->orderBy('name')->get(['users.id', 'name']); $following = $followers->contains('id', auth()->id()); @endphp
-                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                    <form method="POST" action="{{ route('projects.follow', $project) }}">
-                        @csrf
-                        <button class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 font-semibold {{ $following ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50' }}"
-                                title="{{ $following ? 'กดเพื่อเลิกติดตาม' : 'รับแจ้งเตือนความเคลื่อนไหวของโครงการนี้' }}">
-                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
-                            {{ $following ? 'ติดตามอยู่' : 'ติดตามโครงการ' }}
-                        </button>
-                    </form>
-                    @if ($followers->isNotEmpty())
-                        <span>ผู้ติดตาม: {{ $followers->pluck('name')->implode(', ') }}</span>
-                    @endif
-                </div>
-            </div>
-            @editplan
-            <div class="flex shrink-0 gap-2">
-                <a href="{{ route('projects.edit', $project) }}" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">แก้ไขโครงการ</a>
-                {{-- deleting is rare and moves the whole project to the trash: kept one click further away --}}
-                <div class="relative" x-data="{ menu: false }" @click.outside="menu = false" @keydown.escape="menu = false">
-                    <button type="button" @click="menu = ! menu" :aria-expanded="menu" aria-haspopup="true" aria-label="เมนูเพิ่มเติม"
-                            class="flex h-full items-center rounded-lg border border-slate-200 bg-white px-2.5 text-slate-600 hover:bg-slate-50">
-                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-                    </button>
-                    <div x-show="menu" x-cloak x-transition.opacity class="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-xl">
-                        <form method="POST" action="{{ route('projects.destroy', $project) }}" onsubmit="return confirm('ยืนยันการลบโครงการนี้? ตู้และงานทั้งหมดใต้โครงการจะย้ายไปถังขยะ (Admin/PM กู้คืนได้)')">
-                            @csrf @method('DELETE')
-                            <button class="block w-full px-4 py-2 text-left font-medium text-red-600 hover:bg-red-50">ลบโครงการ</button>
+        {{-- หัวโครงการ: the project on the left (name, SO, customer, status / risk / job type, follow), its FAT and next
+             delivery on the right with the buttons that open their windows (_fat / _delivery, through the pmo-fat /
+             pmo-delivery events), the rest of the actions in the ⋯ menu. --}}
+        @php
+            $hdrFat = $project->fats()->get()->last();
+            $hdrRounds = $project->deliveries()->with('vehicles.vehicle')
+                ->when(! \App\Services\DeliveryFlow::canBook(auth()->user()), fn ($q) => $q->where('status', '!=', \App\Models\ProjectDelivery::DRAFT))->get();
+            $hdrNext = $hdrRounds->where('status', '!=', \App\Models\ProjectDelivery::DELIVERED)->sortBy(fn ($d) => $d->firstDay()->format('Ymd').$d->delivery_time)->first();
+            $hdrCanAppt = auth()->user()->canDispatchWork() && ! $project->isLocked();
+            $hdrRisk = ['on_track' => ['ปกติ', 'bg-emerald-50 text-emerald-800', 'bg-emerald-500'], 'watch' => ['เฝ้าระวัง', 'bg-orange-50 text-orange-800', 'bg-orange-500'],
+                'behind' => ['สูง', 'bg-red-50 text-red-800', 'bg-red-500']][$overview['summary']['pace'] ?? ''] ?? null;
+            $today = today();
+            // FAT: [big word / number, its colour, the line under it, the button]
+            $fatDays = $hdrFat ? (int) $today->diffInDays($hdrFat->fat_date, false) : null;
+            $fatEnd = $hdrFat ? (int) $today->diffInDays($hdrFat->lastDay(), false) : null;
+            $fatTile = match (true) {
+                ! $hdrFat => ['ยังไม่ได้นัด', 'text-slate-400', $project->due_date ? 'ครบกำหนด '.$project->due_date->thaiDate() : '', '+ ลงวัน FAT'],
+                $hdrFat->status === 'passed' => ['ผ่าน', 'text-emerald-700', $hdrFat->when(), 'แก้วัน FAT'],
+                $hdrFat->status === 'failed' => ['ไม่ผ่าน', 'text-red-700', 'รอบที่ '.$hdrFat->round.' · '.$hdrFat->when(), 'นัด FAT รอบใหม่'],
+                $fatEnd < 0 => ['เลย '.abs($fatEnd).' วัน', 'text-red-700', $hdrFat->when().' · ยังไม่บันทึกผล', 'บันทึกผล FAT'],
+                $fatDays <= 0 => ['วันนี้', 'text-blue-700', $hdrFat->when(), 'แก้วัน FAT'],
+                default => ['อีก '.$fatDays.' วัน', 'text-ae-navy', $hdrFat->when(), 'แก้วัน FAT'],
+            };
+            $dlDays = $hdrNext ? (int) $today->diffInDays($hdrNext->firstDay(), false) : null;
+            $dlEnd = $hdrNext ? (int) $today->diffInDays($hdrNext->lastDay(), false) : null;
+            $dlTile = match (true) {
+                ! $hdrRounds->count() => ['ยังไม่ได้นัด', 'text-slate-400', ''],
+                ! $hdrNext => ['ส่งครบแล้ว', 'text-emerald-700', $hdrRounds->count().' รอบ'],
+                $dlEnd < 0 => ['เลย '.abs($dlEnd).' วัน', 'text-red-700', $hdrNext->when()],
+                $dlDays <= 0 => ['วันนี้', 'text-blue-700', $hdrNext->when()],
+                default => ['อีก '.$dlDays.' วัน', 'text-ae-navy', $hdrNext->when()],
+            };
+            $followers = $project->followers()->orderBy('name')->get(['users.id', 'name']);
+            $following = $followers->contains('id', auth()->id());
+        @endphp
+        <section aria-label="หัวโครงการ" class="relative rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(11,31,58,.05),0_6px_18px_-12px_rgba(11,31,58,.18)] sm:p-5">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-7">
+                <div class="flex min-w-0 flex-1 flex-col justify-center gap-2.5 pr-12 lg:pr-0">
+                    <div>
+                        <h1 class="text-xl font-bold leading-snug text-ae-navy sm:text-[22px]">{{ $project->project_name }}</h1>
+                        <p class="mt-0.5 flex flex-wrap gap-x-3.5 text-sm text-slate-600">
+                            <span class="font-bold tabular-nums text-slate-900">{{ $project->project_no }}</span>
+                            @if ($project->customer_name)<span>{{ $project->customer_name }}</span>@endif
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <x-project-status :status="$project->status" />
+                        <x-priority-flag :priority="$project->priority" />
+                        @if ($hdrRisk)
+                            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold {{ $hdrRisk[1] }}" title="ผลิตแล้ว {{ $overview['summary']['progress'] }}% · เวลาผ่านไป {{ $overview['summary']['timeElapsed'] }}%">
+                                <span class="h-1.5 w-1.5 rounded-full {{ $hdrRisk[2] }}"></span>ความเสี่ยง : {{ $hdrRisk[0] }}</span>
+                        @endif
+                        <span class="rounded-full border px-2.5 py-0.5 text-xs font-semibold {{ $project->jobType ? 'border-slate-200 text-slate-700' : 'border-dashed border-slate-300 text-slate-500' }}">ประเภทงาน : {{ $project->jobType?->name ?? 'ยังไม่ระบุ' }}</span>
+                        {{-- "ติดตามโครงการ": anyone who sees the project (ProjectFollowers); its พนักงานขาย follow it already --}}
+                        <form method="POST" action="{{ route('projects.follow', $project) }}" class="ml-1">
+                            @csrf
+                            <button class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold {{ $following ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50' }}"
+                                    title="{{ $following ? 'กดเพื่อเลิกติดตาม' : 'รับแจ้งเตือนความเคลื่อนไหวของโครงการนี้' }}" aria-pressed="{{ $following ? 'true' : 'false' }}">
+                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                                {{ $following ? 'ติดตามอยู่' : 'ติดตามโครงการ' }}
+                            </button>
                         </form>
+                        @if ($followers->isNotEmpty())
+                            <span class="text-xs text-slate-500" title="ผู้ติดตาม">ผู้ติดตาม: {{ $followers->pluck('name')->implode(', ') }}</span>
+                        @endif
+                    </div>
+                </div>
+
+                {{-- FAT and the next delivery round: how many days, the date, the button --}}
+                <div class="grid grid-cols-2 gap-3 lg:mr-12 lg:flex lg:gap-0">
+                    <div class="flex min-w-0 flex-col gap-0.5 rounded-xl border border-slate-200 p-3 lg:min-w-[11rem] lg:rounded-none lg:border-0 lg:border-l lg:px-5 lg:py-0.5">
+                        <span class="text-xs font-semibold text-slate-600">วันที่ FAT @if ($hdrFat && $hdrFat->round > 1)<span class="font-normal">รอบที่ {{ $hdrFat->round }}</span>@endif</span>
+                        <span class="flex items-center gap-1.5 text-xl font-bold leading-tight tabular-nums {{ $fatTile[1] }} sm:text-2xl">
+                            @if ($hdrFat?->status === 'passed')<svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>@endif
+                            {{ $fatTile[0] }}</span>
+                        <span class="truncate text-[13px] tabular-nums text-slate-700">{{ $fatTile[2] ?: ' ' }}</span>
+                        <span class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            @if ($hdrCanAppt)
+                                <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-fat', 'edit'))"
+                                        class="inline-flex h-8 items-center rounded-lg px-3 text-[13px] font-semibold {{ $fatTile[1] === 'text-red-700' && $hdrFat?->status !== 'failed' ? 'bg-red-700 text-white hover:bg-red-800' : ($hdrFat ? 'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50' : 'border border-dashed border-slate-400 bg-white text-slate-800 hover:bg-slate-50') }}">{{ $fatTile[3] }}</button>
+                            @endif
+                            @if ($hdrFat)
+                                <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-fat', 'show'))" class="text-[13px] font-semibold text-blue-700 hover:underline">รายละเอียด</button>
+                            @endif
+                        </span>
+                    </div>
+                    <div class="flex min-w-0 flex-col gap-0.5 rounded-xl border border-slate-200 p-3 lg:min-w-[12.5rem] lg:rounded-none lg:border-0 lg:border-l lg:py-0.5 lg:pl-5 lg:pr-0">
+                        <span class="text-xs font-semibold text-slate-600">วันที่ส่งมอบ @if ($hdrNext && $hdrRounds->count() > 1)<span class="font-normal">รอบ {{ $hdrNext->round }} จาก {{ $hdrRounds->count() }}</span>@endif</span>
+                        <span class="flex flex-wrap items-baseline gap-x-2 text-xl font-bold leading-tight tabular-nums {{ $dlTile[1] }} sm:text-2xl">{{ $dlTile[0] }}
+                            @if ($hdrNext)<span class="st-pill rounded-full px-2 py-0.5 text-xs font-bold" style="--c: {{ $hdrNext->stateColor() }}">{{ $hdrNext->status === 'scheduled' && $hdrNext->cabinet_ids ? $hdrNext->step()['text'] : $hdrNext->stateLabel() }}</span>@endif</span>
+                        <span class="truncate text-[13px] tabular-nums text-slate-700">{{ $dlTile[2] ?: ' ' }}{{ $hdrNext ? ' · '.$hdrNext->cabinetsText() : '' }}</span>
+                        <span class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            @if ($hdrCanAppt)
+                                <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-delivery', 'new'))"
+                                        class="inline-flex h-8 items-center rounded-lg bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-700">ลงวันส่งมอบ</button>
+                            @endif
+                            @if ($hdrRounds->count())
+                                <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-delivery', 'show'))" class="text-[13px] font-semibold text-blue-700 hover:underline">ดูทุกรอบ</button>
+                            @endif
+                        </span>
                     </div>
                 </div>
             </div>
-            @endeditplan
-        </div>
 
-        <div class="flex gap-1 overflow-x-auto border-b border-slate-200" role="tablist" aria-label="ส่วนของโครงการ">
+            @editplan
+            {{-- the rest of the actions; deleting moves the whole project to the trash, so it sits last --}}
+            <div class="absolute right-3 top-3 sm:right-4 sm:top-4" x-data="{ menu: false }" @click.outside="menu = false" @keydown.escape="menu = false">
+                <button type="button" @click="menu = ! menu" :aria-expanded="menu" aria-haspopup="true" aria-label="เมนูเพิ่มเติม"
+                        class="flex h-9 w-9 items-center justify-center rounded-[10px] border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                </button>
+                <div x-show="menu" x-cloak x-transition.opacity class="absolute right-0 z-30 mt-1 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-xl">
+                    <a href="{{ route('projects.edit', $project) }}" class="block rounded-lg px-3 py-2 font-medium text-slate-700 hover:bg-slate-50">แก้ไขโครงการ</a>
+                    @if (! $project->isLocked() && $project->due_date)
+                        <button type="button" @click="menu = false; tab = 'info'; $nextTick(() => $dispatch('open-modal', 'project-dates'))" class="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">เลื่อน / แก้วันโครงการ</button>
+                    @endif
+                    <button type="button" @click="menu = false; $dispatch('open-modal', 'checklist-bulk')" class="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">แก้ Checklist ทั้งโครงการ</button>
+                    <div class="my-1 h-px bg-slate-100"></div>
+                    <form method="POST" action="{{ route('projects.destroy', $project) }}" onsubmit="return confirm('ยืนยันการลบโครงการนี้? ตู้และงานทั้งหมดใต้โครงการจะย้ายไปถังขยะ (Admin/PM กู้คืนได้)')">
+                        @csrf @method('DELETE')
+                        <button class="block w-full rounded-lg px-3 py-2 text-left font-medium text-red-600 hover:bg-red-50">ลบโครงการ</button>
+                    </form>
+                </div>
+            </div>
+            @endeditplan
+        </section>
+
+        <div class="flex gap-1 overflow-x-auto px-1" role="tablist" aria-label="ส่วนของโครงการ">
             <button type="button" @click="tab = 'info'" role="tab" :aria-selected="tab === 'info'"
-                    :class="tab === 'info' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'"
-                    class="whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px">ข้อมูลโครงการ</button>
+                    :class="tab === 'info' ? 'bg-ae-navy text-white' : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-800'"
+                    class="whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold">ข้อมูลโครงการ</button>
             @if (auth()->user()->allows('data.comments'))
             <button type="button" @click="tab = 'comment'" role="tab" :aria-selected="tab === 'comment'"
-                    :class="tab === 'comment' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'"
-                    class="whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px">Comment</button>
+                    :class="tab === 'comment' ? 'bg-ae-navy text-white' : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-800'"
+                    class="whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold">Comment</button>
             <button type="button" @click="tab = 'activity'" role="tab" :aria-selected="tab === 'activity'"
-                    :class="tab === 'activity' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'"
-                    class="whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px">Activity Log</button>
+                    :class="tab === 'activity' ? 'bg-ae-navy text-white' : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-800'"
+                    class="whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold">Activity Log</button>
             @endif
         </div>
 

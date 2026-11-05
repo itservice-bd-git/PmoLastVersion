@@ -15,12 +15,16 @@
     $errorKeys = ['delivery_date', 'delivery_end_date', 'delivery_time', 'cabinet_ids', 'method', 'vehicle_types', 'vehicle_types.0', 'crew_size', 'delivery'];
     $deliveryPage = auth()->user()->allows('edit.delivery');
 @endphp
-<section id="delivery" class="scroll-mt-20 rounded-xl border border-slate-200 bg-white p-5" aria-label="การจัดส่ง"
-         x-data="{ f: null, cabs: @js($win['cabinets']), vehicles: @js($win['vehicles']),
+{{-- Shown when asked (หัวโครงการ › "ดูทุกรอบ", สถานะโครงการ › ส่งมอบ, a link to #delivery: the pmo-delivery event, 'show');
+     'new' opens the window of a new round. The window stays in the page. --}}
+<section id="delivery" class="scroll-mt-20" aria-label="การจัดส่ง"
+         x-data="{ f: null, cabs: @js($win['cabinets']), vehicles: @js($win['vehicles']), shown: location.hash === '#delivery',
                    open(v) { this.f = JSON.parse(JSON.stringify(v)); this.$dispatch('open-modal', 'project-delivery'); } }"
+         @pmo-delivery.window="if ($event.detail === 'new') { @if ($canDeliver) open(@js($form(null))) @endif } else { shown = true; $nextTick(() => $el.scrollIntoView({ behavior: 'smooth', block: 'start' })) }"
          @if ($errors->hasAny($errorKeys) && $old)
              x-init="f = { ...@js($form($rounds->firstWhere('id', (int) ($old['_delivery'] ?? 0)))), ...@js(\Illuminate\Support\Arr::except($old, ['_token', '_method', '_delivery', 'cabinet_ids'])), cabinet_ids: (@js($old['cabinet_ids'] ?? [])).map(Number) }; $nextTick(() => $dispatch('open-modal', 'project-delivery'))"
          @endif>
+  <div x-show="shown" x-cloak x-transition.opacity class="rounded-2xl border border-slate-200 bg-white p-5">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span class="inline-flex h-6 items-center rounded bg-teal-700 px-2 text-xs font-extrabold tracking-wide text-white">ส่ง</span>
         <h3 class="text-base font-bold text-ae-navy">การจัดส่ง</h3>
@@ -121,6 +125,9 @@
             @endforeach
         </div>
     @endif
+
+    <div class="mt-3 text-right"><button type="button" @click="shown = false" class="text-sm font-semibold text-slate-500 hover:text-slate-800">ซ่อน</button></div>
+  </div>
 
     @if ($canDeliver)
         @include('projects.partials._delivery-form')

@@ -195,6 +195,10 @@ class PlanningBoard
         // (PM's drafts only for those who book rounds: nobody else is meant to see them yet)
         $this->deliveries = $ids->isEmpty() ? collect() : ProjectDelivery::with('vehicles.vehicle')->whereIn('project_id', $ids)
             ->when(! DeliveryFlow::canBook($user), fn ($q) => $q->where('status', '!=', ProjectDelivery::DRAFT))->orderBy('round')->get()->groupBy('project_id');
+        // the dashboard table, as the projects list: production % (the cabinets' average) and ประเภทงาน
+        $this->production = $ids->isEmpty() ? collect() : Cabinet::whereIn('project_id', $ids)->selectRaw('project_id, avg(progress) as pct, count(*) as n')
+            ->groupBy('project_id')->get()->keyBy('project_id');
+        $this->jobTypes = \App\Models\JobType::pluck('name', 'id');
         $cabinets = $builder ? Cabinet::with('boardStatus')->whereIn('project_id', $ids)->orderBy('sequence')->orderBy('id')->get()->groupBy('project_id') : null;
 
         $tasks = $byProject->map(fn (Collection $rows) => $this->task($rows->first()->cabinetTask->cabinet->project, $rows, $comments, $today, $user, $cabinets))
@@ -344,6 +348,12 @@ class PlanningBoard
 
     private Collection $deliveries;
 
+    /** each project's production % (its cabinets' average, as the projects list) and cabinet count, by project id */
+    private Collection $production;
+
+    /** ประเภทงาน names by id */
+    private Collection $jobTypes;
+
     /** @var Collection<int, Collection> project id => department id => page id of the status Admin / PM set for it (filled per tasks() call) */
     private Collection $deptStatuses;
 
@@ -445,7 +455,8 @@ class PlanningBoard
                 'margin' => $user->allows('data.finance') && $project->margin !== null ? (float) $project->margin : null,
                 'owner' => (string) $project->project_owner, 'salesPerson' => (string) $project->sales_person,
                 'managerId' => $project->project_manager_id, 'paymentTerms' => (string) $project->payment_terms,
-                'jobTypeId' => $project->job_type_id, 'pmoStatus' => $project->status,
+                'jobTypeId' => $project->job_type_id, 'jobType' => (string) ($this->jobTypes->get($project->job_type_id) ?? ''), 'pmoStatus' => $project->status,
+                'production' => (int) round((float) ($this->production->get($project->id)?->pct ?? 0)), 'cabinetCount' => (int) ($this->production->get($project->id)?->n ?? 0),
             ],
             // what is still missing, for "ข้อมูลที่ยังขาด" (and the warning dot on the bar)
             'warnings' => array_filter([

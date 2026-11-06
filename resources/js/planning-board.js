@@ -193,6 +193,14 @@ export default function registerPlanningBoard() {
             flag(t) { return t.priority && t.priority !== 'none' ? PRIORITIES[t.priority].color : ''; },
             chipStyle(hex, done) { return 'background-color:' + hexToRgba(hex, done ? 0.12 : 0.17) + ';border-left-color:' + hex; },
             fmtBE(s) { if (!s) return '-'; const [y, m, d] = s.split('-'); return d + '/' + m + '/' + (Number(y) + 543); },
+            // "04/11/2569", "04–06/11/2569", "30/10/2569 – 02/11/2569" (as ProjectFat::dateRange)
+            fmtRangeBE(a, b) { if (!b || b === a) return this.fmtBE(a); return a.slice(0, 7) === b.slice(0, 7) ? a.slice(8) + '–' + this.fmtBE(b) : this.fmtBE(a) + ' – ' + this.fmtBE(b); },
+            fatDays(f) { return f.end && f.end !== f.date ? diffDays(f.end, f.date) + 1 : 1; },
+            // the projects list's countdown chip under the due date: [text, classes]
+            dueChip(date) {
+                const n = this.daysFromToday(date);
+                return [n < 0 ? 'เลยกำหนด ' + (-n) + ' วัน' : n === 0 ? 'ครบกำหนดวันนี้' : 'เหลือ ' + n + ' วัน', n < 0 ? 'bg-red-100 text-red-700' : n <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'];
+            },
             isStarred(t) { return this.stars.includes(t.id); },
             toggleStar(t) {
                 this.stars = this.isStarred(t) ? this.stars.filter((x) => x !== t.id) : [...this.stars, t.id];

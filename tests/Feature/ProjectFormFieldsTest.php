@@ -107,6 +107,11 @@ class ProjectFormFieldsTest extends TestCase
 
         $info = collect(app(PlanningBoard::class)->tasks($pm))->firstWhere('id', 'p'.$p->id)['info'];
         $this->assertSame(['02-111-2222', 500000.0, 50000.0], [$info['customerPhone'], $info['contractValue'], $info['margin']]);
+        // the dashboard table, as the projects list: ประเภทงาน, production % and cabinets
+        \App\Models\Cabinet::forceCreate(['project_id' => $p->id, 'mo_no' => 'MO-A', 'cabinet_name' => 'A', 'quantity' => 1, 'status' => 'in_progress', 'progress' => 40]);
+        \App\Models\Cabinet::forceCreate(['project_id' => $p->id, 'mo_no' => 'MO-B', 'cabinet_name' => 'B', 'quantity' => 1, 'status' => 'completed', 'progress' => 100]);
+        $info = collect(app(PlanningBoard::class)->tasks($pm))->firstWhere('id', 'p'.$p->id)['info'];
+        $this->assertSame(['Service', 70, 2], [$info['jobType'], $info['production'], $info['cabinetCount']]);
 
         $op = fn (array $f) => ['type' => 'project', 'taskId' => 'p'.$p->id, 'fields' => $f];
         $this->assertTrue($sync->apply($pm, [$op(['contractValue' => '750000', 'margin' => '', 'customerPhone' => '089'])])[0]['ok']);

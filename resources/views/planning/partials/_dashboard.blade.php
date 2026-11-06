@@ -133,29 +133,93 @@
             <div>
                 <h4 class="text-sm font-bold text-slate-900" x-text="'โปรเจคทั้งหมด (' + d.rows.length + ')'"></h4>
                 <div class="mt-2 overflow-x-auto rounded-xl border border-slate-200">
+                    {{-- the same table as หน้าโครงการ › รายการโครงการ (projects/index): its columns, chips and colours --}}
                     <table class="min-w-full text-sm">
-                        <thead class="bg-slate-50 text-xs text-slate-500"><tr>
-                            <th class="px-4 py-2 text-left font-semibold">โปรเจค</th><th class="px-4 py-2 text-left font-semibold">วันครบกำหนด</th><th class="px-4 py-2 text-left font-semibold">FAT</th><th class="px-4 py-2 text-left font-semibold">สถานะ</th>
-                            <th class="px-4 py-2 text-left font-semibold">แผนก</th><th class="px-4 py-2 text-left font-semibold">เช็คลิสต์</th><th class="px-4 py-2 text-right font-semibold">ตู้</th>
-                        </tr></thead>
+                        <thead>
+                            <tr class="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold text-slate-500">
+                                <th class="px-5 py-2.5">โครงการ</th>
+                                <th class="px-4 py-2.5">ลูกค้า</th>
+                                <th class="px-4 py-2.5">ประเภทงาน</th>
+                                <th class="px-4 py-2.5">กำหนดส่ง</th>
+                                <th class="px-4 py-2.5">FAT</th>
+                                <th class="px-4 py-2.5">สถานะ</th>
+                                <th class="px-4 py-2.5">แผนก</th>
+                                <th class="w-44 min-w-[9rem] whitespace-nowrap px-4 py-2.5">การผลิต</th>
+                                <th class="px-4 py-2.5 text-right">ตู้</th>
+                            </tr>
+                        </thead>
                         <tbody class="divide-y divide-slate-100">
                             <template x-for="t in d.rows" :key="t.id">
-                                <tr class="hover:bg-slate-50 cursor-pointer" @click="openModal(t.id)">
-                                    <td class="px-4 py-2.5"><span class="font-semibold text-blue-600" x-text="t.so"></span>
-                                        <button type="button" @click.stop="dashProject = t.id; window.scrollTo({ top: 0, behavior: 'smooth' })" class="ml-1.5 rounded border border-slate-200 px-1.5 text-[12px] text-slate-500 hover:border-blue-400 hover:text-blue-600" title="แดชบอร์ดของโครงการนี้">📊</button>
-                                        <p class="text-xs text-slate-500" x-text="t.title"></p></td>
-                                    <td class="px-4 py-2.5 whitespace-nowrap"><span x-text="fmtBE(dueFor(t))"></span><p x-show="overdueFor(t)" class="text-[12px] font-semibold text-red-600" x-text="'เลย ' + Math.abs(daysFromToday(dueFor(t))) + ' วัน'"></p></td>
-                                    {{-- วัน FAT: the latest round, as หน้าโครงการ › รายการโครงการ --}}
-                                    <td class="px-4 py-2.5 whitespace-nowrap"><span x-show="!t.fat" class="text-slate-400">-</span><template x-if="t.fat"><div>
-                                        <span x-text="fmtBE(t.fat.date)"></span><p class="text-[12px]"><span class="rounded-full px-2 py-0.5 font-semibold" :class="fatPill(t)" :style="'--c:' + fatColor(t)" x-text="fatStatus(t)"></span> <span class="text-slate-500" x-text="[t.fat.time, t.fat.round > 1 ? 'รอบ ' + t.fat.round : ''].filter(Boolean).join(' · ')"></span></p>
-                                        <p x-show="fatLate(t)" class="text-[12px] font-semibold text-amber-700" x-text="evState('fat', 'late').name"></p></div></template></td>
-                                    <td class="px-4 py-2.5 whitespace-nowrap"><span class="rounded-full px-2.5 py-0.5 text-xs font-semibold" :style="'background-color:' + statusColor(t) + '26;color:' + statusColor(t)" x-text="statusOf(t).name"></span></td>
-                                    <td class="px-4 py-2.5 text-xs text-slate-600"><template x-for="s in t.deptStages" :key="s.deptId"><span class="inline-flex items-center gap-1 mr-2"><span class="w-2 h-2 rounded-full" :style="'background-color:' + deptOf(s.deptId).color"></span><span :class="s.done ? 'line-through text-slate-400' : ''" x-text="deptOf(s.deptId).name"></span></span></template></td>
-                                    <td class="px-4 py-2.5 whitespace-nowrap"><div class="flex items-center gap-2 w-32"><div class="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden"><div class="h-1.5 rounded-full bg-emerald-500" :style="'width:' + progress(t, dept || null).pct + '%'"></div></div><span class="text-xs text-slate-500 tabular-nums" x-text="progress(t, dept || null).pct + '%'"></span></div></td>
-                                    <td class="px-4 py-2.5 text-right font-semibold tabular-nums" x-text="t.subtasks.length"></td>
+                                <tr class="cursor-pointer hover:bg-blue-50/40" @click="openModal(t.id)">
+                                    <td class="px-5 py-3">
+                                        <div class="flex items-start gap-3">
+                                            {{-- the status ring in front of every project --}}
+                                            <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2" :style="'border-color:' + statusColor(t)" aria-hidden="true">
+                                                <span x-show="isDone(t)" class="h-2 w-2 rounded-full" :style="'background:' + statusColor(t)"></span>
+                                            </span>
+                                            <div class="min-w-0">
+                                                <p class="flex items-center gap-2 font-bold text-ae-navy">
+                                                    <span x-text="t.so"></span>
+                                                    <span x-show="t.priority === 'urgent' || t.priority === 'high'" class="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-semibold"
+                                                          :class="t.priority === 'urgent' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'">
+                                                        <svg class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3a1 1 0 0 1 1 1v.3c1.7-.9 3.6-.9 5.6 0 1.8.8 3.5.8 5.3-.1A1 1 0 0 1 18.3 5v8.2a1 1 0 0 1-.5.9c-2.4 1.3-4.9 1.4-7.2.4-1.6-.7-3.1-.7-4.6.1V20a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1z"/></svg><span x-text="t.priority === 'urgent' ? 'ด่วน' : 'สูง'"></span>
+                                                    </span>
+                                                    <button type="button" @click.stop="dashProject = t.id; window.scrollTo({ top: 0, behavior: 'smooth' })" class="rounded border border-slate-200 px-1.5 text-[12px] font-normal text-slate-500 hover:border-blue-400 hover:text-blue-600" title="แดชบอร์ดของโครงการนี้" aria-label="แดชบอร์ดของโครงการนี้">📊</button>
+                                                </p>
+                                                <p class="max-w-[12rem] truncate text-xs text-slate-500" :title="t.title" x-text="t.title"></p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="max-w-[14rem] px-4 py-3 text-slate-600"><span class="line-clamp-2" x-text="(t.info && t.info.customer) || '-'"></span></td>
+                                    <td class="max-w-[10rem] px-4 py-3 text-slate-600"><span class="line-clamp-2" x-text="(t.info && t.info.jobType) || '-'"></span></td>
+                                    <td class="whitespace-nowrap px-4 py-3">
+                                        <div class="tabular-nums text-slate-700" x-text="dueFor(t) ? fmtBE(dueFor(t)) : '-'"></div>
+                                        <template x-if="dueFor(t) && !isDone(t)">
+                                            <span class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold" :class="dueChip(dueFor(t))[1]" x-text="dueChip(dueFor(t))[0]"></span>
+                                        </template>
+                                    </td>
+                                    {{-- วัน FAT: the latest round, as the projects list --}}
+                                    <td class="whitespace-nowrap px-4 py-3">
+                                        <span x-show="!t.fat" class="text-slate-400">-</span>
+                                        <template x-if="t.fat">
+                                            <div>
+                                                <div class="tabular-nums text-slate-700"><span x-text="fmtRangeBE(t.fat.date, t.fat.end)"></span><span x-show="t.fat.time" class="text-slate-500" x-text="' · ' + t.fat.time + ' น.'"></span></div>
+                                                <span class="st-pill mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold" :style="'--c:' + fatColor(t)" x-text="fatStatus(t)"></span>
+                                                <span class="text-[12px] tabular-nums text-slate-500" x-text="[t.fat.end && t.fat.end !== t.fat.date ? (fatDays(t.fat)) + ' วัน' : '', t.fat.round > 1 ? 'รอบ ' + t.fat.round : ''].filter(Boolean).join(' · ')"></span>
+                                                <div x-show="fatLate(t)" class="mt-0.5 text-[12px] font-semibold text-amber-700">หลังวันกำหนดส่ง</div>
+                                            </div>
+                                        </template>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold" :style="'background:' + statusColor(t) + '1f;color:color-mix(in srgb, ' + statusColor(t) + ' 70%, #0f172a)'">
+                                            <span class="h-1.5 w-1.5 rounded-full" :style="'background:' + statusColor(t)"></span><span x-text="statusOf(t).name"></span>
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <div x-show="t.deptStages.length" class="flex items-center" :title="t.deptStages.map((s) => deptOf(s.deptId).name).join(', ')">
+                                            <template x-for="s in t.deptStages.slice(0, 6)" :key="s.deptId">
+                                                <span class="-ml-1 h-3.5 w-3.5 rounded-full ring-2 ring-white first:ml-0" :style="'background:' + deptOf(s.deptId).color"></span>
+                                            </template>
+                                            <span x-show="t.deptStages.length > 6" class="ml-1.5 text-xs font-medium text-slate-500" x-text="'+' + (t.deptStages.length - 6)"></span>
+                                        </div>
+                                        <span x-show="!t.deptStages.length" class="text-xs text-slate-400">ยังไม่จ่ายงาน</span>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-2">
+                                            <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                                                <div class="h-1.5 rounded-full" :class="(t.info ? t.info.production : 0) >= 100 ? 'bg-emerald-500' : 'bg-blue-500'" :style="'width:' + (t.info ? t.info.production : 0) + '%'"></div>
+                                            </div>
+                                            <span class="w-9 text-right text-xs font-bold tabular-nums text-slate-700" x-text="(t.info ? t.info.production : 0) + '%'"></span>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3 text-right">
+                                        <span class="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-600">
+                                            <svg class="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg><span x-text="t.info && t.info.cabinetCount != null ? t.info.cabinetCount : t.subtasks.length"></span>
+                                        </span>
+                                    </td>
                                 </tr>
                             </template>
-                            <tr x-show="d.rows.length === 0"><td colspan="7" class="px-4 py-8 text-center text-slate-400">ยังไม่มีโปรเจคตามเงื่อนไขที่เลือก</td></tr>
+                            <tr x-show="d.rows.length === 0"><td colspan="9" class="px-5 py-10 text-center text-slate-400">ยังไม่มีโปรเจคตามเงื่อนไขที่เลือก</td></tr>
                         </tbody>
                     </table>
                 </div>

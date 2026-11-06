@@ -147,6 +147,10 @@ class ProjectDeliveryTest extends TestCase
         $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('20/11/2569 · 09:00 น.')->assertSee('รอแผนกจัดส่งจัดรถ / คน')->assertSee('ขอ 6 ล้อเครน + กระบะ · 3 คน');
         $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk()->assertViewHas('tab', 'waiting')
             ->assertSee('SO-1')->assertSee('PM ขอ')->assertSee('6 ล้อเครน + กระบะ · 3 คน')->assertSee('จัดรถ / คน')->assertSee('ไม่รับงาน')->assertDontSee('เลือกวันส่ง');
+
+        // each cabinet with its name, type, size and how many
+        $this->cab1->forceFill(['cabinet_name' => 'MDB-1 ตู้เมน', 'cabinet_type' => 'MDB', 'size' => '80x200x60 ซม.', 'quantity' => 2])->save();
+        $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk()->assertSeeInOrder(['○ ห่อ', 'MO-1', 'MDB-1 ตู้เมน', 'MDB · ขนาด 80x200x60 ซม. · 2 ตู้', 'MO-2', 'B']);
     }
 
     public function test_the_delivery_department_puts_several_vehicles_and_people_on_it_and_pm_hears_what_differs(): void

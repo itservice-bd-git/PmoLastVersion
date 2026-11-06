@@ -49,8 +49,8 @@ class DeliveryController extends Controller
         }
         $vehicles = ProjectDeliveryController::vehicles($all->flatMap(fn ($d) => $d->vehicles->pluck('vehicle_id'))->filter()->unique()->values()->all());
         $people = $all->flatMap(fn ($d) => $d->people())->merge(array_column($vehicles, 'driver'))->filter()->unique()->sort()->values();
-        $names = Cabinet::whereIn('id', $all->flatMap(fn ($d) => $d->cabinet_ids ?? [])->unique())->get(['id', 'mo_no', 'cabinet_name'])
-            ->mapWithKeys(fn ($c) => [$c->id => $c->mo_no ?: $c->cabinet_name]);
+        // what the delivery department loads: each cabinet's MO, its name, type, size and how many
+        $names = Cabinet::whereIn('id', $all->flatMap(fn ($d) => $d->cabinet_ids ?? [])->unique())->get(['id', 'mo_no', 'cabinet_name', 'cabinet_type', 'size', 'quantity'])->keyBy('id');
 
         return view('deliveries.index', [
             'tabs' => $tabs, 'tab' => $tab, 'round' => $round,
@@ -143,7 +143,9 @@ class DeliveryController extends Controller
         return [
             'id' => $d->id, 'status' => $d->status, 'state' => $d->stateLabel(), 'color' => $d->stateColor(),
             'project' => $d->project->project_no, 'name' => $d->project->project_name, 'round' => $d->round,
-            'cabinets' => collect($d->cabinet_ids ?? [])->map(fn ($id) => ['id' => (int) $id, 'name' => $names[$id] ?? 'ตู้ที่ลบแล้ว', 'packed' => $d->isPacked((int) $id),
+            'cabinets' => collect($d->cabinet_ids ?? [])->map(fn ($id) => ['id' => (int) $id, 'name' => ($c = $names->get($id)) ? ($c->mo_no ?: $c->cabinet_name) : 'ตู้ที่ลบแล้ว',
+                'model' => $c && $c->mo_no ? (string) $c->cabinet_name : '', 'type' => (string) $c?->cabinet_type, 'size' => (string) $c?->size, 'qty' => (int) ($c?->quantity ?? 1),
+                'packed' => $d->isPacked((int) $id),
                 'at' => isset(($d->packed ?? [])[$id]) ? Carbon::parse($d->packed[$id])->format('d/m H:i') : ''])->values()->all(),
             'site' => (string) $d->site, 'contact' => collect([$d->contact_name, $d->contact_phone])->filter()->implode(' '), 'note' => (string) $d->note,
             'method' => $d->method, 'transport' => $d->transport() ?? 'ยังไม่มีรถ', 'carrier' => (string) $d->carrier,

@@ -70,30 +70,49 @@
                     <div class="min-w-0">
                         <p class="truncate text-sm font-bold text-slate-900">{{ $row['project'] }} <span class="font-semibold text-slate-600">{{ $row['name'] }}</span></p>
                         <p class="text-[13px] text-slate-600">รอบ {{ $row['round'] }} · {{ count($row['cabinets']) }} ตู้{{ $row['site'] ? ' · '.$row['site'] : '' }}</p>
-                        <div class="mt-1.5 flex flex-wrap gap-1.5">
-                            @foreach ($row['cabinets'] as $c)
-                                @if ($packable)
-                                    <form method="POST" action="{{ $row['urls']['pack'] }}">
-                                        @csrf
-                                        <input type="hidden" name="cabinet_ids[]" value="{{ $c['id'] }}"><input type="hidden" name="packed" value="{{ $c['packed'] ? 0 : 1 }}">
-                                        <button class="inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold tabular-nums {{ $c['packed'] ? 'border-transparent bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-500 hover:text-emerald-800' }}"
-                                                title="{{ $c['packed'] ? 'ห่อแล้ว '.$c['at'].' · กดเพื่อเอาออก' : 'กดเมื่อห่อตู้นี้เสร็จ' }}" aria-pressed="{{ $c['packed'] ? 'true' : 'false' }}">
-                                            {{ $c['packed'] ? '✓' : '○' }} {{ $c['name'] }}
-                                        </button>
-                                    </form>
-                                @else
-                                    <span class="inline-flex h-7 items-center rounded-full px-2.5 text-xs font-semibold tabular-nums {{ $c['packed'] || in_array($row['status'], ['departed', 'delivered'], true) ? 'bg-emerald-50 text-emerald-800' : 'border border-slate-300 text-slate-700' }}">{{ $c['name'] }}</span>
-                                @endif
+                        {{-- each cabinet on its own line: MO, name, type, size, how many - the ห่อแล้ว button in front (more than 4: the rest folded) --}}
+                        <ul class="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200" x-data="{ all: false }">
+                            @foreach ($row['cabinets'] as $i => $c)
+                                @php $gone = in_array($row['status'], ['departed', 'delivered'], true); @endphp
+                                <li class="flex items-start gap-2.5 px-2.5 py-2" @if ($i >= 4) x-show="all" x-cloak @endif>
+                                    @if ($packable)
+                                        <form method="POST" action="{{ $row['urls']['pack'] }}" class="shrink-0">
+                                            @csrf
+                                            <input type="hidden" name="cabinet_ids[]" value="{{ $c['id'] }}"><input type="hidden" name="packed" value="{{ $c['packed'] ? 0 : 1 }}">
+                                            <button class="inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold {{ $c['packed'] ? 'border-transparent bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-500 hover:text-emerald-800' }}"
+                                                    title="{{ $c['packed'] ? 'ห่อแล้ว '.$c['at'].' · กดเพื่อเอาออก' : 'กดเมื่อห่อตู้นี้เสร็จ' }}" aria-pressed="{{ $c['packed'] ? 'true' : 'false' }}" aria-label="{{ $c['packed'] ? 'ห่อแล้ว' : 'ห่อ' }} {{ $c['name'] }}">
+                                                {{ $c['packed'] ? '✓ ห่อแล้ว' : '○ ห่อ' }}
+                                            </button>
+                                        </form>
+                                    @else
+                                        <span class="inline-flex h-8 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold {{ $c['packed'] || $gone ? 'bg-emerald-50 text-emerald-800' : 'border border-slate-300 text-slate-600' }}">{{ $c['packed'] || $gone ? '✓ ห่อแล้ว' : '○ ยังไม่ห่อ' }}</span>
+                                    @endif
+                                    <div class="min-w-0 flex-1">
+                                        <p class="flex flex-wrap items-baseline gap-x-2 text-sm">
+                                            <span class="font-bold tabular-nums text-slate-900">{{ $c['name'] }}</span>
+                                            @if ($c['model'])<span class="min-w-0 break-words text-slate-700">{{ $c['model'] }}</span>@endif
+                                        </p>
+                                        @if ($c['type'] || $c['size'] || $c['qty'] > 1 || ($c['packed'] && $c['at']))
+                                            <p class="text-xs text-slate-600">{{ collect([$c['type'], $c['size'] ? 'ขนาด '.$c['size'] : null, $c['qty'] > 1 ? $c['qty'].' ตู้' : null, $c['packed'] && $c['at'] ? 'ห่อ '.$c['at'] : null])->filter()->implode(' · ') }}</p>
+                                        @endif
+                                    </div>
+                                </li>
                             @endforeach
-                            @if ($packable && $row['packedCount'] < count($row['cabinets']) - 1)
+                            @if (count($row['cabinets']) > 4)
+                                <li><button type="button" @click="all = ! all" class="flex h-9 w-full items-center px-2.5 text-xs font-semibold text-teal-700 hover:bg-teal-50" :aria-expanded="all"
+                                            x-text="all ? 'ย่อ' : 'ดูอีก {{ count($row['cabinets']) - 4 }} ตู้'"></button></li>
+                            @endif
+                        </ul>
+                        @if ($packable && $row['packedCount'] < count($row['cabinets']) - 1)
+                            <div class="mt-1.5">
                                 <form method="POST" action="{{ $row['urls']['pack'] }}">
                                     @csrf
                                     @foreach ($row['cabinets'] as $c)@unless ($c['packed'])<input type="hidden" name="cabinet_ids[]" value="{{ $c['id'] }}">@endunless @endforeach
                                     <input type="hidden" name="packed" value="1">
                                     <button class="inline-flex h-8 items-center rounded-full px-2.5 text-xs font-semibold text-teal-700 hover:bg-teal-50">ห่อครบทุกตู้</button>
                                 </form>
-                            @endif
-                        </div>
+                            </div>
+                        @endif
                         {{-- the four steps --}}
                         <ol class="mt-2 grid max-w-sm grid-cols-4 gap-1" aria-label="ขั้น: {{ $row['step']['text'] }}">
                             @foreach ($steps as $i => $label)
@@ -301,7 +320,7 @@
                         <legend class="text-sm font-semibold text-slate-800">ตู้ที่ส่งถึง <span class="font-normal text-slate-500">(ตู้ที่ไม่ได้ส่ง เอาติ๊กออก PM จะนัดรอบใหม่ได้)</span></legend>
                         <div class="mt-1.5 grid grid-cols-2 gap-x-4 text-sm text-slate-700">
                             <template x-for="c in r.cabinets" :key="c.id">
-                                <label class="flex min-h-[2.25rem] items-center gap-2"><input type="checkbox" name="cabinet_ids[]" :value="c.id" x-model.number="dlv.cabinet_ids" class="rounded"><span x-text="c.name"></span></label>
+                                <label class="flex min-h-[2.25rem] items-center gap-2"><input type="checkbox" name="cabinet_ids[]" :value="c.id" x-model.number="dlv.cabinet_ids" class="rounded"><span x-text="c.name + (c.model ? ' · ' + c.model : '')"></span></label>
                             </template>
                         </div>
                     </fieldset>

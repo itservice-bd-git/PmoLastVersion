@@ -75,11 +75,11 @@ class DeliveryFlow
      * delivery department is told to check they are free that day; a new way of sending takes them off (รอจัดรถ again).
      * Cabinets taken out lose their packing; once แจ้งเปิดบิล the cabinets stay as they are.
      */
-    public function revise(ProjectDelivery $delivery, array $data, User $actor, bool $send = false): ProjectDelivery
+    public function revise(ProjectDelivery $delivery, array $data, User $actor, bool $send = false, array $move = []): ProjectDelivery
     {
         $this->assert(self::canBook($actor), 'แก้รอบส่งได้เฉพาะ Admin / PM');
 
-        return DB::transaction(function () use ($delivery, $data, $actor, $send) {
+        return DB::transaction(function () use ($delivery, $data, $actor, $send, $move) {
             $d = $this->lock($delivery);
             $this->assert(in_array($d->status, [ProjectDelivery::DRAFT, ProjectDelivery::WAITING, ProjectDelivery::REJECTED, ProjectDelivery::SCHEDULED], true),
                 'รอบนี้ออกจากโรงงานแล้ว แก้วัน / รถไม่ได้ · ย้อนสถานะได้ที่หน้า "งานจัดส่ง"');
@@ -92,7 +92,7 @@ class DeliveryFlow
 
                 return $d;
             }
-            $before = ['when' => $d->when(), 'request' => $d->request(), 'cabinets' => array_map('intval', $d->cabinet_ids ?? []), 'method' => $d->method, 'status' => $d->status];
+            $before = ['days' => EventDates::snapshot($d), 'when' => $d->when(), 'request' => $d->request(), 'cabinets' => array_map('intval', $d->cabinet_ids ?? []), 'method' => $d->method, 'status' => $d->status];
             if ($d->billed_at && isset($data['cabinet_ids']) && array_values(array_map('intval', $data['cabinet_ids'])) != $before['cabinets']) {
                 throw ValidationException::withMessages(['cabinet_ids' => 'รอบนี้แจ้งเปิดบิลแล้ว เปลี่ยนตู้ไม่ได้ · ให้แผนกจัดส่งย้อนขั้นก่อน']);
             }
@@ -119,8 +119,9 @@ class DeliveryFlow
             $d->load('vehicles.vehicle');
 
             $moved = $before['when'] !== $d->when();
+            $kept = $moved ? app(EventDates::class)->record($d, $before['days'], $actor, $move) : null;   // ประวัติการเลื่อน
             $changes = array_filter([
-                $moved ? "เลื่อนวันส่งจาก {$before['when']} เป็น {$d->when()}" : null,
+                $moved ? "เลื่อนวันส่งจาก {$before['when']} เป็น {$d->when()}".EventDates::why($kept) : null,
                 $before['method'] !== $d->method ? 'วิธีส่ง: '.ProjectDelivery::methodName($d->method) : null,
                 $before['request'] !== $d->request() && $d->request() ? 'ขอ '.$d->request() : null,
                 $before['cabinets'] !== array_map('intval', $d->cabinet_ids ?? []) ? count($d->cabinet_ids).' ตู้' : null,

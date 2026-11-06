@@ -14,6 +14,7 @@
     $old = session()->getOldInput();
     $errorKeys = ['delivery_date', 'delivery_end_date', 'delivery_time', 'cabinet_ids', 'method', 'vehicle_types', 'vehicle_types.0', 'crew_size', 'delivery'];
     $deliveryPage = auth()->user()->allows('edit.delivery');
+    $dlMoves = \App\Services\EventDates::history($project, \App\Services\EventDates::DELIVERY);   // ประวัติการเลื่อน, by round
 @endphp
 {{-- A panel over the page when asked (หัวโครงการ › "ดูทุกรอบ", สถานะโครงการ › ส่งมอบ, a link to #delivery: the pmo-delivery event, 'show');
      'new' opens the window of a new round. The window stays in the page. --}}
@@ -25,13 +26,18 @@
              x-init="f = { ...@js($form($rounds->firstWhere('id', (int) ($old['_delivery'] ?? 0)))), ...@js(\Illuminate\Support\Arr::except($old, ['_token', '_method', '_delivery', 'cabinet_ids'])), cabinet_ids: (@js($old['cabinet_ids'] ?? [])).map(Number) }; $nextTick(() => $dispatch('open-modal', 'project-delivery'))"
          @endif>
   {{-- a panel from the right, over the page (its forms' windows open above it) --}}
-  <div x-show="shown" x-cloak class="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="การจัดส่ง"
-       x-effect="document.body.classList.toggle('overflow-hidden', shown)" @keydown.escape.window="shown = false">
-    <div x-show="shown" x-transition.opacity.duration.200ms class="absolute inset-0 bg-slate-900/40" @click="shown = false" aria-hidden="true"></div>
-    <div x-show="shown" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
-         x-transition:leave="transition ease-in duration-150" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
-         x-init="$watch('shown', (v) => v && $nextTick(() => $refs.closeDelivery.focus()))"
-         class="relative flex h-full w-full max-w-2xl flex-col bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)]">
+  {{-- Snappy: the backdrop fades and the panel slides (transform only); focus moves without scrolling the page; the scrollbar's
+       width is kept while the page is locked, so nothing behind jumps; Esc closes a form open above it first, not both --}}
+  <div x-show="shown" x-cloak role="dialog" aria-modal="true" aria-label="การจัดส่ง"
+       x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+       x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+       class="fixed inset-0 z-40 flex justify-end bg-slate-900/40" @click.self="shown = false"
+       x-effect="const w = innerWidth - document.documentElement.clientWidth; document.body.classList.toggle('overflow-hidden', shown); document.body.style.paddingRight = shown && w > 0 ? w + 'px' : ''"
+       @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) shown = false">
+    <div x-show="shown" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+         x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
+         x-init="$watch('shown', (v) => v && $nextTick(() => $refs.closeDelivery.focus({ preventScroll: true })))"
+         class="relative flex h-full w-full max-w-2xl flex-col bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)] will-change-transform">
       <button type="button" x-ref="closeDelivery" @click="shown = false" aria-label="ปิด"
               class="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800">
           <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -70,6 +76,8 @@
                             <span class="st-pill rounded-full px-2.5 py-0.5 text-xs font-bold" style="--c: {{ $d->stateColor() }}">{{ $d->stateLabel() }}{{ $d->status === 'departed' && $d->departed_at ? ' '.$d->departed_at->format('H:i') : '' }}</span>
                             @if ($d->status === 'delivered')<span class="text-xs text-slate-500">นัด {{ $d->when() }}</span>@endif
                             @if ($d->isOverdue())<span class="text-xs font-semibold text-orange-700">{{ $d->isOpen() ? 'เลยวันส่งแล้ว · ยังไม่ได้จัดรถ' : 'เลยวันนัดแล้ว' }}</span>@endif
+                            @php $moves = $dlMoves->get($d->id, collect()); $count = $moves->whereNotNull('n')->count(); @endphp
+                            @if ($count)<span class="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-800">เลื่อน {{ $count }} ครั้ง</span>@endif
                         </p>
                         @if ($d->status === 'rejected')
                             <p class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800">แผนกจัดส่งไม่รับงาน · {{ $d->rejected_reason }}{{ $d->rejected_note ? ' · '.$d->rejected_note : '' }} <span class="text-red-600">· โดย {{ $d->rejecter?->name }} {{ $d->rejected_at?->format('d/m H:i') }}</span></p>
@@ -118,6 +126,15 @@
                                 <dt class="text-slate-500">หมายเหตุ</dt><dd>{{ $d->note }}</dd>
                             @endif
                         </dl>
+                        @if ($moves->isNotEmpty())
+                            <details class="group rounded-lg border border-slate-200">
+                                <summary class="flex min-h-[2.5rem] cursor-pointer list-none items-center gap-2 px-3 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                                    <svg class="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m9 6 6 6-6 6"/></svg>
+                                    ประวัติการเลื่อนวัน ({{ $moves->count() }})
+                                </summary>
+                                <div class="border-t border-slate-100 px-3">@include('projects.partials._date-moves', ['moves' => $moves])</div>
+                            </details>
+                        @endif
                     </div>
                     @if ($canDeliver || $deliveryPage)
                         <div class="col-span-2 flex flex-wrap gap-2 sm:col-span-1 sm:flex-col sm:items-end">

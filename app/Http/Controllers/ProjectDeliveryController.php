@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cabinet;
+use App\Models\EventDateChange;
 use App\Models\Project;
 use App\Models\ProjectDelivery;
 use App\Models\Vehicle;
 use App\Services\DeliveryFlow;
+use App\Services\EventDates;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -46,7 +48,8 @@ class ProjectDeliveryController extends Controller
         $this->authorizeEdit($request);
         $draft = $delivery->status === ProjectDelivery::DRAFT;
         $send = ! $draft || $this->sending($request);   // a round already sent stays sent
-        $this->flow->revise($delivery, $this->validated($request, $delivery->project, $delivery, $send), $request->user(), $draft && $send);
+        $move = $request->validate(EventDates::rules());   // why the day moved (ประวัติการเลื่อน)
+        $this->flow->revise($delivery, $this->validated($request, $delivery->project, $delivery, $send), $request->user(), $draft && $send, $move);
 
         return $this->done($request, match (true) {
             $draft => $send ? 'ส่งให้แผนกจัดส่งแล้ว' : 'บันทึกร่างการจัดส่งแล้ว',
@@ -123,6 +126,10 @@ class ProjectDeliveryController extends Controller
                 'by' => (string) $d->rejecter?->name, 'at' => $d->rejected_at?->format('d/m H:i')] : null,
             'locked' => $d && in_array($d->status, [ProjectDelivery::DEPARTED, ProjectDelivery::DELIVERED], true),
             'deleteUrl' => $d ? route('project-deliveries.destroy', $d) : null,
+            // a move of a sent round's day: postpone / correct, why (ประวัติการเลื่อน: EventDates)
+            'was_time' => (string) $d?->delivery_time,
+            'moves' => $d ? EventDateChange::where('event', 'delivery')->where('event_id', $d->id)->where('kind', EventDateChange::POSTPONE)->count() : 0,
+            'move_kind' => EventDateChange::POSTPONE, 'move_reason_id' => 0, 'move_note' => '',
         ];
     }
 

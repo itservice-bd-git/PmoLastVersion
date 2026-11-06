@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\Project;
 use App\Models\ProjectFat;
+use App\Services\EventDates;
 use App\Services\PlanningBoard;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -15,6 +16,8 @@ use Illuminate\Validation\Rule;
  */
 class ProjectFatController extends Controller
 {
+    public function __construct(private EventDates $dates) {}
+
     /** The FAT window on its own, for Planning's project window to open (it saves through store() / update() as JSON). */
     public function form(Request $request, Project $project)
     {
@@ -39,11 +42,13 @@ class ProjectFatController extends Controller
     public function update(Request $request, ProjectFat $fat)
     {
         $this->authorizeEdit($request);
-        $before = ['when' => $fat->when(), 'status' => $fat->statusLabel()];
+        $before = ['when' => $fat->when(), 'status' => $fat->statusLabel(), 'days' => EventDates::snapshot($fat)];
+        $move = $request->validate(EventDates::rules());
         $fat->update($this->validated($request, $fat->project));
+        $moved = $this->dates->record($fat, $before['days'], $request->user(), $move);   // ประวัติการเลื่อน
 
         $changes = array_filter([
-            $before['when'] !== $fat->when() ? "เลื่อนจาก {$before['when']} เป็น {$fat->when()}" : null,
+            $before['when'] !== $fat->when() ? "เลื่อนจาก {$before['when']} เป็น {$fat->when()}".EventDates::why($moved) : null,
             $before['status'] !== $fat->statusLabel() ? "สถานะ {$before['status']} → {$fat->statusLabel()}" : null,
         ]);
         $this->log($request, $fat->project, "วัน FAT รอบที่ {$fat->round}: ".($changes ? implode(' · ', $changes) : 'แก้รายละเอียด'));

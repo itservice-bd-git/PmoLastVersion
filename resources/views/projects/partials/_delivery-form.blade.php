@@ -7,7 +7,7 @@
         <form method="POST" :action="f.url" class="space-y-4 p-6"
               x-data="{ get unfinished() { return cabs.filter((c) => f.cabinet_ids.includes(c.id) && c.progress < 100); },
                         // a sent round's days changed (from - to; no end = one day)
-                        get moved() { return !!f.was && (f.delivery_date + '|' + (f.delivery_end_date && f.delivery_end_date > f.delivery_date ? f.delivery_end_date : f.delivery_date)) !== f.was; } }">
+                        get moved() { return !!f.was && ((f.delivery_date + '|' + (f.delivery_end_date && f.delivery_end_date > f.delivery_date ? f.delivery_end_date : f.delivery_date)) !== f.was || (f.delivery_time || '') !== (f.was_time || '')); } }">
             @csrf
             <input type="hidden" name="_method" :value="f.verb">
             <input type="hidden" name="_delivery" :value="f.id || ''">{{-- which round to reopen on a validation error (_delivery) --}}
@@ -69,7 +69,8 @@
                                class="mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal tabular-nums">
                     </label>
                 </div>
-                <p x-show="moved" class="-mt-2 text-xs font-semibold text-amber-800" x-text="'เลื่อนวันส่งจาก ' + f.was_text + ' · บันทึกลงประวัติของโครงการ'"></p>
+                <p x-show="moved" class="-mt-2 text-xs font-semibold text-amber-800" x-text="'เลื่อนวันส่งจาก ' + f.was_text + ' · บันทึกลงประวัติการเลื่อน'"></p>
+                @include('projects.partials._date-move-fields')
                 {{-- the kinds of vehicle (several) and how many people --}}
                 <fieldset x-show="f.method === 'company'">
                     <legend class="text-sm font-semibold text-slate-800">ประเภทรถที่ต้องใช้<span x-show="f.types.length"> *</span> <span class="font-normal text-slate-500">(เลือกได้หลายแบบ)</span></legend>

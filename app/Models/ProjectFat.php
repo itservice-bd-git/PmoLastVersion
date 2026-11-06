@@ -104,6 +104,10 @@ class ProjectFat extends Model
             'fat_date' => $f?->fat_date->format('Y-m-d') ?? '', 'fat_end_date' => $f?->fat_end_date?->format('Y-m-d') ?? '', 'fat_time' => (string) $f?->fat_time, 'status' => $f?->status ?? 'scheduled',
             'scope' => $f?->cabinet_ids ? 'some' : 'all', 'cabinet_ids' => array_map('intval', $f?->cabinet_ids ?? []), 'note' => (string) $f?->note,
             'deleteUrl' => $f ? route('project-fats.destroy', $f) : null,
+            // its day as set, to tell a move (ประวัติการเลื่อน: App\Services\EventDates)
+            'was' => $f ? implode('|', [$f->fat_date->format('Y-m-d'), (string) $f->fat_end_date?->format('Y-m-d'), (string) $f->fat_time]) : '', 'was_text' => $f ? $f->when() : '',
+            'moves' => $f ? EventDateChange::where('event', 'fat')->where('event_id', $f->id)->where('kind', EventDateChange::POSTPONE)->count() : 0,
+            'move_kind' => EventDateChange::POSTPONE, 'move_reason_id' => 0, 'move_note' => '',
         ];
     }
 }

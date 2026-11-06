@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\ActivityLog;
 use App\Models\Cabinet;
 use App\Models\Department;
+use App\Models\EventDateChange;
 use App\Models\Project;
+use App\Models\ProjectDateReason;
 use App\Models\ProjectFat;
 use App\Models\User;
 use App\Services\PlanningBoard;
@@ -71,6 +73,36 @@ class ProjectFatTest extends TestCase
 
         $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()
             ->assertSee('รอบที่ 2 · นัดแล้ว')->assertSee('ประวัติ FAT')->assertSee('MO-2');
+    }
+
+    public function test_a_moved_fat_day_is_kept_with_its_reason_and_shows_in_the_panel(): void
+    {
+        $this->actingAs($this->pm)->post(route('projects.fats.store', $this->project), $this->fatData())->assertSessionHasNoErrors();
+        $fat = $this->project->latestFat()->first();
+        $reason = ProjectDateReason::where('name', 'ลูกค้าขอเลื่อน')->first();
+
+        // a change that leaves the day alone keeps nothing
+        $this->actingAs($this->pm)->put(route('project-fats.update', $fat), $this->fatData(['note' => 'ลูกค้า 4 คน']))->assertSessionHasNoErrors();
+        $this->assertSame(0, EventDateChange::count());
+
+        $this->actingAs($this->pm)->put(route('project-fats.update', $fat), $this->fatData(['fat_date' => '2026-11-06', 'move_reason_id' => $reason->id, 'move_note' => 'หน้างานยังไม่พร้อม']))->assertSessionHasNoErrors();
+        $this->assertStringContainsString('เลื่อนจาก 04/11/2569 · 10:00 น. เป็น 06/11/2569 · 10:00 น. · สาเหตุ: ลูกค้าขอเลื่อน — หน้างานยังไม่พร้อม', ActivityLog::where('action', 'fat')->latest('id')->value('description'));
+        // typed wrong: kept, not counted
+        $this->actingAs($this->pm)->put(route('project-fats.update', $fat), $this->fatData(['fat_date' => '2026-11-07', 'fat_time' => '13:00', 'move_kind' => 'correct', 'move_reason_id' => $reason->id]))->assertSessionHasNoErrors();
+
+        $changes = EventDateChange::orderBy('id')->get();
+        $this->assertSame([['fat', $fat->id, 1, 'postpone', '2026-11-04', '2026-11-06', 'ลูกค้าขอเลื่อน', $this->pm->id], ['fat', $fat->id, 1, 'correct', '2026-11-06', '2026-11-07', null, $this->pm->id]],
+            $changes->map(fn ($c) => [$c->event, $c->event_id, $c->round, $c->kind, $c->old_date->format('Y-m-d'), $c->new_date->format('Y-m-d'), $c->reason_name, $c->changed_by])->all());
+        $this->assertSame(['06/11/2569 · 10:00 น.', '07/11/2569 · 13:00 น.', 2], [$changes[1]->fromText(), $changes[1]->toText(), $changes[0]->days()]);
+
+        $this->assertSame(1, ProjectFat::formData($this->project, $fat->fresh(), $fat)['moves']);
+        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()
+            ->assertSee('เลื่อน 1 ครั้ง')->assertSeeInOrder(['ประวัติการเลื่อนวัน FAT', 'แก้ไข', 'ลงวันผิด · ไม่นับเป็นการเลื่อน', 'ครั้งที่ 1', '04/11/2569 · 10:00 น.', '+2 วัน', 'ลูกค้าขอเลื่อน', 'หน้างานยังไม่พร้อม'])
+            ->assertSee('สาเหตุที่เลื่อน');
+
+        // the history stays when the round is deleted
+        $this->actingAs($this->pm)->delete(route('project-fats.destroy', $fat));
+        $this->assertSame(2, EventDateChange::count());
     }
 
     public function test_only_admin_and_pm_may_set_it_and_a_closed_project_refuses(): void

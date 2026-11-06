@@ -2,7 +2,8 @@
      (_fat-window, saved there as JSON). Needs $project, $fatCabinets, $cabName and an x-data holding `f` (formData) and `due`. --}}
 <x-modal name="project-fat" maxWidth="lg">
     <template x-if="f">
-        <form method="POST" :action="f.url" class="space-y-4 p-6">
+        <form method="POST" :action="f.url" class="space-y-4 p-6"
+              x-data="{ get moved() { return !!f.was && [f.fat_date, f.fat_end_date && f.fat_end_date !== f.fat_date ? f.fat_end_date : '', f.fat_time || ''].join('|') !== f.was; } }">
             @csrf
             <input type="hidden" name="_method" :value="f.method">
             <h3 class="text-base font-semibold text-slate-900" x-text="f.title + ' · {{ $project->project_no }}'"></h3>
@@ -26,6 +27,8 @@
             </div>
             <p x-show="due && (f.fat_end_date || f.fat_date) > due && f.status !== 'passed'" class="-mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
                 FAT หลังวันครบกำหนดของโครงการ ({{ $project->due_date?->thaiDate() }}) · บันทึกได้ แต่ควรเลื่อนวันส่งมอบด้วย</p>
+            <p x-show="moved" x-cloak class="-mt-2 text-xs font-semibold text-amber-800" x-text="'เลื่อนจาก ' + f.was_text + ' · บันทึกลงประวัติการเลื่อน'"></p>
+            @include('projects.partials._date-move-fields')
             <fieldset>
                 <legend class="text-sm font-semibold text-slate-800">สถานะ</legend>
                 <div class="mt-1.5 flex flex-wrap gap-2">

@@ -9,6 +9,7 @@ use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
 use App\Models\Department;
+use App\Models\EventDateChange;
 use App\Models\Project;
 use App\Models\ProjectDelivery;
 use App\Models\User;
@@ -225,6 +226,29 @@ class ProjectDeliveryTest extends TestCase
         $this->assertContains('PM เปลี่ยนวิธีส่ง · จัดรถ / คนใหม่', $this->notices($this->clerk->fresh(), 'delivery_todo'));
         $this->assign($d, [['label' => '70-1234', 'driver_name' => 'คนขับไทยขนส่ง']])->assertSessionHasNoErrors();
         $this->assertSame('ขนส่งภายนอก · ไทยขนส่ง · 70-1234', $d->fresh()->transport());
+    }
+
+    public function test_a_moved_delivery_day_is_kept_per_round_with_its_reason(): void
+    {
+        // a draft's day is not a set day yet: moving it keeps nothing
+        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['send' => '0']))->assertSessionHasNoErrors();
+        $draft = $this->project->deliveries()->first();
+        $this->actingAs($this->pm)->put(route('project-deliveries.update', $draft), $this->data(['delivery_date' => '2026-11-21', 'send' => '0']))->assertSessionHasNoErrors();
+        $this->assertSame(0, EventDateChange::count());
+        $draft->delete();
+
+        $d = $this->send();
+        $this->assign($d);
+        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['delivery_date' => '2026-11-23', 'move_note' => 'ลูกค้ายังไม่พร้อมรับ']))->assertSessionHasNoErrors();
+        $this->actingAs($this->pm)->put(route('project-deliveries.update', $d), $this->data(['delivery_date' => '2026-11-23', 'delivery_time' => '13:00']))->assertSessionHasNoErrors();
+
+        $this->assertSame('การจัดส่งรอบที่ 1: เลื่อนวันส่งจาก 20/11/2569 · 09:00 น. เป็น 23/11/2569 · 09:00 น. — ลูกค้ายังไม่พร้อมรับ',
+            ActivityLog::where('action', 'delivery')->orderBy('id')->get()->pluck('description')->first(fn ($l) => str_contains($l, 'ลูกค้ายังไม่พร้อมรับ')));
+        $this->assertSame([['delivery', $d->id, 'postpone', '20/11/2569 · 09:00 น.', '23/11/2569 · 09:00 น.'], ['delivery', $d->id, 'postpone', '23/11/2569 · 09:00 น.', '23/11/2569 · 13:00 น.']],
+            EventDateChange::orderBy('id')->get()->map(fn ($c) => [$c->event, $c->event_id, $c->kind, $c->fromText(), $c->toText()])->all());
+        $this->assertSame(2, \App\Http\Controllers\ProjectDeliveryController::formData($this->project, $d->fresh())['moves']);
+        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()
+            ->assertSee('เลื่อน 2 ครั้ง')->assertSeeInOrder(['ประวัติการเลื่อนวัน (2)', 'ครั้งที่ 2', 'ครั้งที่ 1', '+3 วัน', 'ลูกค้ายังไม่พร้อมรับ']);
     }
 
     public function test_packing_billing_leaving_and_arriving_tick_the_checklist_and_step_back_unticks(): void

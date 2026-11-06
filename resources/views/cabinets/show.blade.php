@@ -147,7 +147,7 @@
                                 @else
                                     <span class="text-xs font-semibold {{ $cabFat->status === \App\Models\ProjectFat::FAILED ? 'text-red-600' : 'text-emerald-700' }}">· {{ $cabFat->statusLabel() }}</span>
                                 @endif
-                                <a href="{{ route('projects.show', $cabinet->project_id) }}#fat" class="mt-0.5 block text-xs font-semibold text-blue-700 hover:underline">{{ collect([$cabFat->round > 1 ? 'รอบที่ '.$cabFat->round : null, $cabFat->fat_time ? $cabFat->fat_time.' น.' : null, $cabFat->cabinet_ids ? count($cabFat->cabinet_ids).' ตู้' : 'ทุกตู้'])->filter()->implode(' · ') }} · ดู FAT ›</a>
+                                <a href="{{ route('projects.show', $cabinet->project_id) }}#fat" class="mt-0.5 block text-xs font-semibold text-blue-700 hover:underline">{{ collect([$cabFat->round > 1 ? 'รอบที่ '.$cabFat->round : null, $cabFat->fat_time ? $cabFat->fat_time.' น.' : null, $cabFat->cabinet_ids ? count($cabFat->cabinet_ids).' ตู้' : 'ทุกตู้'])->filter()->implode(' · ') }} · <span class="whitespace-nowrap">ดู FAT ›</span></a>
                             </dd>
                         @endif
                         <dt class="text-slate-500">วันเริ่ม</dt><dd class="text-slate-800">{{ optional($cabinet->start_date)->thaiDate() ?? '-' }}</dd>

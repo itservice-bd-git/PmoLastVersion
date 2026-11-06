@@ -2,8 +2,9 @@
     <x-slot name="header">
         <div class="flex min-w-0 items-center gap-2">
             <x-back-link :href="route('projects.index')" label="รายการโครงการ" />
-            <h2 class="text-lg font-semibold text-slate-900">{{ $project->project_no }}</h2>
-            <x-project-status :status="$project->status" />
+            <h2 class="truncate whitespace-nowrap text-lg font-semibold text-slate-900">{{ $project->project_no }}</h2>
+            {{-- the card below shows it too: on a phone the bar keeps its room for the project number --}}
+            <span class="hidden sm:inline-flex"><x-project-status :status="$project->status" /></span>
         </div>
     </x-slot>
 

@@ -77,15 +77,15 @@
                 <table class="min-w-full text-sm">
                     <thead>
                         <tr class="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold text-slate-500">
-                            <th class="px-5 py-2.5">โครงการ</th>
-                            <th class="px-4 py-2.5">ลูกค้า</th>
-                            <th class="px-4 py-2.5">ประเภทงาน</th>
-                            <th class="px-4 py-2.5">กำหนดส่ง</th>
-                            <th class="px-4 py-2.5">FAT</th>
-                            <th class="px-4 py-2.5">สถานะ</th>
-                            <th class="px-4 py-2.5">แผนก</th>
-                            <th class="w-44 min-w-[9rem] whitespace-nowrap px-4 py-2.5">การผลิต</th>
-                            <th class="px-4 py-2.5 text-right">ตู้</th>
+                            <th class="sticky left-0 z-[1] bg-slate-50 py-2.5 pl-5 pr-3">โครงการ</th>
+                            <th class="whitespace-nowrap px-3 py-2.5">ลูกค้า</th>
+                            <th class="whitespace-nowrap px-3 py-2.5">ประเภทงาน</th>
+                            <th class="whitespace-nowrap px-3 py-2.5">กำหนดส่ง</th>
+                            <th class="whitespace-nowrap px-3 py-2.5">FAT</th>
+                            <th class="whitespace-nowrap px-3 py-2.5">สถานะ</th>
+                            <th class="whitespace-nowrap px-3 py-2.5">แผนก</th>
+                            <th class="w-24 min-w-[6rem] whitespace-nowrap px-3 py-2.5">การผลิต</th>
+                            <th class="whitespace-nowrap px-3 py-2.5 pr-4 text-right">ตู้</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
@@ -95,8 +95,8 @@
                                 $done = in_array($project->status, [\App\Models\Project::STATUS_COMPLETED, \App\Models\Project::STATUS_CANCELLED], true);
                                 $depts = $projectDepartments[$project->id] ?? [];
                             @endphp
-                            <tr class="cursor-pointer hover:bg-blue-50/40" onclick="window.location='{{ route('projects.show', $project) }}'">
-                                <td class="px-5 py-3">
+                            <tr class="group cursor-pointer hover:bg-blue-50/40" onclick="window.location='{{ route('projects.show', $project) }}'">
+                                <td class="sticky left-0 z-[1] bg-white py-3 pl-5 pr-3 group-hover:bg-[#f6f9fe]">
                                     <div class="flex items-start gap-3">
                                         {{-- the status ring Planning puts in front of every project --}}
                                         <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2" style="border-color: {{ $color }}" aria-hidden="true">
@@ -104,13 +104,13 @@
                                         </span>
                                         <div class="min-w-0">
                                             <a href="{{ route('projects.show', $project) }}" class="flex items-center gap-2 font-bold text-ae-navy hover:underline">{{ $project->project_no }} <x-priority-flag :priority="$project->priority" pill /></a>
-                                            <p class="max-w-[12rem] truncate text-xs text-slate-500" title="{{ $project->project_name }}">{{ $project->project_name }}</p>
+                                            <p class="max-w-[9.5rem] truncate text-xs text-slate-500" title="{{ $project->project_name }}">{{ $project->project_name }}</p>
                                         </div>
                                     </div>
                                 </td>
-                                <td class="max-w-[14rem] px-4 py-3 text-slate-600"><span class="line-clamp-2">{{ $project->customer_name }}</span></td>
-                                <td class="max-w-[10rem] px-4 py-3 text-slate-600"><span class="line-clamp-2">{{ $project->jobType?->name ?? '-' }}</span></td>
-                                <td class="whitespace-nowrap px-4 py-3">
+                                <td class="min-w-[8.5rem] max-w-[11rem] px-3 py-3 text-slate-600"><span class="line-clamp-2" title="{{ $project->customer_name }}">{{ $project->customer_name }}</span></td>
+                                <td class="whitespace-nowrap px-3 py-3 text-slate-600">{{ $project->jobType?->name ?? '-' }}</td>
+                                <td class="whitespace-nowrap px-3 py-3">
                                     <div class="tabular-nums text-slate-700">{{ optional($project->due_date)->thaiDate() ?? '-' }}</div>
                                     @if ($project->due_date && ! $done)
                                         @php $days = $project->days_remaining; @endphp
@@ -120,7 +120,7 @@
                                     @endif
                                 </td>
                                 {{-- วัน FAT: the latest round (ProjectFatController), as in หน้าโครงการ's FAT card --}}
-                                <td class="whitespace-nowrap px-4 py-3">
+                                <td class="whitespace-nowrap px-3 py-3">
                                     @if ($fat = $project->latestFat)
                                         <div class="tabular-nums text-slate-700">{{ $fat->dateRange() }}@if ($fat->fat_time) <span class="text-slate-500">· {{ $fat->fat_time }} น.</span>@endif</div>
                                         <span class="st-pill mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold" style="--c: {{ $fat->stateColor($project) }}">{{ $fat->statusLabel() }}</span>
@@ -130,8 +130,8 @@
                                         <span class="text-slate-400">-</span>
                                     @endif
                                 </td>
-                                <td class="px-4 py-3"><x-project-status :status="$project->status" /></td>
-                                <td class="px-4 py-3">
+                                <td class="whitespace-nowrap px-3 py-3"><x-project-status :status="$project->status" /></td>
+                                <td class="min-w-[4.5rem] px-3 py-3">
                                     @if ($depts)
                                         <div class="flex items-center" title="{{ collect($depts)->map(fn ($d) => $departmentNames[$d] ?? '')->implode(', ') }}">
                                             @foreach (array_slice($depts, 0, 6) as $deptId)
@@ -140,10 +140,10 @@
                                             @if (count($depts) > 6)<span class="ml-1.5 text-xs font-medium text-slate-500">+{{ count($depts) - 6 }}</span>@endif
                                         </div>
                                     @else
-                                        <span class="text-xs text-slate-400">ยังไม่จ่ายงาน</span>
+                                        <span class="text-xs leading-tight text-slate-400">ยังไม่จ่ายงาน</span>
                                     @endif
                                 </td>
-                                <td class="px-4 py-3">
+                                <td class="px-3 py-3">
                                     <div class="flex items-center gap-2">
                                         <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
                                             <div class="h-1.5 rounded-full {{ $project->production_progress >= 100 ? 'bg-emerald-500' : 'bg-blue-500' }}" style="width: {{ $project->production_progress }}%"></div>
@@ -154,7 +154,7 @@
                                         <div class="mt-0.5 text-[12px] text-slate-400">งานบริหาร {{ $project->task_progress }}%</div>
                                     @endif
                                 </td>
-                                <td class="px-4 py-3 text-right">
+                                <td class="px-3 py-3 pr-4 text-right">
                                     <span class="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-600">
                                         <svg class="h-3 w-3 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg>{{ $project->cabinets_count }}
                                     </span>

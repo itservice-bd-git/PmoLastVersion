@@ -51,7 +51,7 @@ class ProjectFatTest extends TestCase
         $type = \App\Models\JobType::create(['name' => 'ตู้ MDB งานโรงงาน', 'is_active' => true]);
         $this->project->forceFill(['job_type_id' => $type->id])->save();
         $this->actingAs($this->pm)->get(route('projects.index'))->assertOk()
-            ->assertSeeInOrder(['<th class="px-4 py-2.5">ลูกค้า</th>', '<th class="px-4 py-2.5">ประเภทงาน</th>'], false)
+            ->assertSeeInOrder(['<th class="whitespace-nowrap px-3 py-2.5">ลูกค้า</th>', '<th class="whitespace-nowrap px-3 py-2.5">ประเภทงาน</th>'], false)
             ->assertSeeInOrder(['SO-1', 'C', 'ตู้ MDB งานโรงงาน']);
 
         // ความสำคัญ: a chip like the due-date countdown
@@ -61,7 +61,7 @@ class ProjectFatTest extends TestCase
 
     public function test_the_projects_list_shows_the_latest_fat(): void
     {
-        $this->actingAs($this->pm)->get(route('projects.index'))->assertOk()->assertSee('<th class="px-4 py-2.5">FAT</th>', false)->assertDontSee('นัดแล้ว');
+        $this->actingAs($this->pm)->get(route('projects.index'))->assertOk()->assertSee('<th class="whitespace-nowrap px-3 py-2.5">FAT</th>', false)->assertDontSee('นัดแล้ว');
 
         ProjectFat::forceCreate(['project_id' => $this->project->id, 'round' => 1, 'fat_date' => '2026-11-04', 'status' => 'failed']);
         ProjectFat::forceCreate(['project_id' => $this->project->id, 'round' => 2, 'fat_date' => '2026-11-20', 'fat_time' => '13:30', 'status' => 'scheduled']);
@@ -131,8 +131,8 @@ class ProjectFatTest extends TestCase
         $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('<th class="hidden px-2 py-2 lg:table-cell">FAT</th>', false);
 
         // the cabinet page: the same day, once the cabinet is in a round
-        $this->actingAs($this->pm)->get(route('cabinets.show', $this->cab2))->assertOk()->assertSeeInOrder(['วัน FAT', '12–13/11/2569', '· 11 วัน', 'รอบที่ 2 · 1 ตู้ · ดู FAT ›']);
-        $this->actingAs($this->pm)->get(route('cabinets.show', $this->cab1))->assertOk()->assertSeeInOrder(['วัน FAT', '04/11/2569', '· ไม่ผ่าน', 'ทุกตู้ · ดู FAT ›']);
+        $this->actingAs($this->pm)->get(route('cabinets.show', $this->cab2))->assertOk()->assertSeeInOrder(['วัน FAT', '12–13/11/2569', '· 11 วัน', 'รอบที่ 2 · 1 ตู้ · ', 'ดู FAT ›']);
+        $this->actingAs($this->pm)->get(route('cabinets.show', $this->cab1))->assertOk()->assertSeeInOrder(['วัน FAT', '04/11/2569', '· ไม่ผ่าน', 'ทุกตู้ · ', 'ดู FAT ›']);
         $other = Cabinet::forceCreate(['project_id' => $this->project->id, 'mo_no' => 'MO-3', 'cabinet_name' => 'C', 'quantity' => 1, 'status' => 'not_started', 'progress' => 0]);
         ProjectFat::where('round', 1)->update(['cabinet_ids' => json_encode([$this->cab1->id])]);
         $this->actingAs($this->pm)->get(route('cabinets.show', $other))->assertOk()->assertDontSee('วัน FAT');

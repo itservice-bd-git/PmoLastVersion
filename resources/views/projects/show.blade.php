@@ -29,25 +29,29 @@
             $hdrRisk = ['on_track' => ['ปกติ', 'bg-emerald-50 text-emerald-800', 'bg-emerald-500'], 'watch' => ['เฝ้าระวัง', 'bg-orange-50 text-orange-800', 'bg-orange-500'],
                 'behind' => ['สูง', 'bg-red-50 text-red-800', 'bg-red-500']][$overview['summary']['pace'] ?? ''] ?? null;
             $today = today();
-            // FAT: [big word / number, its colour, the line under it, the button]
+            // FAT and the next delivery round: the date large; under it how many days (or what happened) and the time
+            $range = fn ($a, $b) => \App\Models\ProjectDelivery::range($a, $b && $b->gt($a) ? $b : $a);
             $fatDays = $hdrFat ? (int) $today->diffInDays($hdrFat->fat_date, false) : null;
             $fatEnd = $hdrFat ? (int) $today->diffInDays($hdrFat->lastDay(), false) : null;
+            $fatTime = $hdrFat?->fat_time ? $hdrFat->fat_time.' น.' : null;
+            // [the date (null = none), the line under it, its colour, the button]
             $fatTile = match (true) {
-                ! $hdrFat => ['ยังไม่ได้นัด', 'text-slate-500', $project->due_date ? 'ครบกำหนด '.$project->due_date->thaiDate() : '', '+ ลงวัน FAT'],
-                $hdrFat->status === 'passed' => ['ผ่าน', 'text-emerald-700', $hdrFat->when(), 'แก้วัน FAT'],
-                $hdrFat->status === 'failed' => ['ไม่ผ่าน', 'text-red-700', 'รอบที่ '.$hdrFat->round.' · '.$hdrFat->when(), 'นัด FAT รอบใหม่'],
-                $fatEnd < 0 => ['เลย '.abs($fatEnd).' วัน', 'text-red-700', $hdrFat->when().' · ยังไม่บันทึกผล', 'บันทึกผล FAT'],
-                $fatDays <= 0 => ['วันนี้', 'text-blue-700', $hdrFat->when(), 'แก้วัน FAT'],
-                default => ['อีก '.$fatDays.' วัน', 'text-ae-navy', $hdrFat->when(), 'แก้วัน FAT'],
+                ! $hdrFat => [null, $project->due_date ? 'ครบกำหนดโครงการ '.$project->due_date->thaiDate() : '', 'text-slate-600', '+ ลงวัน FAT'],
+                $hdrFat->status === 'passed' => [$range($hdrFat->fat_date, $hdrFat->fat_end_date), 'ผ่านแล้ว', 'text-emerald-700', 'แก้วัน FAT'],
+                $hdrFat->status === 'failed' => [$range($hdrFat->fat_date, $hdrFat->fat_end_date), 'ไม่ผ่าน · นัดรอบใหม่', 'text-red-700', 'นัด FAT รอบใหม่'],
+                $fatEnd < 0 => [$range($hdrFat->fat_date, $hdrFat->fat_end_date), 'เลย '.abs($fatEnd).' วัน · ยังไม่บันทึกผล', 'text-red-700', 'บันทึกผล FAT'],
+                $fatDays <= 0 => [$range($hdrFat->fat_date, $hdrFat->fat_end_date), 'วันนี้'.($fatTime ? ' · '.$fatTime : ''), 'text-blue-700', 'แก้วัน FAT'],
+                default => [$range($hdrFat->fat_date, $hdrFat->fat_end_date), 'อีก '.$fatDays.' วัน'.($fatTime ? ' · '.$fatTime : ''), 'text-slate-700', 'แก้วัน FAT'],
             };
             $dlDays = $hdrNext ? (int) $today->diffInDays($hdrNext->firstDay(), false) : null;
             $dlEnd = $hdrNext ? (int) $today->diffInDays($hdrNext->lastDay(), false) : null;
+            $dlTime = $hdrNext?->delivery_time ? $hdrNext->delivery_time.' น.' : null;
             $dlTile = match (true) {
-                ! $hdrRounds->count() => ['ยังไม่ได้นัด', 'text-slate-500', ''],
-                ! $hdrNext => ['ส่งครบแล้ว', 'text-emerald-700', $hdrRounds->count().' รอบ'],
-                $dlEnd < 0 => ['เลย '.abs($dlEnd).' วัน', 'text-red-700', $hdrNext->when()],
-                $dlDays <= 0 => ['วันนี้', 'text-blue-700', $hdrNext->when()],
-                default => ['อีก '.$dlDays.' วัน', 'text-ae-navy', $hdrNext->when()],
+                ! $hdrRounds->count() => [null, '', 'text-slate-600'],
+                ! $hdrNext => [$range($hdrRounds->max(fn ($d) => $d->lastDay()), null), 'ส่งครบแล้ว · '.$hdrRounds->count().' รอบ', 'text-emerald-700'],
+                $dlEnd < 0 => [$range($hdrNext->firstDay(), $hdrNext->lastDay()), 'เลย '.abs($dlEnd).' วัน · ยังไม่บันทึกว่าส่งถึง', 'text-red-700'],
+                $dlDays <= 0 => [$range($hdrNext->firstDay(), $hdrNext->lastDay()), 'วันนี้'.($dlTime ? ' · '.$dlTime : ''), 'text-blue-700'],
+                default => [$range($hdrNext->firstDay(), $hdrNext->lastDay()), 'อีก '.$dlDays.' วัน'.($dlTime ? ' · '.$dlTime : ''), 'text-slate-700'],
             };
             $followers = $project->followers()->orderBy('name')->get(['users.id', 'name']);
             $following = $followers->contains('id', auth()->id());
@@ -89,14 +93,14 @@
                 <div class="grid grid-cols-2 gap-3 lg:mr-12 lg:flex lg:gap-0">
                     <div class="flex min-w-0 flex-col gap-0.5 rounded-xl border border-slate-200 p-3 lg:min-w-[11rem] lg:rounded-none lg:border-0 lg:border-l lg:px-5 lg:py-0.5">
                         <span class="text-[13px] font-semibold text-slate-600">วันที่ FAT @if ($hdrFat && $hdrFat->round > 1)<span class="font-normal">รอบที่ {{ $hdrFat->round }}</span>@endif</span>
-                        <span class="flex items-center gap-1.5 text-xl font-bold leading-tight tabular-nums {{ $fatTile[1] }} sm:text-2xl">
-                            @if ($hdrFat?->status === 'passed')<svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>@endif
-                            {{ $fatTile[0] }}</span>
-                        <span class="text-[13px] tabular-nums text-slate-700">{{ $fatTile[2] ?: ' ' }}</span>
+                        <span class="text-xl font-bold leading-tight tabular-nums sm:text-2xl {{ $fatTile[0] ? 'text-ae-navy' : 'text-slate-500' }}">{{ $fatTile[0] ?? 'ยังไม่ได้นัด' }}</span>
+                        <span class="flex flex-wrap items-center gap-1 text-[13px] font-semibold tabular-nums {{ $fatTile[2] }}">
+                            @if ($hdrFat?->status === 'passed')<svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>@endif
+                            {{ $fatTile[1] ?: ' ' }}</span>
                         <span class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                             @if ($hdrCanAppt)
                                 <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-fat', 'edit'))"
-                                        class="inline-flex h-10 items-center rounded-lg px-3 text-[13px] font-semibold sm:h-8 {{ $fatTile[1] === 'text-red-700' && $hdrFat?->status !== 'failed' ? 'bg-red-700 text-white hover:bg-red-800' : ($hdrFat ? 'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50' : 'border border-dashed border-slate-400 bg-white text-slate-800 hover:bg-slate-50') }}">{{ $fatTile[3] }}</button>
+                                        class="inline-flex h-10 items-center rounded-lg px-3 text-[13px] font-semibold sm:h-8 {{ $fatTile[2] === 'text-red-700' && $hdrFat?->status !== 'failed' ? 'bg-red-700 text-white hover:bg-red-800' : ($hdrFat ? 'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50' : 'border border-dashed border-slate-400 bg-white text-slate-800 hover:bg-slate-50') }}">{{ $fatTile[3] }}</button>
                             @endif
                             @if ($hdrFat)
                                 <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-fat', 'show'))" class="inline-flex min-h-10 items-center text-[13px] font-semibold text-blue-700 hover:underline sm:min-h-0">รายละเอียด</button>
@@ -105,9 +109,12 @@
                     </div>
                     <div class="flex min-w-0 flex-col gap-0.5 rounded-xl border border-slate-200 p-3 lg:min-w-[12.5rem] lg:rounded-none lg:border-0 lg:border-l lg:py-0.5 lg:pl-5 lg:pr-0">
                         <span class="text-[13px] font-semibold text-slate-600">วันที่ส่งมอบ @if ($hdrNext && $hdrRounds->count() > 1)<span class="font-normal">รอบ {{ $hdrNext->round }} จาก {{ $hdrRounds->count() }}</span>@endif</span>
-                        <span class="flex flex-wrap items-baseline gap-x-2 text-xl font-bold leading-tight tabular-nums {{ $dlTile[1] }} sm:text-2xl">{{ $dlTile[0] }}
-                            @if ($hdrNext)<span class="st-pill rounded-full px-2 py-0.5 text-xs font-bold" style="--c: {{ $hdrNext->stateColor() }}">{{ $hdrNext->status === 'scheduled' && $hdrNext->cabinet_ids ? $hdrNext->step()['text'] : $hdrNext->stateLabel() }}</span>@endif</span>
-                        <span class="text-[13px] tabular-nums text-slate-700">{{ $dlTile[2] ?: ' ' }}{{ $hdrNext ? ' · '.$hdrNext->cabinetsText() : '' }}</span>
+                        <span class="text-xl font-bold leading-tight tabular-nums sm:text-2xl {{ $dlTile[0] ? 'text-ae-navy' : 'text-slate-500' }}">{{ $dlTile[0] ?? 'ยังไม่ได้นัด' }}</span>
+                        <span class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] tabular-nums">
+                            <span class="font-semibold {{ $dlTile[2] }}">{{ $dlTile[1] ?: ' ' }}</span>
+                            @if ($hdrNext)<span class="st-pill rounded-full px-2 py-0.5 text-xs font-bold" style="--c: {{ $hdrNext->stateColor() }}">{{ $hdrNext->status === 'scheduled' && $hdrNext->cabinet_ids ? $hdrNext->step()['text'] : $hdrNext->stateLabel() }}</span>
+                                <span class="text-slate-600">{{ $hdrNext->cabinetsText() }}</span>@endif
+                        </span>
                         <span class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                             @if ($hdrCanAppt)
                                 <button type="button" @click="tab = 'info'; $nextTick(() => $dispatch('pmo-delivery', 'new'))"

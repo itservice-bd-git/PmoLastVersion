@@ -104,16 +104,12 @@ class DeliveryController extends Controller
 
     public function bill(Request $request, ProjectDelivery $delivery)
     {
-        $this->flow->bill($delivery, $request->user());
-
-        return $this->done($request, 'แจ้งเปิดบิลแล้ว');
+        return $this->done($request, 'แจ้งเปิดบิลแล้ว', $this->flow->bill($delivery, $request->user()));
     }
 
     public function depart(Request $request, ProjectDelivery $delivery)
     {
-        $this->flow->depart($delivery, $request->user());
-
-        return $this->done($request, 'บันทึกออกจากโรงงานแล้ว');
+        return $this->done($request, 'บันทึกออกจากโรงงานแล้ว', $this->flow->depart($delivery, $request->user()));
     }
 
     public function deliver(Request $request, ProjectDelivery $delivery)
@@ -136,7 +132,7 @@ class DeliveryController extends Controller
     {
         $this->flow->stepBack($delivery, $request->user());
 
-        return $this->done($request, 'ย้อนสถานะแล้ว');
+        return $this->done($request, 'ย้อนสถานะแล้ว', $delivery);
     }
 
     /** One round as the page shows it and its windows fill in. */
@@ -189,8 +185,15 @@ class DeliveryController extends Controller
         return $out;
     }
 
-    private function done(Request $request, string $message)
+    /** Saved: back to the page, or as JSON for the panels - with the round as it is now ($d) when the panel stays on it. */
+    private function done(Request $request, string $message, ?ProjectDelivery $d = null)
     {
-        return $request->wantsJson() ? response()->json(['message' => $message]) : back()->with('success', $message);
+        if (! $request->wantsJson()) {
+            return back()->with('success', $message);
+        }
+        $d = $d?->fresh(['project', 'vehicles.vehicle', 'sender', 'rejecter', 'biller']);
+        $names = $d ? Cabinet::whereIn('id', $d->cabinet_ids ?? [])->get(['id', 'mo_no', 'cabinet_name', 'cabinet_type', 'size', 'quantity'])->keyBy('id') : collect();
+
+        return response()->json(['message' => $message] + ($d ? ['row' => $this->row($d, $names, today())] : []));
     }
 }

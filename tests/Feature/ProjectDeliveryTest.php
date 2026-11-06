@@ -150,7 +150,7 @@ class ProjectDeliveryTest extends TestCase
 
         // each cabinet with its name, type, size and how many
         $this->cab1->forceFill(['cabinet_name' => 'MDB-1 ตู้เมน', 'cabinet_type' => 'MDB', 'size' => '80x200x60 ซม.', 'quantity' => 2])->save();
-        $page = $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk()->assertSee('ห่อตู้ · รายการตู้ (2)')->assertSee('MO-1, MO-2');
+        $page = $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk()->assertSee('ห่อตู้ 0/2')->assertSee('MO-1, MO-2');
         $row = collect($page->viewData('rows'))->firstWhere('id', $d->id);
         $this->assertSame(['MO-1', 'MDB-1 ตู้เมน', 'MDB', '80x200x60 ซม.', 2, true], [$row['cabinets'][0]['name'], $row['cabinets'][0]['model'], $row['cabinets'][0]['type'], $row['cabinets'][0]['size'], $row['cabinets'][0]['qty'], $row['packable']]);
 
@@ -160,6 +160,34 @@ class ProjectDeliveryTest extends TestCase
             ->assertJson(['count' => 1, 'total' => 2, 'packed' => [$this->cab1->id => '18/11 14:20']]);
         $this->assertTrue($d->fresh()->isPacked($this->cab1->id));
         $this->actingAs($this->member)->postJson(route('deliveries.pack', $d), ['cabinet_ids' => [$this->cab2->id], 'packed' => 1])->assertStatus(403);
+    }
+
+    public function test_the_cabinets_panel_carries_on_to_bill_leave_and_step_back(): void
+    {
+        $d = $this->send();
+        $this->assign($d)->assertSessionHasNoErrors();
+        $page = fn () => $this->actingAs($this->clerk)->get(route('deliveries.index', ['tab' => 'scheduled']));
+        $page()->assertSee('ห่อตู้ 0/2')->assertDontSee('ห่อให้ครบก่อน');
+
+        // not all packed: refused with its reason
+        $this->actingAs($this->clerk)->postJson(route('deliveries.bill', $d))->assertStatus(422)->assertJsonValidationErrors(['delivery' => 'ห่อตู้ให้ครบก่อน (ห่อแล้ว 0/2)']);
+        $this->actingAs($this->clerk)->postJson(route('deliveries.pack', $d), ['cabinet_ids' => [$this->cab1->id, $this->cab2->id], 'packed' => 1])->assertOk();
+        $page()->assertSee('>แจ้งเปิดบิล<', false);   // the card's one button names what is next in the panel
+
+        // แจ้งเปิดบิล from the panel: the round back as it is now, so the panel goes on to ออกจากโรงงาน
+        $row = $this->actingAs($this->clerk)->postJson(route('deliveries.bill', $d))->assertOk()->assertJson(['message' => 'แจ้งเปิดบิลแล้ว'])->json('row');
+        $this->assertSame([$d->id, false, 'scheduled', true], [$row['id'], $row['packable'], $row['status'], $row['billed'] !== '']);
+        $page()->assertSee('รายการตู้ (2)')->assertSee('ออกจากโรงงาน');
+
+        // ย้อนขั้น: back to before the bill
+        $row = $this->actingAs($this->clerk)->postJson(route('deliveries.back', $d))->assertOk()->assertJson(['message' => 'ย้อนสถานะแล้ว'])->json('row');
+        $this->assertSame([true, ''], [$row['packable'], $row['billed']]);
+        $this->assertNull($d->fresh()->billed_at);
+
+        $this->actingAs($this->clerk)->postJson(route('deliveries.bill', $d))->assertOk();
+        $this->actingAs($this->clerk)->postJson(route('deliveries.depart', $d))->assertOk()->assertJson(['message' => 'บันทึกออกจากโรงงานแล้ว']);
+        $this->assertSame('departed', $d->fresh()->status);
+        $this->actingAs($this->member)->postJson(route('deliveries.back', $d))->assertForbidden();
     }
 
     public function test_pm_asks_for_several_vehicles_of_one_kind_and_hears_when_fewer_go(): void

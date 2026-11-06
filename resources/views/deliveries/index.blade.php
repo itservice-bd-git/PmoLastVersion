@@ -70,12 +70,48 @@
                    notAsked(row) { const v = this.car(row.vehicle_id); return v && v.type && this.r.types.length && !this.r.types.includes(v.type) ? v.type : ''; },
                    get going() { return this.asg.rows.flatMap((x) => [x.driver_name, ...x.crew]).filter((n) => n && n.trim()).length; },
                    get canSave() { return this.r && (this.r.method !== 'company' || this.asg.rows.some((x) => x.vehicle_id)) && !this.asg.rows.some((x) => this.takenElsewhere(x)); },
-                   // รายการตู้ / ห่อตู้: a panel; each tick saves at once (JSON) and the round's card behind it is redrawn from the page
-                   cab: { open: false, row: null, list: [], filter: 'all', q: '', error: '', saving: 0 },
+                   // ห่อตู้ → แจ้งเปิดบิล → ออกจากโรงงาน, and ย้อนขั้น: one panel; each tick saves at once (JSON) and the round's card
+                   // behind it is redrawn from the page; its bottom bar is always the next thing to do (cabStep)
+                   cab: { open: false, row: null, list: [], filter: 'all', q: '', error: '', saving: 0, act: '', back: false },
                    openCabs(row) {
                        const list = row.cabinets.map((c) => ({ ...c, busy: false }));
                        const todo = list.filter((c) => !c.packed).length;
-                       this.cab = { open: true, row, list, filter: row.packable && todo && todo < list.length ? 'todo' : 'all', q: '', error: '', saving: 0 };
+                       this.cab = { open: true, row, list, filter: row.packable && todo && todo < list.length ? 'todo' : 'all', q: '', error: '', saving: 0, act: '', back: false };
+                   },
+                   // pack: cabinets still to pack · bill: all packed, แจ้งเปิดบิล next · wait: all packed, sent back to PM ·
+                   // billed: แจ้งเปิดบิลแล้ว, not left yet · after: left the factory / arrived (look only)
+                   get cabStep() {
+                       const r = this.cab.row;
+                       if (!r) return '';
+                       if (r.billed && ['waiting', 'rejected', 'scheduled'].includes(r.status)) return 'billed';
+                       if (!r.packable) return 'after';
+                       if (this.cabCount('todo')) return 'pack';
+                       return r.status === 'rejected' ? 'wait' : 'bill';
+                   },
+                   // แจ้งเปิดบิล / ออกจากโรงงาน / ย้อนขั้น from the panel: it carries on with the round as the server has it now
+                   async cabAct(kind) {
+                       const row = this.cab.row;
+                       if (this.cab.act || this.cab.saving) return;
+                       this.cab.act = kind; this.cab.error = '';
+                       try {
+                           const res = await fetch(row.urls[kind], { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content } });
+                           const data = await res.json().catch(() => ({}));
+                           if (!res.ok) throw new Error((data.errors && Object.values(data.errors)[0][0]) || data.message || 'บันทึกไม่ได้ ลองอีกครั้ง');
+                           this.say(data.message || 'บันทึกแล้ว');
+                           if (kind === 'depart') {
+                               this.cab.open = false;
+                           } else if (data.row) {
+                               const now = Object.fromEntries(data.row.cabinets.map((c) => [c.id, c]));
+                               this.cab.row = data.row;
+                               this.cab.list.forEach((c) => { if (now[c.id]) { c.packed = now[c.id].packed; c.at = now[c.id].at; } });
+                           }
+                           this.cab.back = false;
+                           this.refreshList();
+                       } catch (e) {
+                           this.cab.error = e.message;
+                       } finally {
+                           this.cab.act = '';
+                       }
                    },
                    cabCount(f) { return this.cab.list.filter((c) => f === 'todo' ? !c.packed : f === 'done' ? c.packed : true).length; },
                    get cabShown() {
@@ -149,14 +185,19 @@
                     <div class="min-w-0">
                         <p class="truncate text-sm font-bold text-slate-900">{{ $row['project'] }} <span class="font-semibold text-slate-600">{{ $row['name'] }}</span></p>
                         <p class="text-[13px] text-slate-600">รอบ {{ $row['round'] }} · {{ count($row['cabinets']) }} ตู้{{ $row['site'] ? ' · '.$row['site'] : '' }}</p>
-                        {{-- the cabinets: a short line here, every one of them (name, type, size, how many) and the ห่อ buttons in the panel --}}
-                        @php $cabNames = collect($row['cabinets'])->pluck('name'); @endphp
+                        {{-- the cabinets: a short line here; every one of them, ห่อ → แจ้งเปิดบิล → ออกจากโรงงาน and ย้อนขั้น in the panel. The
+                             button names what is next there --}}
+                        @php
+                            $cabNames = collect($row['cabinets'])->pluck('name');
+                            $toBill = $packable && $row['allPacked'] && $row['status'] !== 'rejected';
+                            $cabLabel = $packable && ! $row['allPacked'] ? 'ห่อตู้ '.$row['packedCount'].'/'.count($row['cabinets']) : ($toBill ? 'แจ้งเปิดบิล' : 'รายการตู้ ('.count($row['cabinets']).')');
+                        @endphp
                         <div class="mt-1.5 flex flex-wrap items-center gap-2">
                             <p class="min-w-0 flex-1 truncate text-xs text-slate-600" title="{{ $cabNames->implode(', ') }}">{{ $cabNames->take(4)->implode(', ') }}{{ $cabNames->count() > 4 ? ' +'.($cabNames->count() - 4).' ตู้' : '' }}</p>
                             <button type="button" @click="openCabs(@js($row))"
-                                    class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold {{ $packable && ! $row['allPacked'] ? 'bg-teal-700 text-white hover:bg-teal-800' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' }}">
+                                    class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold {{ ($packable && ! $row['allPacked']) || $toBill ? 'bg-teal-700 text-white hover:bg-teal-800' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' }}">
                                 <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4"/></svg>
-                                {{ $packable ? 'ห่อตู้ · รายการตู้' : 'รายการตู้' }} ({{ count($row['cabinets']) }})
+                                {{ $cabLabel }}
                             </button>
                         </div>
                         {{-- the four steps --}}
@@ -207,14 +248,9 @@
                             @endif
                             <button type="button" class="{{ $btn }}" @click="openReject(@js($row))">ไม่รับงาน</button>
                         @endif
-                        @if ($before && $row['status'] !== 'rejected' && $row['allPacked'] && ! $row['billed'])
-                            <form method="POST" action="{{ $row['urls']['bill'] }}">@csrf<button class="{{ $row['status'] === 'scheduled' ? $main : $btn }}">แจ้งเปิดบิล</button></form>
-                        @endif
                         @if ($row['status'] === 'scheduled')
                             @if ($row['billed'])
                                 <form method="POST" action="{{ $row['urls']['depart'] }}">@csrf<button class="{{ $main }}">{{ \App\Models\ProjectDelivery::statusName('departed') }}</button></form>
-                            @elseif (! $row['allPacked'])
-                                <span class="inline-flex h-9 items-center rounded-lg border border-dashed border-slate-300 px-3 text-sm text-slate-500">ห่อให้ครบก่อน ({{ $row['packedCount'] }}/{{ count($row['cabinets']) }})</span>
                             @endif
                             @if ($row['method'] !== 'pickup')
                                 <button type="button" class="{{ $btn }}" @click="openAssign(@js($row))">แก้รถ / คน</button>
@@ -225,9 +261,6 @@
                         @endif
                         @if ($row['status'] === 'delivered')
                             <button type="button" class="{{ $btn }}" @click="openDeliver(@js($row))">แก้</button>
-                        @endif
-                        @if (in_array($row['status'], ['departed', 'delivered'], true) || ($before && $row['billed']))
-                            <form method="POST" action="{{ $row['urls']['back'] }}">@csrf<button class="{{ $btn }}" title="ย้อนจาก “{{ $row['step']['text'] }}” หนึ่งขั้น · Checklist ที่ติ๊กไว้จะเอาออกด้วย">ย้อนขั้น</button></form>
                         @endif
                         @if ($row['status'] === 'rejected')
                             <span class="text-sm text-slate-500">รอ PM เลือกวันใหม่แล้วส่งมาอีกครั้ง</span>
@@ -267,11 +300,23 @@
                                 <p class="truncate text-base font-bold text-slate-900"><span x-text="cab.row.project"></span> <span class="font-semibold text-slate-600" x-text="cab.row.name"></span></p>
                                 <p class="text-sm text-slate-600" x-text="'รอบ ' + cab.row.round + ' · ' + cab.row.when + ' · ' + cab.list.length + ' ตู้'"></p>
                             </div>
+                            {{-- ห่อตู้ → แจ้งเปิดบิล --}}
                             <div>
-                                <div class="flex items-baseline justify-between text-sm"><span class="font-semibold text-slate-800">ห่อแล้ว</span><span class="font-bold tabular-nums text-slate-900" x-text="cabCount('done') + ' / ' + cab.list.length"></span></div>
-                                <div class="mt-1 h-2 overflow-hidden rounded-full bg-slate-200"><div class="h-full rounded-full bg-emerald-600 transition-[width] duration-300" :style="'width:' + (cab.list.length ? cabCount('done') / cab.list.length * 100 : 0) + '%'"></div></div>
+                                <ol class="flex items-center gap-2 text-sm" aria-label="ขั้น">
+                                    <li class="flex items-center gap-1.5 font-semibold" :class="cabCount('todo') ? 'text-slate-900' : 'text-emerald-700'">
+                                        <span class="flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold" :class="cabCount('todo') ? 'bg-sky-600 text-white' : 'bg-emerald-600 text-white'" aria-hidden="true" x-text="cabCount('todo') ? '1' : '✓'"></span>
+                                        <span x-text="'ห่อตู้ ' + cabCount('done') + '/' + cab.list.length"></span>
+                                    </li>
+                                    <li class="h-px w-6 shrink-0 bg-slate-300" aria-hidden="true"></li>
+                                    <li class="flex min-w-0 items-center gap-1.5 font-semibold" :class="cab.row.billed ? 'text-emerald-700' : (cabStep === 'bill' ? 'text-slate-900' : 'text-slate-500')">
+                                        <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" :class="cab.row.billed ? 'bg-emerald-600 text-white' : (cabStep === 'bill' ? 'bg-sky-600 text-white' : 'border border-slate-300 text-slate-500')" aria-hidden="true" x-text="cab.row.billed ? '✓' : '2'"></span>
+                                        <span class="truncate" x-text="cab.row.billed ? 'แจ้งเปิดบิล ' + cab.row.billed : 'แจ้งเปิดบิล'"></span>
+                                    </li>
+                                </ol>
+                                <div class="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div class="h-full rounded-full bg-emerald-600 transition-[width] duration-300" :style="'width:' + (cab.list.length ? cabCount('done') / cab.list.length * 100 : 0) + '%'"></div></div>
                             </div>
-                            <p x-show="!cab.row.packable" class="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700" x-text="cab.row.billed ? 'แจ้งเปิดบิลแล้ว · ดูได้อย่างเดียว (ย้อนขั้นก่อนถึงจะแก้การห่อได้)' : 'รอบนี้ออกจากโรงงานแล้ว · ดูได้อย่างเดียว'"></p>
+                            <p x-show="cabStep === 'billed' || cabStep === 'after'" class="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700"
+                               x-text="cabStep === 'billed' ? 'แจ้งเปิดบิลแล้ว · แก้การห่อไม่ได้ (ย้อนขั้นก่อนถึงจะแก้ได้)' : 'รอบนี้' + (cab.row.status === 'delivered' ? 'ส่งถึงแล้ว' : 'ออกจากโรงงานแล้ว') + ' · ดูได้อย่างเดียว'"></p>
                             <div class="flex flex-wrap items-center gap-2">
                                 <div class="inline-flex rounded-lg bg-slate-100 p-1 text-sm" role="group" aria-label="แสดง">
                                     <template x-for="f in [['todo', 'ยังไม่ห่อ'], ['done', 'ห่อแล้ว'], ['all', 'ทั้งหมด']]" :key="f[0]">
@@ -308,14 +353,54 @@
                             <li x-show="!cabShown.length" class="px-5 py-10 text-center text-sm text-slate-500" x-text="cab.q ? 'ไม่พบตู้ที่ค้นหา' : (cab.filter === 'todo' ? 'ห่อครบทุกตู้แล้ว' : 'ยังไม่มีตู้ที่ห่อ')"></li>
                         </ul>
 
-                        {{-- saving / a refusal, and every one left in one go --}}
+                        {{-- the next thing to do: ห่อที่เหลือ → แจ้งเปิดบิล → ออกจากโรงงาน; ย้อนขั้น asks first --}}
                         <div class="space-y-2 border-t border-slate-200 p-4 sm:px-5">
                             <p x-show="cab.error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert" x-text="cab.error"></p>
-                            <div class="flex items-center gap-2">
-                                <span class="text-xs text-slate-500" aria-live="polite" x-text="cab.saving ? 'กำลังบันทึก…' : (cab.row.packable ? 'กดที่ตู้เพื่อห่อ / เอาออก · บันทึกทันที' : '')"></span>
-                                <button type="button" x-show="cab.row.packable && cabCount('todo')" @click="packCabs(cab.list, true)"
-                                        class="ml-auto inline-flex h-11 items-center rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800" x-text="'ห่อครบทุกตู้ที่เหลือ (' + cabCount('todo') + ')'"></button>
-                                <button type="button" x-show="!cab.row.packable || !cabCount('todo')" @click="cab.open = false" class="ml-auto inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">ปิด</button>
+                            {{-- ย้อนขั้น: sure? --}}
+                            <div x-show="cab.back" class="space-y-2">
+                                <p class="text-sm text-slate-800">ย้อนจาก <span class="font-bold" x-text="'“' + cab.row.step.text + '”'"></span> หนึ่งขั้น · Checklist ที่ติ๊กไว้ของขั้นนี้จะเอาออกด้วย</p>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" @click="cab.back = false" class="ml-auto inline-flex h-11 items-center rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ไม่ย้อน</button>
+                                    <button type="button" @click="cabAct('back')" :disabled="!!cab.act" class="inline-flex h-11 items-center rounded-lg bg-red-700 px-4 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50" x-text="cab.act === 'back' ? 'กำลังย้อน…' : 'ย้อนขั้น'"></button>
+                                </div>
+                            </div>
+                            <div x-show="!cab.back" class="flex flex-wrap items-center gap-2">
+                                {{-- ห่อตู้ --}}
+                                <template x-if="cabStep === 'pack'">
+                                    <div class="contents">
+                                        <span class="min-w-0 flex-1 text-xs text-slate-500" aria-live="polite" x-text="cab.saving ? 'กำลังบันทึก…' : 'กดที่ตู้เพื่อห่อ / เอาออก · แจ้งเปิดบิลได้เมื่อห่อครบ'"></span>
+                                        <button type="button" @click="packCabs(cab.list, true)" class="inline-flex h-11 items-center rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800" x-text="'ห่อครบที่เหลือ (' + cabCount('todo') + ')'"></button>
+                                    </div>
+                                </template>
+                                {{-- แจ้งเปิดบิล --}}
+                                <template x-if="cabStep === 'bill'">
+                                    <div class="contents">
+                                        <span class="min-w-0 flex-1 text-sm"><span class="font-semibold text-emerald-700" x-text="'✓ ห่อครบ ' + cab.list.length + '/' + cab.list.length + ' แล้ว'"></span>
+                                            <span class="block text-xs text-slate-500" x-text="cab.saving ? 'กำลังบันทึก…' : 'แจ้งฝ่ายบัญชีเปิดบิลรอบนี้ · เอาการห่อออกได้จนกว่าจะแจ้ง'"></span></span>
+                                        <button type="button" @click="cabAct('bill')" :disabled="!!cab.act || cab.saving > 0" class="inline-flex h-11 items-center rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50" x-text="cab.act === 'bill' ? 'กำลังแจ้ง…' : 'แจ้งเปิดบิล'"></button>
+                                    </div>
+                                </template>
+                                <template x-if="cabStep === 'wait'">
+                                    <div class="contents">
+                                        <span class="min-w-0 flex-1 text-sm text-slate-600">ห่อครบแล้ว · รอ PM ส่งรอบนี้มาใหม่ก่อนแจ้งเปิดบิล</span>
+                                        <button type="button" @click="cab.open = false" class="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">ปิด</button>
+                                    </div>
+                                </template>
+                                {{-- แจ้งเปิดบิลแล้ว: ออกจากโรงงาน next (once the vehicles are on it) --}}
+                                <template x-if="cabStep === 'billed'">
+                                    <div class="contents">
+                                        <button type="button" @click="cab.back = true" class="inline-flex h-11 items-center rounded-lg px-3 text-sm font-semibold text-slate-600 hover:bg-slate-100">ย้อนขั้น</button>
+                                        <span x-show="cab.row.status !== 'scheduled'" class="ml-auto text-xs text-slate-500">จัดรถ / คนก่อนถึงจะออกจากโรงงานได้</span>
+                                        <button type="button" x-show="cab.row.status === 'scheduled'" @click="cabAct('depart')" :disabled="!!cab.act" class="ml-auto inline-flex h-11 items-center rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50" x-text="cab.act === 'depart' ? 'กำลังบันทึก…' : 'ออกจากโรงงาน'"></button>
+                                    </div>
+                                </template>
+                                {{-- ออกจากโรงงาน / ส่งถึงแล้ว: look, or one step back --}}
+                                <template x-if="cabStep === 'after'">
+                                    <div class="contents">
+                                        <button type="button" @click="cab.back = true" class="inline-flex h-11 items-center rounded-lg px-3 text-sm font-semibold text-slate-600 hover:bg-slate-100">ย้อนขั้น</button>
+                                        <button type="button" @click="cab.open = false" class="ml-auto inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">ปิด</button>
+                                    </div>
+                                </template>
                             </div>
                         </div>
                     </div>

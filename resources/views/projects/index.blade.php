@@ -103,7 +103,7 @@
                                             @if ($done)<span class="h-2 w-2 rounded-full" style="background: {{ $color }}"></span>@endif
                                         </span>
                                         <div class="min-w-0">
-                                            <a href="{{ route('projects.show', $project) }}" class="flex items-center gap-2 font-bold text-ae-navy hover:underline">{{ $project->project_no }} <x-priority-flag :priority="$project->priority" /></a>
+                                            <a href="{{ route('projects.show', $project) }}" class="flex items-center gap-2 font-bold text-ae-navy hover:underline">{{ $project->project_no }} <x-priority-flag :priority="$project->priority" pill /></a>
                                             <p class="max-w-[12rem] truncate text-xs text-slate-500" title="{{ $project->project_name }}">{{ $project->project_name }}</p>
                                         </div>
                                     </div>

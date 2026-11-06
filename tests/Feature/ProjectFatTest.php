@@ -53,6 +53,10 @@ class ProjectFatTest extends TestCase
         $this->actingAs($this->pm)->get(route('projects.index'))->assertOk()
             ->assertSeeInOrder(['<th class="px-4 py-2.5">ลูกค้า</th>', '<th class="px-4 py-2.5">ประเภทงาน</th>'], false)
             ->assertSeeInOrder(['SO-1', 'C', 'ตู้ MDB งานโรงงาน']);
+
+        // ความสำคัญ: a chip like the due-date countdown
+        $this->project->forceFill(['priority' => 'urgent'])->save();
+        $this->actingAs($this->pm)->get(route('projects.index'))->assertOk()->assertSee('rounded-full px-2 py-0.5 text-[12px] font-semibold bg-red-100 text-red-700', false);
     }
 
     public function test_the_projects_list_shows_the_latest_fat(): void

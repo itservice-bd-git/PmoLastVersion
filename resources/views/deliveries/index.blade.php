@@ -17,7 +17,7 @@
     </x-slot>
 
     <div class="mx-auto max-w-6xl space-y-4"
-         x-data="{ r: null, tab: @js($tab), busy: @js((object) $busy), vehicles: @js($vehicles), reasons: @js($reasons), people: @js($people), dlv: {}, toast: '',
+         x-data="{ r: null, tab: @js($tab), busy: @js((object) $busy), vehicles: @js($vehicles), reasons: @js($reasons), people: @js($people), dlv: { cabinet_ids: null }, toast: '',
                    rej: { open: false, reason: '', note: '', saving: false, error: '', errors: {} },
                    asg: { open: false, rows: [], carrier: '', saving: false, error: '', errors: {} },
                    // จัดรถ / คน: the round's vehicles, or one empty line per kind PM asked for
@@ -495,7 +495,8 @@
 
         {{-- ส่งถึงแล้ว: when, who received it, the delivery note, a problem, the cabinets that arrived --}}
         <x-modal name="dl-deliver" maxWidth="lg">
-            <template x-if="r">
+            {{-- only once ส่งถึงแล้ว is opened (openDeliver fills dlv): r alone is set by the other panels too --}}
+            <template x-if="r && dlv.cabinet_ids">
                 <form method="POST" :action="r.urls.deliver" class="space-y-4 p-6">
                     @csrf
                     <h3 class="text-base font-semibold text-slate-900" x-text="'{{ \App\Models\ProjectDelivery::statusName('delivered') }} · ' + r.project + ' รอบ ' + r.round"></h3>

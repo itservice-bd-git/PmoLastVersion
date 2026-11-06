@@ -37,10 +37,14 @@ $panelWidth = ['sm' => 'max-w-md', 'md' => 'max-w-lg', 'lg' => 'max-w-xl', 'xl' 
     }"
     x-init="$watch('show', value => {
         if (value) {
+            // the page is locked without jumping: the scrollbar's width is kept (none when a panel below already locked it)
+            const w = innerWidth - document.documentElement.clientWidth;
+            if (w > 0) { document.body.style.paddingRight = w + 'px'; $el.dataset.pad = '1'; }
             document.body.classList.add('overflow-y-hidden');
             {{ $attributes->has('focusable') ? 'setTimeout(() => firstFocusable().focus(), 100)' : ($panel ? '$nextTick(() => $refs.closePanel && $refs.closePanel.focus({ preventScroll: true }))' : '') }}
         } else {
             document.body.classList.remove('overflow-y-hidden');
+            if ($el.dataset.pad) { document.body.style.paddingRight = ''; delete $el.dataset.pad; }
         }
     })"
     x-on:open-modal.window="$event.detail == '{{ $name }}' ? show = true : null"
@@ -51,13 +55,17 @@ $panelWidth = ['sm' => 'max-w-md', 'md' => 'max-w-lg', 'lg' => 'max-w-xl', 'xl' 
     x-on:keydown.shift.tab.prevent="prevFocusable().focus()"
     x-show="show"
     @if ($panel)
+    {{-- Light to open: the backdrop fades on its own layer and the panel only slides - nothing above the panel changes
+         its opacity (a fading parent makes the browser repaint the whole panel every frame, slow in Safari). The outer
+         layer only waits for them to finish closing. --}}
     role="dialog" aria-modal="true"
-    x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
-    x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-    class="fixed inset-0 z-50 flex justify-end bg-slate-900/40"
-    x-on:click.self="show = false"
+    x-transition:leave="transition-[visibility] duration-150"
+    class="fixed inset-0 z-50 flex justify-end"
     style="display: {{ $show ? 'flex' : 'none' }};"
 >
+    <div x-show="show" x-on:click="show = false" aria-hidden="true" class="absolute inset-0 bg-slate-900/40"
+         x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"></div>
     <div x-show="show"
          x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
          x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"

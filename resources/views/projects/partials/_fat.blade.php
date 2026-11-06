@@ -30,11 +30,13 @@
   {{-- Snappy: the backdrop fades and the panel slides (transform only); focus moves without scrolling the page; the scrollbar's
        width is kept while the page is locked, so nothing behind jumps; Esc closes a form open above it first, not both --}}
   <div x-show="shown" x-cloak role="dialog" aria-modal="true" aria-label="วัน FAT"
-       x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
-       x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-       class="fixed inset-0 z-40 flex justify-end bg-slate-900/40" @click.self="shown = false"
+       x-transition:leave="transition-[visibility] duration-150"
+       class="fixed inset-0 z-40 flex justify-end"
        x-effect="const w = innerWidth - document.documentElement.clientWidth; document.body.classList.toggle('overflow-hidden', shown); document.body.style.paddingRight = shown && w > 0 ? w + 'px' : ''"
        @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) shown = false">
+    <div x-show="shown" @click="shown = false" aria-hidden="true" class="absolute inset-0 bg-slate-900/40"
+         x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"></div>
     <div x-show="shown" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
          x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
          x-init="$watch('shown', (v) => v && $nextTick(() => $refs.closeFat.focus({ preventScroll: true })))"

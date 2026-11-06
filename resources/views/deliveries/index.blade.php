@@ -313,11 +313,13 @@
         {{-- จัดรถ / คน: as many vehicles as it takes, each with its driver and the people who go on it; the day is PM's --}}
         {{-- รายการตู้ / ห่อตู้: every cabinet of the round, big rows to tap (gloves, phones); a tick saves at once --}}
         <div x-show="cab.open" x-cloak role="dialog" aria-modal="true" :aria-label="cab.row ? 'รายการตู้ ' + cab.row.project + ' รอบ ' + cab.row.round : 'รายการตู้'"
-             x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
-             x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-             class="fixed inset-0 z-40 flex justify-end bg-slate-900/40" @click.self="cab.open = false"
+             x-transition:leave="transition-[visibility] duration-150"
+             class="fixed inset-0 z-40 flex justify-end"
              x-effect="const w = innerWidth - document.documentElement.clientWidth, on = cab.open || asg.open || rej.open; document.body.classList.toggle('overflow-hidden', on); document.body.style.paddingRight = on && w > 0 ? w + 'px' : ''"
              @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) cab.open = false">
+            <div x-show="cab.open" @click="cab.open = false" aria-hidden="true" class="absolute inset-0 bg-slate-900/40"
+                 x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"></div>
             <div x-show="cab.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
                  x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
                  x-init="$watch('cab.open', (v) => v && $nextTick(() => $refs.closeCabs.focus({ preventScroll: true })))"
@@ -456,10 +458,12 @@
         {{-- จัดรถ / คน: a panel (full screen on a phone) - PM's request and how much of it is filled stay on top, the save button
              at the bottom; saved without reloading (saveAssign) --}}
         <div x-show="asg.open" x-cloak role="dialog" aria-modal="true" :aria-label="r ? (r.vehicles.length ? 'แก้รถ / คน ' : 'จัดรถ / คน ') + r.project + ' รอบ ' + r.round : 'จัดรถ / คน'"
-             x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
-             x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-             class="fixed inset-0 z-40 flex justify-end bg-slate-900/40" @click.self="asg.open = false"
+             x-transition:leave="transition-[visibility] duration-150"
+             class="fixed inset-0 z-40 flex justify-end"
              @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) asg.open = false">
+            <div x-show="asg.open" @click="asg.open = false" aria-hidden="true" class="absolute inset-0 bg-slate-900/40"
+                 x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"></div>
             <div x-show="asg.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
                  x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
                  x-init="$watch('asg.open', (v) => v && $nextTick(() => $refs.closeAsg.focus({ preventScroll: true })))"
@@ -560,10 +564,12 @@
         {{-- ไม่รับงาน: a panel as จัดรถ / คน - a reason (Settings > รถขนส่ง) or "อื่น ๆ" with its words; back to PM for another
              day; saved without reloading --}}
         <div x-show="rej.open" x-cloak role="dialog" aria-modal="true" :aria-label="r ? 'ไม่รับงาน ' + r.project + ' รอบ ' + r.round : 'ไม่รับงาน'"
-             x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
-             x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-             class="fixed inset-0 z-40 flex justify-end bg-slate-900/40" @click.self="rej.open = false"
+             x-transition:leave="transition-[visibility] duration-150"
+             class="fixed inset-0 z-40 flex justify-end"
              @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) rej.open = false">
+            <div x-show="rej.open" @click="rej.open = false" aria-hidden="true" class="absolute inset-0 bg-slate-900/40"
+                 x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"></div>
             <div x-show="rej.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
                  x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
                  x-init="$watch('rej.open', (v) => v && $nextTick(() => $refs.closeRej.focus({ preventScroll: true })))"

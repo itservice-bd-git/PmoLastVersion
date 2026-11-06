@@ -112,8 +112,8 @@ class ProjectFatTest extends TestCase
         ProjectFat::forceCreate(['project_id' => $this->project->id, 'round' => 2, 'fat_date' => '2026-11-12', 'fat_end_date' => '2026-11-13', 'status' => 'scheduled', 'cabinet_ids' => [$this->cab2->id]]);
 
         $rows = collect(app(\App\Services\ProjectOverview::class)->build($this->project->fresh(), $this->pm)['rows'])->keyBy('mo');
-        $this->assertSame(['04/11/2569', 1, 'ไม่ผ่าน · รอนัดใหม่'], [$rows['MO-1']['fat']['date'], $rows['MO-1']['fat']['round'], $rows['MO-1']['fat']['state']]);
-        $this->assertSame(['12–13/11/2569', 2, 'นัดแล้ว · อีก 11 วัน'], [$rows['MO-2']['fat']['date'], $rows['MO-2']['fat']['round'], $rows['MO-2']['fat']['state']]);
+        $this->assertSame(['04/11/2569', 1, null, 'failed', 'ไม่ผ่าน'], array_values(\Illuminate\Support\Arr::only($rows['MO-1']['fat'], ['date', 'round', 'days', 'result', 'resultText'])));
+        $this->assertSame(['12–13/11/2569', 2, 11, null, null], array_values(\Illuminate\Support\Arr::only($rows['MO-2']['fat'], ['date', 'round', 'days', 'result', 'resultText'])));
 
         $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('<th class="hidden px-2 py-2 lg:table-cell">FAT</th>', false);
     }

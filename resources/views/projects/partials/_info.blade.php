@@ -486,17 +486,11 @@
                                     </span>
                                 </span>
                             </td>
-                            {{-- the latest FAT round the cabinet is in: its day, then what happened (words, not the colour alone) --}}
-                            <td class="hidden whitespace-nowrap px-2 py-3 lg:table-cell">
-                                <template x-if="r.fat">
-                                    <span class="block">
-                                        <span class="block tabular-nums text-slate-700" x-text="r.fat.date + (r.fat.round > 1 ? ' · รอบ ' + r.fat.round : '')"></span>
-                                        <span class="flex items-center gap-1.5 text-xs font-semibold" :class="r.fat.overdue ? 'text-red-700' : 'text-slate-600'">
-                                            <span class="h-2 w-2 shrink-0 rounded-full" :style="'background:' + r.fat.color" aria-hidden="true"></span><span x-text="r.fat.state"></span>
-                                        </span>
-                                    </span>
-                                </template>
-                                <span x-show="! r.fat" class="text-slate-500">-</span>
+                            {{-- the latest FAT round the cabinet is in, as the "ส่ง" column: the day, then days to it, or its result (in words) --}}
+                            <td class="hidden whitespace-nowrap px-2 py-3 lg:table-cell" :title="r.fat && r.fat.round > 1 ? 'FAT รอบที่ ' + r.fat.round : null">
+                                <span class="tabular-nums text-slate-600" x-text="r.fat ? r.fat.date : '-'"></span>
+                                <span x-show="r.fat && r.fat.days !== null" class="text-xs font-semibold" :class="r.fat && dueClass(r.fat.days)" x-text="r.fat && dueLabel(r.fat.days)"></span>
+                                <span x-show="r.fat && r.fat.result" class="text-xs font-semibold" :class="r.fat && r.fat.result === 'failed' ? 'text-red-600' : 'text-emerald-700'" x-text="r.fat ? '· ' + r.fat.resultText : ''"></span>
                             </td>
                             <td class="hidden whitespace-nowrap px-2 py-3 sm:table-cell">
                                 <span class="tabular-nums text-slate-600" x-text="r.due || '-'"></span>

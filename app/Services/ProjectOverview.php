@@ -39,7 +39,7 @@ class ProjectOverview
 
         $fats = $project->fats()->get()->sortByDesc('round');   // each cabinet's FAT: the latest round it is in (no cabinets listed = all)
         $rows = $cabinets->map(fn (Cabinet $c) => $this->row($c, $project, $late, $today)
-            + ['fat' => $this->fatOf($fats->first(fn ($f) => ! $f->cabinet_ids || in_array($c->id, $f->cabinet_ids, true)), $project, $today)]);
+            + ['fat' => $this->fatOf($fats->first(fn ($f) => ! $f->cabinet_ids || in_array($c->id, $f->cabinet_ids, true)), $today)]);
         $prefix = $this->sharedPrefix($rows->pluck('mo'));
 
         return [
@@ -276,22 +276,22 @@ class ProjectOverview
         ];
     }
 
-    /** A cabinet's FAT in the table: its day, and what happened / how long until it ("นัดแล้ว · อีก 5 วัน", "ผ่าน", "ไม่ผ่าน · รอนัดใหม่"). */
-    private function fatOf(?\App\Models\ProjectFat $f, Project $project, Carbon $today): ?array
+    /**
+     * A cabinet's FAT in the table, as its "ส่ง" column: the day, then days to it (a FAT over several days: 0 until its last
+     * day, then late), or what happened once it has a result.
+     */
+    private function fatOf(?\App\Models\ProjectFat $f, Carbon $today): ?array
     {
         if (! $f) {
             return null;
         }
         $in = (int) $today->diffInDays($f->fat_date, false);
         $left = (int) $today->diffInDays($f->lastDay(), false);
-        $state = match ($f->status) {
-            \App\Models\ProjectFat::PASSED => $f->statusLabel(),
-            \App\Models\ProjectFat::FAILED => $f->statusLabel().' · รอนัดใหม่',
-            default => $f->statusLabel().' · '.($in > 0 ? 'อีก '.$in.' วัน' : ($left >= 0 ? 'วันนี้' : 'ยังไม่บันทึกผล')),
-        };
+        $scheduled = $f->status === \App\Models\ProjectFat::SCHEDULED;
 
-        return ['date' => $f->dateRange(), 'key' => $f->fat_date->format('Y-m-d'), 'round' => $f->round, 'state' => $state,
-            'color' => $f->stateColor($project), 'overdue' => $f->status === \App\Models\ProjectFat::SCHEDULED && $left < 0];
+        return ['date' => $f->dateRange(), 'key' => $f->fat_date->format('Y-m-d'), 'round' => $f->round,
+            'days' => $scheduled ? ($in > 0 ? $in : ($left >= 0 ? 0 : $left)) : null,
+            'result' => $scheduled ? null : $f->status, 'resultText' => $scheduled ? null : $f->statusLabel()];
     }
 
     /** The steps "จ่ายงานทั้งขั้น" offers: cabinets whose steps line up (the same template) form one group. */

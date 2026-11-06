@@ -177,13 +177,14 @@ class DeliveryFlow
 
             $other = $d->otherTypes() && $d->otherTypes() !== $before['other'] ? 'PM ขอ '.$d->typesText().' · ใช้ '.implode(', ', $d->otherTypes()).' ด้วย' : null;
             $short = $d->shortOfPeople() ? 'คน '.count($d->people()).'/'.$d->crew_size.' (น้อยกว่าที่ขอ)' : null;
+            $fewer = $d->shortOfVehicles() ? $d->vehiclesShortText().' (น้อยกว่าที่ขอ '.$d->typesText().')' : null;
             $what = ($d->transport() ?? '-').($d->people() ? ' · คน '.$d->peopleText() : '');
             if ($again && $before['transport'] === $d->transport() && $before['people'] === $d->peopleText()) {
                 return $d;   // saved again with nothing new
             }
-            $this->log($actor, $d, "การจัดส่งรอบที่ {$d->round}: ".($again ? 'แผนกจัดส่งแก้รถ / คน: ' : 'แผนกจัดส่งจัดรถแล้ว: ').$what.($other ? ' · '.$other : ''));
+            $this->log($actor, $d, "การจัดส่งรอบที่ {$d->round}: ".($again ? 'แผนกจัดส่งแก้รถ / คน: ' : 'แผนกจัดส่งจัดรถแล้ว: ').$what.($other ? ' · '.$other : '').($fewer ? ' · '.$fewer : ''));
             $this->notices->deliveryForManager($d, $actor, $again ? 'แผนกจัดส่งเปลี่ยนรถ / คน' : ($d->method === ProjectDelivery::PICKUP ? 'แผนกจัดส่งรับงานแล้ว' : 'แผนกจัดส่งจัดรถแล้ว'),
-                collect([$what, $other, $short])->filter()->implode(' — '));
+                collect([$what, $other, $fewer, $short])->filter()->implode(' — '));
 
             return $d;
         });

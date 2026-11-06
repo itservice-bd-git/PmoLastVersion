@@ -104,6 +104,7 @@
                                 @else
                                     {{ $d->transport() ?? '-' }}
                                     @if ($d->request())<span class="text-slate-500">· PM ขอ {{ $d->request() }}</span>@endif
+                                    @if ($d->shortOfVehicles())<span class="rounded bg-amber-100 px-1 text-xs font-bold text-amber-800">{{ $d->vehiclesShortText() }}</span>@endif
                                     @if ($d->otherType())<span class="rounded bg-amber-100 px-1 text-xs font-bold text-amber-800">มี {{ implode(', ', $d->otherTypes()) }} ที่ไม่ได้ขอ</span>@endif
                                 @endif
                             </dd>

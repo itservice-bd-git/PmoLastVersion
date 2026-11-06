@@ -162,6 +162,39 @@ class ProjectDeliveryTest extends TestCase
         $this->actingAs($this->member)->postJson(route('deliveries.pack', $d), ['cabinet_ids' => [$this->cab2->id], 'packed' => 1])->assertStatus(403);
     }
 
+    public function test_pm_asks_for_several_vehicles_of_one_kind_and_hears_when_fewer_go(): void
+    {
+        // a kind once per vehicle; sent in any order, kept each kind together
+        $d = $this->send(['vehicle_types' => ['6 ล้อเครน', 'กระบะ', '6 ล้อเครน']]);
+        $this->assertSame(['6 ล้อเครน', '6 ล้อเครน', 'กระบะ'], $d->vehicle_types);
+        $this->assertSame(['6 ล้อเครน' => 2, 'กระบะ' => 1], $d->typeCounts());
+        $this->assertSame('6 ล้อเครน 2 คัน + กระบะ · 3 คน', $d->request());
+        $this->actingAs($this->pm)->post(route('projects.deliveries.store', $this->project), $this->data(['cabinet_ids' => [], 'send' => '0', 'vehicle_types' => array_fill(0, 21, 'กระบะ')]))
+            ->assertSessionHasErrors(['vehicle_types' => 'รถรวมไม่เกิน 20 คัน']);
+        $this->actingAs($this->pm)->get(route('projects.deliveries.form', [$this->project, 'delivery' => $d->id]))->assertOk()
+            ->assertViewHas('f', fn ($f) => $f['vehicle_types'] === ['6 ล้อเครน', '6 ล้อเครน', 'กระบะ']);
+
+        // one 6 ล้อเครน of the two: allowed, PM hears it, the delivery department sees it
+        $this->assign($d, [['vehicle_id' => $this->truck->id, 'crew' => ['วิชัย']], ['vehicle_id' => $this->pickup->id]])->assertSessionHasNoErrors();
+        $d->refresh();
+        $this->assertSame([true, 'รถ 2/3 คัน'], [$d->shortOfVehicles(), $d->vehiclesShortText()]);
+        $this->assertStringContainsString('รถ 2/3 คัน (น้อยกว่าที่ขอ 6 ล้อเครน 2 คัน + กระบะ)', $this->lastLog());
+        $this->assertStringContainsString('รถ 2/3 คัน (น้อยกว่าที่ขอ', $this->pm->notifications()->first()->data['body']);
+        $this->actingAs($this->clerk)->get(route('deliveries.index', ['round' => $d->id]))->assertSee('PM ขอ <span class="font-semibold text-slate-700">6 ล้อเครน 2 คัน + กระบะ · 3 คน</span>', false)
+            ->assertSee('รถ 2/3 คัน · น้อยกว่าที่ขอ');
+        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertSee('รถ 2/3 คัน');
+
+        // the third one put on: no longer short
+        $second = Vehicle::create(['name' => 'เครน 2', 'type' => '6 ล้อเครน', 'plate' => '4กข-999', 'is_active' => true]);
+        $this->assign($d, [['vehicle_id' => $this->truck->id], ['vehicle_id' => $second->id], ['vehicle_id' => $this->pickup->id]])->assertSessionHasNoErrors();
+        $this->assertFalse($d->fresh()->shortOfVehicles());
+
+        // the new-project form keeps the counts on its draft
+        $this->actingAs($this->pm)->post(route('projects.store'), ['project_no' => 'PJ-CARS', 'project_name' => 'X', 'customer_name' => 'C', 'priority' => 'normal',
+            'delivery_date' => '2026-12-01', 'delivery_method' => 'company', 'delivery_vehicle_types' => ['กระบะ', 'กระบะ']])->assertSessionHasNoErrors();
+        $this->assertSame(['กระบะ', 'กระบะ'], Project::where('project_no', 'PJ-CARS')->firstOrFail()->deliveries()->firstOrFail()->vehicle_types);
+    }
+
     public function test_the_delivery_department_puts_several_vehicles_and_people_on_it_and_pm_hears_what_differs(): void
     {
         $d = $this->send();

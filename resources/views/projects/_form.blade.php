@@ -159,7 +159,7 @@
         @endphp
         <div class="space-y-4 md:col-span-2"
              x-data="{ fat: @js((string) old('fat_date')), fatEnd: @js((string) old('fat_end_date')), fatTime: @js((string) old('fat_time')),
-                       fatStatus: @js(old('fat_status', 'scheduled')), method: @js(old('delivery_method', 'company')), due: '' }"
+                       fatStatus: @js(old('fat_status', 'scheduled')), method: @js(old('delivery_method', 'company')), cars: @js(array_values((array) old('delivery_vehicle_types', []))), due: '' }"
              x-init="$nextTick(() => { const d = document.getElementById('due_date'); if (d) { due = d.value; d.addEventListener('change', () => { due = d.value; }); } })">
             {{-- วัน FAT: as the FAT window --}}
             <fieldset class="rounded-xl border border-slate-200 p-4">
@@ -220,15 +220,12 @@
                         </label>
                     </div>
                     <fieldset x-show="method === 'company'">
-                        <legend class="text-sm font-semibold text-slate-800">ประเภทรถที่ต้องใช้ <span class="font-normal text-slate-500">(เลือกได้หลายแบบ)</span></legend>
-                        <div class="mt-1.5 flex flex-wrap gap-2">
-                            @forelse ($vehicleTypes as $t)
-                                <label class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-700 has-[:checked]:border-teal-700 has-[:checked]:bg-teal-50 has-[:checked]:text-teal-800">
-                                    <input type="checkbox" name="delivery_vehicle_types[]" value="{{ $t }}" @checked(in_array($t, (array) old('delivery_vehicle_types', []), true)) :disabled="method !== 'company'" class="rounded text-teal-700">{{ $t }}</label>
-                            @empty
-                                <span class="text-sm text-slate-500">ยังไม่มีประเภทรถ (ตั้งค่า › รถขนส่ง)</span>
-                            @endforelse
-                        </div>
+                        <legend class="text-sm font-semibold text-slate-800">ประเภทรถที่ต้องใช้ <span class="font-normal text-slate-500">(เลือกได้หลายแบบ · กด + ถ้าใช้หลายคัน)</span></legend>
+                        @if ($vehicleTypes)
+                            @include('projects.partials._vehicle-types', ['list' => json_encode($vehicleTypes, JSON_UNESCAPED_UNICODE), 'model' => 'cars', 'name' => 'delivery_vehicle_types', 'off' => "method !== 'company'"])
+                        @else
+                            <p class="mt-1.5 text-sm text-slate-500">ยังไม่มีประเภทรถ (ตั้งค่า › รถขนส่ง)</p>
+                        @endif
                     </fieldset>
                     <label x-show="method !== 'pickup'" class="block w-40 text-sm font-semibold text-slate-800">จำนวนคน
                         <input type="number" name="delivery_crew_size" value="{{ old('delivery_crew_size') }}" :disabled="method === 'pickup'" min="1" max="20" inputmode="numeric" placeholder="เช่น 3" class="{{ $box }} tabular-nums">

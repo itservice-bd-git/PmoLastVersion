@@ -73,14 +73,8 @@
                 @include('projects.partials._date-move-fields')
                 {{-- the kinds of vehicle (several) and how many people --}}
                 <fieldset x-show="f.method === 'company'">
-                    <legend class="text-sm font-semibold text-slate-800">ประเภทรถที่ต้องใช้<span x-show="f.types.length"> *</span> <span class="font-normal text-slate-500">(เลือกได้หลายแบบ)</span></legend>
-                    <div class="mt-1.5 flex flex-wrap gap-2">
-                        <template x-for="t in f.types" :key="t">
-                            <label class="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold"
-                                   :class="f.vehicle_types.includes(t) ? 'border-teal-700 bg-teal-50 text-teal-800' : 'border-slate-300 bg-white text-slate-700'">
-                                <input type="checkbox" name="vehicle_types[]" :value="t" x-model="f.vehicle_types" :disabled="f.method !== 'company'" class="rounded text-teal-700"><span x-text="t"></span></label>
-                        </template>
-                    </div>
+                    <legend class="text-sm font-semibold text-slate-800">ประเภทรถที่ต้องใช้<span x-show="f.types.length"> *</span> <span class="font-normal text-slate-500">(เลือกได้หลายแบบ · กด + ถ้าใช้หลายคัน)</span></legend>
+                    @include('projects.partials._vehicle-types', ['list' => 'f.types', 'model' => 'f.vehicle_types', 'name' => 'vehicle_types', 'off' => "f.method !== 'company'"])
                     <p x-show="!f.types.length" class="mt-1 text-xs text-slate-500">ยังไม่มีประเภทรถ · ให้แผนกจัดส่งใส่ประเภทให้รถแต่ละคันที่ ตั้งค่า › รถขนส่ง</p>
                 </fieldset>
                 <label x-show="f.method !== 'pickup'" class="block w-40 text-sm font-semibold text-slate-800">จำนวนคน

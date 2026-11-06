@@ -159,7 +159,7 @@ class DeliveryController extends Controller
                 'name' => $v->name(), 'type' => (string) $v->vehicle?->type, 'driver_name' => (string) $v->driver_name, 'crew' => $v->crew ?? []])->values()->all(),
             // what PM asked for, and what differs from it
             'types' => $d->vehicle_types ?? [], 'crew_size' => (int) $d->crew_size, 'request' => $d->request(), 'other' => $d->otherTypes(),
-            'people' => $d->peopleText(), 'short' => $d->shortOfPeople(), 'sender' => (string) $d->sender?->name,
+            'people' => $d->peopleText(), 'short' => $d->shortOfPeople(), 'fewer' => $d->vehiclesShortText(), 'sender' => (string) $d->sender?->name,
             'date' => $d->delivery_date->format('Y-m-d'), 'days' => $d->days(), 'when' => $d->when(),
             'left' => $left, 'late' => $d->status !== ProjectDelivery::DELIVERED && $end < 0, 'during' => $left <= 0 && $end >= 0,
             // the four steps

@@ -130,10 +130,44 @@ class ProjectDelivery extends Model
         return in_array($this->status, [self::WAITING, self::REJECTED, self::SCHEDULED], true);
     }
 
-    /** The kinds of vehicle PM asked for: "10 ล้อ + กระบะ" ('' = none) */
+    /** Most vehicles PM may ask for on one round. */
+    public const MAX_VEHICLES = 20;
+
+    /**
+     * PM's kinds of vehicle as saved: a kind once per vehicle, each kind's together in the order first picked
+     * (["6 ล้อเครน", "6 ล้อเครน", "กระบะ"] = two 6 ล้อเครน and a กระบะ); null = none.
+     *
+     * @param  array<mixed>|null  $types
+     */
+    public static function normaliseTypes(?array $types): ?array
+    {
+        $list = collect($types ?? [])->map(fn ($t) => trim((string) $t))->filter()->take(self::MAX_VEHICLES);
+
+        return $list->countBy()->flatMap(fn ($n, $t) => array_fill(0, $n, (string) $t))->values()->all() ?: null;
+    }
+
+    /** ["6 ล้อเครน" => 2, "กระบะ" => 1] */
+    public function typeCounts(): array
+    {
+        return collect($this->vehicle_types ?? [])->countBy()->all();
+    }
+
+    /** The kinds of vehicle PM asked for: "10 ล้อ 2 คัน + กระบะ" ('' = none) */
     public function typesText(): string
     {
-        return implode(' + ', $this->vehicle_types ?? []);
+        return collect($this->typeCounts())->map(fn ($n, $t) => $n > 1 ? "{$t} {$n} คัน" : $t)->implode(' + ');
+    }
+
+    /** Fewer vehicles on it than PM asked for (PM asked two 6 ล้อเครน, one put on it). */
+    public function shortOfVehicles(): bool
+    {
+        return $this->method === self::COMPANY && ! $this->isOpen() && $this->vehicles->count() < count($this->vehicle_types ?? []);
+    }
+
+    /** "รถ 1/2 คัน" when short, else '' */
+    public function vehiclesShortText(): string
+    {
+        return $this->shortOfVehicles() ? 'รถ '.$this->vehicles->count().'/'.count($this->vehicle_types).' คัน' : '';
     }
 
     /**

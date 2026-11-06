@@ -143,6 +143,7 @@
                         @empty
                             @if ($row['method'] !== 'company')<p class="font-semibold">{{ $row['transport'] }}</p>@endif
                         @endforelse
+                        @if ($row['fewer'])<p class="font-semibold text-amber-800">{{ $row['fewer'] }} · น้อยกว่าที่ขอ</p>@endif
                         @if ($row['people'])<p class="{{ $row['short'] ? 'font-semibold text-amber-800' : 'text-slate-500' }}">👷 {{ $row['people'] }}</p>@endif
                         @if ($row['contact'])<p class="text-slate-500">📞 {{ $row['contact'] }}</p>@endif
                     </div>

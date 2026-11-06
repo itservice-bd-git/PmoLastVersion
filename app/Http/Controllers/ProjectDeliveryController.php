@@ -159,7 +159,7 @@ class ProjectDeliveryController extends Controller
             'cabinet_ids' => [$send ? 'required' : 'nullable', 'array', $send ? 'min:1' : 'min:0'],
             'cabinet_ids.*' => ['integer', Rule::exists('cabinets', 'id')->where('project_id', $project->id)->whereNull('deleted_at')],
             'method' => ['required', Rule::in(array_keys(ProjectDelivery::METHOD_LABELS))],
-            'vehicle_types' => [Rule::requiredIf($send && $method === ProjectDelivery::COMPANY && $types), 'nullable', 'array', 'max:10'],
+            'vehicle_types' => [Rule::requiredIf($send && $method === ProjectDelivery::COMPANY && $types), 'nullable', 'array', 'max:'.ProjectDelivery::MAX_VEHICLES],
             'vehicle_types.*' => ['string', Rule::in($types)],
             'crew_size' => ['nullable', 'integer', 'min:1', 'max:20'],
         ];
@@ -171,6 +171,7 @@ class ProjectDeliveryController extends Controller
         'delivery_time.date_format' => 'ใส่เวลาแบบ 09:00',
         'cabinet_ids.required' => 'เลือกตู้ที่ส่งรอบนี้อย่างน้อย 1 ตู้',
         'vehicle_types.required' => 'เลือกประเภทรถอย่างน้อย 1 แบบ',
+        'vehicle_types.max' => 'รถรวมไม่เกิน '.ProjectDelivery::MAX_VEHICLES.' คัน',
         'vehicle_types.*.in' => 'ไม่มีรถประเภทนี้ · เพิ่มได้ที่ ตั้งค่า › รถขนส่ง',
         'crew_size.min' => 'จำนวนคนอย่างน้อย 1 คน',
         'crew_size.max' => 'จำนวนคนไม่เกิน 20 คน',
@@ -207,7 +208,7 @@ class ProjectDeliveryController extends Controller
             'delivery_time' => $text('delivery_time'),
             'cabinet_ids' => $ids,
             'method' => $method,
-            'vehicle_types' => $company ? (array_values(array_unique(array_filter($data['vehicle_types'] ?? []))) ?: null) : null,
+            'vehicle_types' => $company ? ProjectDelivery::normaliseTypes($data['vehicle_types'] ?? []) : null,   // a kind once per vehicle
             'crew_size' => $method !== ProjectDelivery::PICKUP && ! empty($data['crew_size']) ? (int) $data['crew_size'] : null,
         ] + [
             'carrier' => $method === ProjectDelivery::EXTERNAL ? $text('carrier') : null,

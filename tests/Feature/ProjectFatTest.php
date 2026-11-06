@@ -105,6 +105,19 @@ class ProjectFatTest extends TestCase
         $this->assertSame(2, EventDateChange::count());
     }
 
+    public function test_the_cabinet_table_shows_each_cabinets_latest_fat_round(): void
+    {
+        $this->travelTo('2026-11-01');
+        ProjectFat::forceCreate(['project_id' => $this->project->id, 'round' => 1, 'fat_date' => '2026-11-04', 'status' => 'failed']);
+        ProjectFat::forceCreate(['project_id' => $this->project->id, 'round' => 2, 'fat_date' => '2026-11-12', 'fat_end_date' => '2026-11-13', 'status' => 'scheduled', 'cabinet_ids' => [$this->cab2->id]]);
+
+        $rows = collect(app(\App\Services\ProjectOverview::class)->build($this->project->fresh(), $this->pm)['rows'])->keyBy('mo');
+        $this->assertSame(['04/11/2569', 1, 'ไม่ผ่าน · รอนัดใหม่'], [$rows['MO-1']['fat']['date'], $rows['MO-1']['fat']['round'], $rows['MO-1']['fat']['state']]);
+        $this->assertSame(['12–13/11/2569', 2, 'นัดแล้ว · อีก 11 วัน'], [$rows['MO-2']['fat']['date'], $rows['MO-2']['fat']['round'], $rows['MO-2']['fat']['state']]);
+
+        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('<th class="hidden px-2 py-2 lg:table-cell">FAT</th>', false);
+    }
+
     public function test_only_admin_and_pm_may_set_it_and_a_closed_project_refuses(): void
     {
         $this->actingAs($this->member)->post(route('projects.fats.store', $this->project), $this->fatData())->assertForbidden();

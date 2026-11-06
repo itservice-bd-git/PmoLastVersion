@@ -37,7 +37,9 @@ class ProjectOverview
         $visible = $cabinets->flatMap->tasks->flatMap->subtasks
             ->when(! $user->canSeeAllWork(), fn ($c) => $c->whereIn('department_id', $user->departmentIds()));
 
-        $rows = $cabinets->map(fn (Cabinet $c) => $this->row($c, $project, $late, $today));
+        $fats = $project->fats()->get()->sortByDesc('round');   // each cabinet's FAT: the latest round it is in (no cabinets listed = all)
+        $rows = $cabinets->map(fn (Cabinet $c) => $this->row($c, $project, $late, $today)
+            + ['fat' => $this->fatOf($fats->first(fn ($f) => ! $f->cabinet_ids || in_array($c->id, $f->cabinet_ids, true)), $project, $today)]);
         $prefix = $this->sharedPrefix($rows->pluck('mo'));
 
         return [
@@ -272,6 +274,24 @@ class ProjectOverview
             'signature' => $steps->pluck('label')->implode("\n"),
             'templateName' => $c->cabinetTemplate?->name,
         ];
+    }
+
+    /** A cabinet's FAT in the table: its day, and what happened / how long until it ("นัดแล้ว · อีก 5 วัน", "ผ่าน", "ไม่ผ่าน · รอนัดใหม่"). */
+    private function fatOf(?\App\Models\ProjectFat $f, Project $project, Carbon $today): ?array
+    {
+        if (! $f) {
+            return null;
+        }
+        $in = (int) $today->diffInDays($f->fat_date, false);
+        $left = (int) $today->diffInDays($f->lastDay(), false);
+        $state = match ($f->status) {
+            \App\Models\ProjectFat::PASSED => $f->statusLabel(),
+            \App\Models\ProjectFat::FAILED => $f->statusLabel().' · รอนัดใหม่',
+            default => $f->statusLabel().' · '.($in > 0 ? 'อีก '.$in.' วัน' : ($left >= 0 ? 'วันนี้' : 'ยังไม่บันทึกผล')),
+        };
+
+        return ['date' => $f->dateRange(), 'key' => $f->fat_date->format('Y-m-d'), 'round' => $f->round, 'state' => $state,
+            'color' => $f->stateColor($project), 'overdue' => $f->status === \App\Models\ProjectFat::SCHEDULED && $left < 0];
     }
 
     /** The steps "จ่ายงานทั้งขั้น" offers: cabinets whose steps line up (the same template) form one group. */

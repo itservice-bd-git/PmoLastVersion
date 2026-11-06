@@ -454,6 +454,7 @@
                         <th class="px-4 py-2">ตู้ @if ($overview['moPrefix'])<span class="font-normal text-slate-400" title="ทุกตู้ขึ้นต้นด้วย {{ $overview['moPrefix'] }}">({{ $overview['moPrefix'] }} …)</span>@endif</th>
                         <th class="px-2 py-2">ความคืบหน้า</th>
                         <th class="hidden px-2 py-2 md:table-cell">ตอนนี้อยู่ขั้น</th>
+                        <th class="hidden px-2 py-2 lg:table-cell">FAT</th>
                         <th class="hidden px-2 py-2 sm:table-cell">ส่ง</th>
                         <th class="hidden whitespace-nowrap px-2 py-2 text-right sm:table-cell">งานเลยกำหนด</th>
                         <th class="px-2 py-2"><span class="sr-only">ดำเนินการ</span></th>
@@ -485,6 +486,18 @@
                                     </span>
                                 </span>
                             </td>
+                            {{-- the latest FAT round the cabinet is in: its day, then what happened (words, not the colour alone) --}}
+                            <td class="hidden whitespace-nowrap px-2 py-3 lg:table-cell">
+                                <template x-if="r.fat">
+                                    <span class="block">
+                                        <span class="block tabular-nums text-slate-700" x-text="r.fat.date + (r.fat.round > 1 ? ' · รอบ ' + r.fat.round : '')"></span>
+                                        <span class="flex items-center gap-1.5 text-xs font-semibold" :class="r.fat.overdue ? 'text-red-700' : 'text-slate-600'">
+                                            <span class="h-2 w-2 shrink-0 rounded-full" :style="'background:' + r.fat.color" aria-hidden="true"></span><span x-text="r.fat.state"></span>
+                                        </span>
+                                    </span>
+                                </template>
+                                <span x-show="! r.fat" class="text-slate-500">-</span>
+                            </td>
                             <td class="hidden whitespace-nowrap px-2 py-3 sm:table-cell">
                                 <span class="tabular-nums text-slate-600" x-text="r.due || '-'"></span>
                                 <span x-show="r.daysLeft !== null" class="text-xs font-semibold" :class="dueClass(r.daysLeft)" x-text="dueLabel(r.daysLeft)"></span>
@@ -515,7 +528,7 @@
                         </tr>
                     </template>
                     <tr x-show="! filtered().length">
-                        <td colspan="7" class="px-4 py-8 text-center text-sm text-slate-500">{{ $overview['cabinetCount'] ? 'ไม่มีตู้ที่ตรงกับตัวกรอง' : 'ยังไม่มีตู้ไฟฟ้าในโครงการนี้' }}</td>
+                        <td colspan="8" class="px-4 py-8 text-center text-sm text-slate-500">{{ $overview['cabinetCount'] ? 'ไม่มีตู้ที่ตรงกับตัวกรอง' : 'ยังไม่มีตู้ไฟฟ้าในโครงการนี้' }}</td>
                     </tr>
                 </tbody>
             </table>

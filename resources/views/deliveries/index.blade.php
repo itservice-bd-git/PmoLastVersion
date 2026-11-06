@@ -333,20 +333,31 @@
                             </div>
                         </div>
 
-                        {{-- the cabinets --}}
-                        <ul class="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain">
+                        {{-- the cabinets, in columns: เลข MO | ชื่อตู้ (type · size · how many) | ห่อแล้ว; big rows to tap --}}
+                        @php $cols = 'grid grid-cols-[1.75rem_minmax(0,7rem)_minmax(0,1fr)_auto] items-center gap-x-3 sm:grid-cols-[1.75rem_9rem_minmax(0,1fr)_auto]'; @endphp
+                        <ul class="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain" aria-label="รายการตู้">
+                            <li x-show="cabShown.length" class="{{ $cols }} sticky top-0 z-[1] border-b border-slate-200 bg-slate-50 px-4 py-1.5 text-xs font-semibold text-slate-500 sm:px-5" aria-hidden="true">
+                                <span></span><span>เลข MO</span><span>ชื่อตู้ · ประเภท · ขนาด</span><span class="text-right">สถานะ</span>
+                            </li>
                             <template x-for="c in cabShown" :key="c.id">
                                 <li>
                                     <button type="button" @click="packCabs([c], !c.packed)" :disabled="!cab.row.packable || c.busy" :aria-pressed="c.packed"
-                                            class="flex min-h-[3.75rem] w-full items-center gap-3 px-4 py-2.5 text-left enabled:hover:bg-slate-50 disabled:cursor-default sm:px-5" :class="c.busy ? 'opacity-60' : ''">
-                                        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors" :class="c.packed ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white text-transparent'" aria-hidden="true">
+                                            :aria-label="(c.model ? c.name + ' ' + c.model : c.name) + (c.packed ? ' ห่อแล้ว' : ' ยังไม่ห่อ')"
+                                            class="{{ $cols }} min-h-[3.75rem] w-full px-4 py-2.5 text-left enabled:hover:bg-slate-50 disabled:cursor-default sm:px-5" :class="c.busy ? 'opacity-60' : ''">
+                                        <span class="flex h-7 w-7 items-center justify-center rounded-full border-2 transition-colors" :class="c.packed ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white text-transparent'" aria-hidden="true">
                                             <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5 9-10"/></svg>
                                         </span>
-                                        <span class="min-w-0 flex-1">
-                                            <span class="flex flex-wrap items-baseline gap-x-2"><span class="font-bold tabular-nums text-slate-900" x-text="c.name"></span><span x-show="c.model" class="min-w-0 break-words text-sm text-slate-700" x-text="c.model"></span></span>
+                                        {{-- เลข MO (none: -) --}}
+                                        <span class="break-words text-sm font-bold tabular-nums text-slate-900" x-text="c.model ? c.name : '-'"></span>
+                                        {{-- ชื่อตู้, then what it is --}}
+                                        <span class="min-w-0">
+                                            <span class="block break-words text-sm font-semibold text-slate-800" x-text="c.model || c.name"></span>
                                             <span x-show="c.type || c.size || c.qty > 1" class="block text-xs text-slate-600" x-text="[c.type, c.size ? 'ขนาด ' + c.size : '', c.qty > 1 ? c.qty + ' ตู้' : ''].filter(Boolean).join(' · ')"></span>
                                         </span>
-                                        <span class="shrink-0 text-right text-xs font-semibold" :class="c.packed ? 'text-emerald-700' : 'text-slate-500'" x-text="c.packed ? 'ห่อแล้ว' + (c.at ? ' ' + c.at : '') : 'ยังไม่ห่อ'"></span>
+                                        <span class="text-right text-xs font-semibold leading-tight" :class="c.packed ? 'text-emerald-700' : 'text-slate-500'">
+                                            <span class="block" x-text="c.packed ? 'ห่อแล้ว' : 'ยังไม่ห่อ'"></span>
+                                            <span x-show="c.packed && c.at" class="block font-normal tabular-nums" x-text="c.at"></span>
+                                        </span>
                                     </button>
                                 </li>
                             </template>

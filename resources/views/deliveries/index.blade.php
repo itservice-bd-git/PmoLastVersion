@@ -6,13 +6,23 @@
     $btn = 'inline-flex h-9 items-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50';
     $main = 'inline-flex h-9 items-center rounded-lg bg-teal-700 px-3 text-sm font-semibold text-white hover:bg-teal-800';
     $steps = ['ห่อตู้', 'แจ้งเปิดบิล', 'ออกจากโรงงาน', 'ส่งถึง'];
+    // small line icons for the card's details (one family, one stroke)
+    $icons = [
+        'truck' => 'M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12',
+        'people' => 'M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z',
+        'phone' => 'M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z',
+    ];
+    $icon = fn (string $k) => '<svg class="mt-[3px] h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="'.$icons[$k].'"/></svg>';
+    $check = '<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>';
+    $keep = fn (string $text, string $sep = ' · ') => collect(explode($sep, $text))->map(fn ($part) => '<span class="whitespace-nowrap">'.e($part).'</span>')->implode(e($sep));
+    $phone = fn (string $text) => preg_replace('/(\+?\d[\d\- ]{5,}\d)/', '<span class="whitespace-nowrap">$1</span>', e($text));
+    $cabIcon = '<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4"/></svg>';
 @endphp
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h2 class="text-lg font-semibold text-slate-900">งานจัดส่ง</h2>
-            <span class="text-sm text-slate-500">จัดรถ / คนตามวันที่ PM ลง · ห่อตู้ · แจ้งเปิดบิล · ออกจากโรงงาน · ส่งถึง (Checklist ของตู้ติ๊กให้เอง)</span>
-            <a href="{{ route('settings.vehicles.index') }}" class="ml-auto text-sm font-semibold text-teal-700 hover:underline">จัดการรถ / เหตุผลไม่รับงาน</a>
+        <div class="flex min-w-0 items-baseline gap-3">
+            <h2 class="shrink-0 text-lg font-semibold text-slate-900">งานจัดส่ง</h2>
+            <span class="hidden truncate text-sm text-slate-500 xl:block">จัดรถ / คนตามวันที่ PM ลง · ห่อตู้ · แจ้งเปิดบิล · ออกจากโรงงาน · ส่งถึง (Checklist ของตู้ติ๊กให้เอง)</span>
         </div>
     </x-slot>
 
@@ -48,6 +58,21 @@
                            st.error = 'บันทึกไม่ได้ ตรวจการเชื่อมต่อแล้วลองอีกครั้ง';
                        } finally {
                            st.saving = false;
+                       }
+                   },
+                   // a card's one-tap step (ออกจากโรงงาน, รับงาน): saved without reloading, the list drawn again
+                   async quick(url) {
+                       if (this._quick) return;
+                       this._quick = true;
+                       try {
+                           const res = await fetch(url, { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content } });
+                           const data = await res.json().catch(() => ({}));
+                           this.say(res.ok ? (data.message || 'บันทึกแล้ว') : ((data.errors && Object.values(data.errors)[0][0]) || data.message || 'บันทึกไม่ได้ ลองอีกครั้ง'));
+                           if (res.ok) await this.refreshList();
+                       } catch (e) {
+                           this.say('บันทึกไม่ได้ ตรวจการเชื่อมต่อแล้วลองอีกครั้ง');
+                       } finally {
+                           this._quick = false;
                        }
                    },
                    say(m) { this.toast = m; clearTimeout(this._toast); this._toast = setTimeout(() => { this.toast = ''; }, 3500); },
@@ -158,7 +183,8 @@
             <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{{ $errors->first() }}</p>
         @endif
 
-        <nav id="dl-tabs" class="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 text-sm" aria-label="ขั้นงาน">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <nav id="dl-tabs" class="flex min-w-0 basis-full gap-1 sm:basis-auto sm:flex-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 text-sm" aria-label="ขั้นงาน">
             @foreach (\App\Http\Controllers\DeliveryController::TABS as $key => $label)
                 @php $n = $tabs[$key]->count(); @endphp
                 <a href="{{ route('deliveries.index', ['tab' => $key]) }}" @if ($tab === $key) aria-current="page" @endif
@@ -170,6 +196,8 @@
                 </a>
             @endforeach
         </nav>
+            <a href="{{ route('settings.vehicles.index') }}" class="shrink-0 text-sm font-semibold text-teal-700 hover:underline">จัดการรถ / เหตุผลไม่รับงาน</a>
+        </div>
 
         {{-- what the panels need that changes once something is saved; read again by refreshList() --}}
         <script type="application/json" id="dl-live">@json(['busy' => (object) $busy, 'people' => $people])</script>
@@ -181,58 +209,52 @@
                 @endphp
                 <article class="grid gap-x-4 gap-y-3 border-t border-slate-100 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] {{ $round === $row['id'] ? 'bg-amber-50/60 ring-2 ring-inset ring-amber-300' : '' }}"
                          id="round-{{ $row['id'] }}">
-                    {{-- what goes: each cabinet with its ห่อแล้ว button --}}
+                    @php
+                        $toBill = $packable && $row['allPacked'] && $row['status'] !== 'rejected';
+                        $cabLabel = $packable && ! $row['allPacked'] ? 'ห่อตู้ '.$row['packedCount'].'/'.count($row['cabinets']) : ($toBill ? 'แจ้งเปิดบิล' : 'รายการตู้ ('.count($row['cabinets']).')');
+                        // the panel's button leads the card when packing / แจ้งเปิดบิล is what is next (not before the vehicles)
+                        $cabLeads = $row['status'] === 'scheduled' && (($packable && ! $row['allPacked']) || $toBill);
+                        $cabTitles = collect($row['cabinets'])->map(fn ($c) => $c['model'] ?: $c['name']);
+                        $cabButton = fn (bool $lead) => '<button type="button" @click="openCabs('.e(\Illuminate\Support\Js::from($row)).')" class="'.($lead ? $main : $btn).' gap-1.5">'.$cabIcon.e($cabLabel).'</button>';
+                    @endphp
+                    {{-- what goes: the cabinets' names (every detail in the panel), and how far it is --}}
                     <div class="min-w-0">
                         <p class="truncate text-sm font-bold text-slate-900">{{ $row['project'] }} <span class="font-semibold text-slate-600">{{ $row['name'] }}</span></p>
                         <p class="text-[13px] text-slate-600">รอบ {{ $row['round'] }} · {{ count($row['cabinets']) }} ตู้{{ $row['site'] ? ' · '.$row['site'] : '' }}</p>
-                        {{-- the cabinets: their names only, on up to two lines; every detail of them, ห่อ → แจ้งเปิดบิล → ออกจากโรงงาน
-                             and ย้อนขั้น in the panel. The button names what is next there --}}
-                        @php
-                            $toBill = $packable && $row['allPacked'] && $row['status'] !== 'rejected';
-                            $cabLabel = $packable && ! $row['allPacked'] ? 'ห่อตู้ '.$row['packedCount'].'/'.count($row['cabinets']) : ($toBill ? 'แจ้งเปิดบิล' : 'รายการตู้ ('.count($row['cabinets']).')');
-                            $cabTitles = collect($row['cabinets'])->map(fn ($c) => $c['model'] ?: $c['name']);
-                        @endphp
                         <p class="mt-1.5 flex items-baseline gap-1.5 text-[13px]">
                             <span class="line-clamp-2 min-w-0 text-slate-700" title="{{ $cabTitles->implode(', ') }}">{{ $cabTitles->take(8)->implode(', ') }}</span>
                             @if ($cabTitles->count() > 2)<button type="button" @click="openCabs(@js($row))" class="shrink-0 font-semibold text-teal-700 hover:underline">ดูทั้งหมด</button>@endif
                         </p>
-                        {{-- the next step's button, and the four steps --}}
-                        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-                            <button type="button" @click="openCabs(@js($row))"
-                                    class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold {{ ($packable && ! $row['allPacked']) || $toBill ? 'bg-teal-700 text-white hover:bg-teal-800' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' }}">
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4"/></svg>
-                                {{ $cabLabel }}
-                            </button>
-                        <ol class="grid min-w-[14rem] max-w-sm flex-1 grid-cols-4 gap-1" aria-label="ขั้น: {{ $row['step']['text'] }}">
+                        {{-- the four steps --}}
+                        <ol class="mt-2.5 grid max-w-md grid-cols-4 gap-1.5" aria-label="ขั้น: {{ $row['step']['text'] }}">
                             @foreach ($steps as $i => $label)
                                 @php $fill = $i === 0 ? ($row['step']['n'] >= 1 ? 100 : (int) round($row['packedCount'] / max(1, count($row['cabinets'])) * 100)) : ($row['step']['n'] > $i ? 100 : 0); @endphp
                                 <li class="min-w-0"><span class="block h-1.5 overflow-hidden rounded-full bg-slate-200"><span class="block h-full {{ $row['step']['n'] === $i && $fill < 100 ? 'bg-sky-600' : 'bg-emerald-600' }}" style="width: {{ $fill }}%"></span></span>
-                                    <span class="block truncate text-[11px] {{ $row['step']['n'] === $i ? 'font-bold text-slate-900' : ($row['step']['n'] > $i ? 'text-emerald-700' : 'text-slate-500') }}">{{ $i === 0 ? 'ห่อ '.$row['packedCount'].'/'.count($row['cabinets']) : $label }}</span></li>
+                                    <span class="mt-0.5 block truncate text-[11px] {{ $row['step']['n'] === $i ? 'font-bold text-slate-900' : ($row['step']['n'] > $i ? 'text-emerald-700' : 'text-slate-500') }}">{{ $i === 0 ? 'ห่อ '.$row['packedCount'].'/'.count($row['cabinets']) : $label }}</span></li>
                             @endforeach
                         </ol>
-                        </div>
                     </div>
-                    {{-- on what: PM's request, the vehicles put on it --}}
-                    <div class="min-w-0 space-y-0.5 text-[13px] text-slate-700">
+                    {{-- on what: PM's request, the vehicles put on it (after the day on a phone) --}}
+                    <div class="order-2 min-w-0 space-y-1 text-[13px] text-slate-700 md:order-none">
                         @if ($row['request'])<p class="text-slate-500">PM ขอ <span class="font-semibold text-slate-700">{{ $row['request'] }}</span></p>@endif
                         @forelse ($row['vehicles'] as $v)
-                            <p><span class="font-semibold">{{ $row['method'] === 'company' ? '🚚 ' : '' }}{{ $v['name'] }}</span>
+                            <p class="flex gap-1.5">@if ($row['method'] === 'company'){!! $icon('truck') !!}@endif<span class="min-w-0"><span class="font-semibold">{{ $v['name'] }}</span>
                                 @if ($v['type'] && $row['types'] && ! in_array($v['type'], $row['types'], true))<span class="ml-1 rounded bg-amber-100 px-1 text-xs font-bold text-amber-800">ไม่ได้ขอ</span>@endif
-                                @if ($v['driver_name'] || $v['crew'])<span class="text-slate-500"> · {{ implode(', ', array_filter([$v['driver_name'], ...$v['crew']])) }}</span>@endif</p>
+                                @if ($v['driver_name'] || $v['crew'])<span class="text-slate-500"> · {{ implode(', ', array_filter([$v['driver_name'], ...$v['crew']])) }}</span>@endif</span></p>
                         @empty
                             @if ($row['method'] !== 'company')<p class="font-semibold">{{ $row['transport'] }}</p>@endif
                         @endforelse
                         @if ($row['fewer'])<p class="font-semibold text-amber-800">{{ $row['fewer'] }} · น้อยกว่าที่ขอ</p>@endif
-                        @if ($row['people'])<p class="{{ $row['short'] ? 'font-semibold text-amber-800' : 'text-slate-500' }}">👷 {{ $row['people'] }}</p>@endif
-                        @if ($row['contact'])<p class="text-slate-500">📞 {{ $row['contact'] }}</p>@endif
+                        @if ($row['people'])<p class="flex gap-1.5 {{ $row['short'] ? 'font-semibold text-amber-800' : 'text-slate-500' }}">{!! $icon('people') !!}<span class="min-w-0">{{ $row['people'] }}</span></p>@endif
+                        @if ($row['contact'])<p class="flex gap-1.5 text-slate-500">{!! $icon('phone') !!}<span class="min-w-0">{!! $phone($row['contact']) !!}</span></p>@endif
                     </div>
-                    {{-- when: PM's day --}}
-                    <div class="min-w-0 text-[13px]">
+                    {{-- when: PM's day (right under the cabinets on a phone) --}}
+                    <div class="order-1 min-w-0 text-[13px] md:order-none">
                         @if ($row['status'] === 'delivered')
                             <p class="font-semibold text-slate-800">ส่งถึง {{ $row['delivered'] }}</p>
                             <p class="text-slate-500">ผู้รับ {{ $row['receiver'] }}{{ $row['doc_no'] ? ' · ใบส่งของ '.$row['doc_no'] : '' }}</p>
                         @else
-                            <p class="font-semibold {{ $row['late'] ? 'text-orange-700' : 'text-slate-800' }}">{{ $row['when'] }}</p>
+                            <p class="font-semibold {{ $row['late'] ? 'text-orange-700' : 'text-slate-800' }}">{!! $keep($row['when']) !!}</p>
                             <p class="{{ $row['late'] ? 'font-semibold text-orange-700' : 'text-slate-500' }}">
                                 {{ $row['late'] ? 'เลยวันส่งแล้ว · ยังไม่ได้บันทึกว่าส่งถึง' : ($row['departed'] ? 'ออก '.$row['departed'] : ($row['during'] ? ($row['left'] === 0 ? 'วันนี้' : 'อยู่ในช่วงส่ง') : ($row['left'] > 0 ? 'อีก '.$row['left'].' วัน' : ''))) }}
                             </p>
@@ -241,36 +263,41 @@
                         @endif
                         <span class="st-pill mt-1 inline-block rounded-full px-2 text-xs font-bold" style="--c: {{ $row['color'] }}">{{ $row['state'] }}</span>
                     </div>
-                    {{-- the next step's button first --}}
-                    <div class="flex flex-wrap content-start gap-2 md:max-w-[13rem] md:justify-end">
+                    {{-- one main button, always first: what is next for this round; then the others --}}
+                    <div class="order-3 flex flex-wrap content-start gap-2 md:order-none md:max-w-[13rem] md:justify-end">
                         @if ($row['status'] === 'waiting')
                             @if ($row['method'] === 'pickup')
-                                <form method="POST" action="{{ $row['urls']['assign'] }}">@csrf<button class="{{ $main }}">รับงาน</button></form>
+                                <button type="button" class="{{ $main }}" @click="quick(@js($row['urls']['assign']))">รับงาน</button>
                             @else
                                 <button type="button" class="{{ $main }}" @click="openAssign(@js($row))">จัดรถ / คน</button>
                             @endif
+                            {!! $cabButton(false) !!}
                             <button type="button" class="{{ $btn }}" @click="openReject(@js($row))">ไม่รับงาน</button>
-                        @endif
-                        @if ($row['status'] === 'scheduled')
-                            @if ($row['billed'])
-                                <form method="POST" action="{{ $row['urls']['depart'] }}">@csrf<button class="{{ $main }}">{{ \App\Models\ProjectDelivery::statusName('departed') }}</button></form>
+                        @elseif ($row['status'] === 'scheduled')
+                            @if ($cabLeads)
+                                {!! $cabButton(true) !!}
+                            @elseif ($row['billed'])
+                                <button type="button" class="{{ $main }}" @click="quick(@js($row['urls']['depart']))">{{ \App\Models\ProjectDelivery::statusName('departed') }}</button>
+                                {!! $cabButton(false) !!}
+                            @else
+                                {!! $cabButton(false) !!}
                             @endif
                             @if ($row['method'] !== 'pickup')
                                 <button type="button" class="{{ $btn }}" @click="openAssign(@js($row))">แก้รถ / คน</button>
                             @endif
-                        @endif
-                        @if ($row['status'] === 'departed')
+                        @elseif ($row['status'] === 'departed')
                             <button type="button" class="{{ $main }}" @click="openDeliver(@js($row))">{{ \App\Models\ProjectDelivery::statusName('delivered') }}</button>
-                        @endif
-                        @if ($row['status'] === 'delivered')
-                            <button type="button" class="{{ $btn }}" @click="openDeliver(@js($row))">แก้</button>
-                        @endif
-                        @if ($row['status'] === 'rejected')
-                            <span class="text-sm text-slate-500">รอ PM เลือกวันใหม่แล้วส่งมาอีกครั้ง</span>
+                            {!! $cabButton(false) !!}
+                        @elseif ($row['status'] === 'delivered')
+                            <button type="button" class="{{ $btn }}" @click="openDeliver(@js($row))">แก้ข้อมูลส่งถึง</button>
+                            {!! $cabButton(false) !!}
+                        @else
+                            <span class="w-full text-sm text-slate-500 md:text-right">รอ PM เลือกวันใหม่แล้วส่งมาอีกครั้ง</span>
+                            {!! $cabButton(false) !!}
                         @endif
                     </div>
                     @if ($row['rejected'] || $row['issue'] || $row['note'])
-                        <p class="text-[13px] md:col-span-4 {{ $row['rejected'] || $row['issue'] ? 'rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-800' : 'text-slate-600' }}">
+                        <p class="order-4 text-[13px] md:order-none md:col-span-4 {{ $row['rejected'] || $row['issue'] ? 'rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-800' : 'text-slate-600' }}">
                             {{ $row['rejected'] ? 'ไม่รับงาน · '.$row['rejected'] : ($row['issue'] ? 'ปัญหาที่หน้างาน: '.$row['issue'] : 'หมายเหตุ: '.$row['note']) }}
                         </p>
                     @endif
@@ -307,12 +334,12 @@
                             <div>
                                 <ol class="flex items-center gap-2 text-sm" aria-label="ขั้น">
                                     <li class="flex items-center gap-1.5 font-semibold" :class="cabCount('todo') ? 'text-slate-900' : 'text-emerald-700'">
-                                        <span class="flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold" :class="cabCount('todo') ? 'bg-sky-600 text-white' : 'bg-emerald-600 text-white'" aria-hidden="true" x-text="cabCount('todo') ? '1' : '✓'"></span>
+                                        <span class="flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold" :class="cabCount('todo') ? 'bg-sky-600 text-white' : 'bg-emerald-600 text-white'" aria-hidden="true"><span x-show="cabCount('todo')">1</span><span x-show="!cabCount('todo')">{!! $check !!}</span></span>
                                         <span x-text="'ห่อตู้ ' + cabCount('done') + '/' + cab.list.length"></span>
                                     </li>
                                     <li class="h-px w-6 shrink-0 bg-slate-300" aria-hidden="true"></li>
                                     <li class="flex min-w-0 items-center gap-1.5 font-semibold" :class="cab.row.billed ? 'text-emerald-700' : (cabStep === 'bill' ? 'text-slate-900' : 'text-slate-500')">
-                                        <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" :class="cab.row.billed ? 'bg-emerald-600 text-white' : (cabStep === 'bill' ? 'bg-sky-600 text-white' : 'border border-slate-300 text-slate-500')" aria-hidden="true" x-text="cab.row.billed ? '✓' : '2'"></span>
+                                        <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" :class="cab.row.billed ? 'bg-emerald-600 text-white' : (cabStep === 'bill' ? 'bg-sky-600 text-white' : 'border border-slate-300 text-slate-500')" aria-hidden="true"><span x-show="!cab.row.billed">2</span><span x-show="cab.row.billed">{!! $check !!}</span></span>
                                         <span class="truncate" x-text="cab.row.billed ? 'แจ้งเปิดบิล ' + cab.row.billed : 'แจ้งเปิดบิล'"></span>
                                     </li>
                                 </ol>
@@ -389,7 +416,7 @@
                                 {{-- แจ้งเปิดบิล --}}
                                 <template x-if="cabStep === 'bill'">
                                     <div class="contents">
-                                        <span class="min-w-0 flex-1 text-sm"><span class="font-semibold text-emerald-700" x-text="'✓ ห่อครบ ' + cab.list.length + '/' + cab.list.length + ' แล้ว'"></span>
+                                        <span class="min-w-0 flex-1 text-sm"><span class="inline-flex items-center gap-1 font-semibold text-emerald-700">{!! $check !!}<span x-text="'ห่อครบ ' + cab.list.length + '/' + cab.list.length + ' แล้ว'"></span></span>
                                             <span class="block text-xs text-slate-500" x-text="cab.saving ? 'กำลังบันทึก…' : 'แจ้งฝ่ายบัญชีเปิดบิลรอบนี้ · เอาการห่อออกได้จนกว่าจะแจ้ง'"></span></span>
                                         <button type="button" @click="cabAct('bill')" :disabled="!!cab.act || cab.saving > 0" class="inline-flex h-11 items-center rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50" x-text="cab.act === 'bill' ? 'กำลังแจ้ง…' : 'แจ้งเปิดบิล'"></button>
                                     </div>
@@ -451,11 +478,11 @@
                             <div x-show="r.method !== 'pickup'" class="flex flex-wrap gap-2 text-sm">
                                 <span x-show="r.method === 'company' && r.types.length" class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-semibold tabular-nums"
                                       :class="asgCars >= r.types.length ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'"
-                                      x-text="'รถ ' + asgCars + '/' + r.types.length + ' คัน' + (asgCars >= r.types.length ? ' ✓' : '')"></span>
+                                      ><span x-text="'รถ ' + asgCars + '/' + r.types.length + ' คัน'"></span><span x-show="asgCars >= r.types.length">{!! $check !!}</span></span>
                                 <span x-show="r.method === 'company' && !r.types.length" class="rounded-full bg-slate-100 px-2.5 py-0.5 font-semibold tabular-nums text-slate-700" x-text="'รถ ' + asgCars + ' คัน'"></span>
                                 <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-semibold tabular-nums"
                                       :class="!r.crew_size ? 'bg-slate-100 text-slate-700' : (going >= r.crew_size ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')"
-                                      x-text="r.crew_size ? 'คน ' + going + '/' + r.crew_size + (going >= r.crew_size ? ' ✓' : '') : going + ' คน'"></span>
+                                      ><span x-text="r.crew_size ? 'คน ' + going + '/' + r.crew_size : going + ' คน'"></span><span x-show="r.crew_size && going >= r.crew_size">{!! $check !!}</span></span>
                             </div>
                         </div>
 
@@ -489,7 +516,7 @@
                                         <template x-for="(n, j) in v.crew" :key="j">
                                             <span class="inline-flex items-center">
                                                 <input type="text" :name="'vehicles[' + i + '][crew][]'" x-model="v.crew[j]" list="dl-people" maxlength="100" autocomplete="off" placeholder="ชื่อ" class="block h-10 w-32 rounded-lg border-slate-300 text-sm">
-                                                <button type="button" @click="v.crew.splice(j, 1)" class="h-10 px-1.5 text-slate-400 hover:text-slate-700" aria-label="เอาคนนี้ออก">✕</button>
+                                                <button type="button" @click="v.crew.splice(j, 1)" class="h-10 px-1.5 text-slate-400 hover:text-slate-700" aria-label="เอาคนนี้ออก"><svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
                                             </span>
                                         </template>
                                         <button type="button" @click="v.crew.push('')" class="h-10 text-sm font-semibold text-teal-700 hover:underline">+ เพิ่มคน</button>

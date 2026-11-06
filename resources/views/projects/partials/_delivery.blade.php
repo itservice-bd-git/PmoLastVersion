@@ -15,16 +15,28 @@
     $errorKeys = ['delivery_date', 'delivery_end_date', 'delivery_time', 'cabinet_ids', 'method', 'vehicle_types', 'vehicle_types.0', 'crew_size', 'delivery'];
     $deliveryPage = auth()->user()->allows('edit.delivery');
 @endphp
-{{-- Shown when asked (หัวโครงการ › "ดูทุกรอบ", สถานะโครงการ › ส่งมอบ, a link to #delivery: the pmo-delivery event, 'show');
+{{-- A panel over the page when asked (หัวโครงการ › "ดูทุกรอบ", สถานะโครงการ › ส่งมอบ, a link to #delivery: the pmo-delivery event, 'show');
      'new' opens the window of a new round. The window stays in the page. --}}
 <section id="delivery" class="scroll-mt-20" aria-label="การจัดส่ง"
          x-data="{ f: null, cabs: @js($win['cabinets']), vehicles: @js($win['vehicles']), shown: location.hash === '#delivery',
                    open(v) { this.f = JSON.parse(JSON.stringify(v)); this.$dispatch('open-modal', 'project-delivery'); } }"
-         @pmo-delivery.window="if ($event.detail === 'new') { @if ($canDeliver) open(@js($form(null))) @endif } else { shown = true; $nextTick(() => $el.scrollIntoView({ behavior: 'smooth', block: 'start' })) }"
+         @pmo-delivery.window="if ($event.detail === 'new') { @if ($canDeliver) open(@js($form(null))) @endif } else { shown = true }"
          @if ($errors->hasAny($errorKeys) && $old)
              x-init="f = { ...@js($form($rounds->firstWhere('id', (int) ($old['_delivery'] ?? 0)))), ...@js(\Illuminate\Support\Arr::except($old, ['_token', '_method', '_delivery', 'cabinet_ids'])), cabinet_ids: (@js($old['cabinet_ids'] ?? [])).map(Number) }; $nextTick(() => $dispatch('open-modal', 'project-delivery'))"
          @endif>
-  <div x-show="shown" x-cloak x-transition.opacity class="rounded-[14px] border border-slate-200 bg-white p-5">
+  {{-- a panel from the right, over the page (its forms' windows open above it) --}}
+  <div x-show="shown" x-cloak class="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="การจัดส่ง"
+       x-effect="document.body.classList.toggle('overflow-hidden', shown)" @keydown.escape.window="shown = false">
+    <div x-show="shown" x-transition.opacity.duration.200ms class="absolute inset-0 bg-slate-900/40" @click="shown = false" aria-hidden="true"></div>
+    <div x-show="shown" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+         x-transition:leave="transition ease-in duration-150" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
+         x-init="$watch('shown', (v) => v && $nextTick(() => $refs.closeDelivery.focus()))"
+         class="relative flex h-full w-full max-w-2xl flex-col bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)]">
+      <button type="button" x-ref="closeDelivery" @click="shown = false" aria-label="ปิด"
+              class="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <div class="flex-1 overflow-y-auto p-5 pr-14 sm:p-6 sm:pr-16">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span class="inline-flex h-6 items-center rounded bg-teal-700 px-2 text-xs font-extrabold tracking-wide text-white">ส่ง</span>
         <h3 class="text-base font-bold text-ae-navy">การจัดส่ง</h3>
@@ -126,7 +138,8 @@
         </div>
     @endif
 
-    <div class="mt-3 text-right"><button type="button" @click="shown = false" class="text-sm font-semibold text-slate-500 hover:text-slate-800">ซ่อน</button></div>
+      </div>
+    </div>
   </div>
 
     @if ($canDeliver)

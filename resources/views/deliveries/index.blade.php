@@ -179,35 +179,54 @@
                     $before = in_array($row['status'], ['waiting', 'rejected', 'scheduled'], true);   // packing / แจ้งเปิดบิล may happen
                     $packable = $before && ! $row['billed'];
                 @endphp
-                <article class="grid gap-x-4 gap-y-3 border-t border-slate-100 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] {{ $round === $row['id'] ? 'bg-amber-50/60 ring-2 ring-inset ring-amber-300' : '' }}"
+                <article class="grid gap-x-4 gap-y-3 border-t border-slate-100 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] {{ $round === $row['id'] ? 'bg-amber-50/60 ring-2 ring-inset ring-amber-300' : '' }}"
                          id="round-{{ $row['id'] }}">
                     {{-- what goes: each cabinet with its ห่อแล้ว button --}}
                     <div class="min-w-0">
                         <p class="truncate text-sm font-bold text-slate-900">{{ $row['project'] }} <span class="font-semibold text-slate-600">{{ $row['name'] }}</span></p>
                         <p class="text-[13px] text-slate-600">รอบ {{ $row['round'] }} · {{ count($row['cabinets']) }} ตู้{{ $row['site'] ? ' · '.$row['site'] : '' }}</p>
-                        {{-- the cabinets: a short line here; every one of them, ห่อ → แจ้งเปิดบิล → ออกจากโรงงาน and ย้อนขั้น in the panel. The
-                             button names what is next there --}}
+                        {{-- the cabinets: the first few in the panel's columns (เลข MO | ชื่อตู้ · ประเภท · ขนาด), those still to pack
+                             first; all of them, ห่อ → แจ้งเปิดบิล → ออกจากโรงงาน and ย้อนขั้น in the panel. The button names what is next there --}}
                         @php
-                            $cabNames = collect($row['cabinets'])->pluck('name');
                             $toBill = $packable && $row['allPacked'] && $row['status'] !== 'rejected';
                             $cabLabel = $packable && ! $row['allPacked'] ? 'ห่อตู้ '.$row['packedCount'].'/'.count($row['cabinets']) : ($toBill ? 'แจ้งเปิดบิล' : 'รายการตู้ ('.count($row['cabinets']).')');
+                            $cabFirst = collect($row['cabinets'])->sortBy(fn ($c, $i) => ($c['packed'] ? 100000 : 0) + $i)->take(3);
+                            $cabMore = count($row['cabinets']) - $cabFirst->count();
+                            $cabWhat = fn ($c) => collect([$c['type'], $c['size'] ? 'ขนาด '.$c['size'] : '', $c['qty'] > 1 ? $c['qty'].' ตู้' : ''])->filter()->implode(' · ');
                         @endphp
-                        <div class="mt-1.5 flex flex-wrap items-center gap-2">
-                            <p class="min-w-0 flex-1 truncate text-xs text-slate-600" title="{{ $cabNames->implode(', ') }}">{{ $cabNames->take(4)->implode(', ') }}{{ $cabNames->count() > 4 ? ' +'.($cabNames->count() - 4).' ตู้' : '' }}</p>
+                        <div class="mt-2">
+                            <button type="button" @click="openCabs(@js($row))" class="block w-full overflow-hidden rounded-lg border border-slate-200 text-left hover:border-slate-300 hover:bg-slate-50"
+                                    aria-label="ดูรายการตู้ทั้งหมด {{ count($row['cabinets']) }} ตู้">
+                                <span class="block divide-y divide-slate-100">
+                                    @foreach ($cabFirst as $c)
+                                        <span class="grid grid-cols-[0.875rem_minmax(0,6.75rem)_minmax(0,1fr)] items-baseline gap-x-2 px-2.5 py-1.5 text-xs">
+                                            <span class="{{ $c['packed'] ? 'text-emerald-600' : 'text-slate-300' }}" title="{{ $c['packed'] ? 'ห่อแล้ว' : 'ยังไม่ห่อ' }}">{{ $c['packed'] ? '✓' : '○' }}</span>
+                                            <span class="truncate font-bold tabular-nums text-slate-900">{{ $c['model'] ? $c['name'] : '-' }}</span>
+                                            <span class="min-w-0">
+                                                <span class="block truncate font-semibold text-slate-800">{{ $c['model'] ?: $c['name'] }}</span>
+                                                @if ($cabWhat($c))<span class="block truncate text-slate-500">{{ $cabWhat($c) }}</span>@endif
+                                            </span>
+                                        </span>
+                                    @endforeach
+                                </span>
+                                <span class="block border-t border-slate-100 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-teal-700">{{ $cabMore > 0 ? '+ อีก '.$cabMore.' ตู้ · ดูทั้งหมด' : 'ดูรายการตู้' }}</span>
+                            </button>
+                        </div>
+                        {{-- the next step's button, and the four steps --}}
+                        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
                             <button type="button" @click="openCabs(@js($row))"
                                     class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold {{ ($packable && ! $row['allPacked']) || $toBill ? 'bg-teal-700 text-white hover:bg-teal-800' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' }}">
                                 <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4"/></svg>
                                 {{ $cabLabel }}
                             </button>
-                        </div>
-                        {{-- the four steps --}}
-                        <ol class="mt-2 grid max-w-sm grid-cols-4 gap-1" aria-label="ขั้น: {{ $row['step']['text'] }}">
+                        <ol class="grid min-w-[14rem] max-w-sm flex-1 grid-cols-4 gap-1" aria-label="ขั้น: {{ $row['step']['text'] }}">
                             @foreach ($steps as $i => $label)
                                 @php $fill = $i === 0 ? ($row['step']['n'] >= 1 ? 100 : (int) round($row['packedCount'] / max(1, count($row['cabinets'])) * 100)) : ($row['step']['n'] > $i ? 100 : 0); @endphp
                                 <li class="min-w-0"><span class="block h-1.5 overflow-hidden rounded-full bg-slate-200"><span class="block h-full {{ $row['step']['n'] === $i && $fill < 100 ? 'bg-sky-600' : 'bg-emerald-600' }}" style="width: {{ $fill }}%"></span></span>
                                     <span class="block truncate text-[11px] {{ $row['step']['n'] === $i ? 'font-bold text-slate-900' : ($row['step']['n'] > $i ? 'text-emerald-700' : 'text-slate-500') }}">{{ $i === 0 ? 'ห่อ '.$row['packedCount'].'/'.count($row['cabinets']) : $label }}</span></li>
                             @endforeach
                         </ol>
+                        </div>
                     </div>
                     {{-- on what: PM's request, the vehicles put on it --}}
                     <div class="min-w-0 space-y-0.5 text-[13px] text-slate-700">

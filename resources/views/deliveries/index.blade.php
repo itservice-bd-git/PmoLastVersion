@@ -17,7 +17,8 @@
     </x-slot>
 
     <div class="mx-auto max-w-6xl space-y-4"
-         x-data="{ r: null, tab: @js($tab), busy: @js((object) $busy), vehicles: @js($vehicles), reasons: @js($reasons), people: @js($people), rej: {}, dlv: {}, toast: '',
+         x-data="{ r: null, tab: @js($tab), busy: @js((object) $busy), vehicles: @js($vehicles), reasons: @js($reasons), people: @js($people), dlv: {}, toast: '',
+                   rej: { open: false, reason: '', note: '', saving: false, error: '', errors: {} },
                    asg: { open: false, rows: [], carrier: '', saving: false, error: '', errors: {} },
                    // จัดรถ / คน: the round's vehicles, or one empty line per kind PM asked for
                    openAssign(row) {
@@ -30,21 +31,23 @@
                    asgErr(k) { return (this.asg.errors[k] || [])[0] || ''; },
                    // vehicles filled in so far (a picked one, or an external one's words)
                    get asgCars() { return this.asg.rows.filter((x) => this.r.method === 'company' ? x.vehicle_id : (x.label || '').trim()).length; },
-                   // saved without reloading: the panel closes, the tabs and the list are drawn again from a fresh copy of this tab
-                   async saveAssign(form) {
-                       if (!this.canSave || this.asg.saving) return;
-                       this.asg.saving = true; this.asg.error = ''; this.asg.errors = {};
+                   saveAssign(form) { if (this.canSave) this.submit(form, this.asg); },
+                   // a panel's form saved without reloading: the panel closes, the tabs and the list are drawn again from a fresh
+                   // copy of this tab; refused, it stays open with the reason (st: asg / rej)
+                   async submit(form, st) {
+                       if (st.saving) return;
+                       st.saving = true; st.error = ''; st.errors = {};
                        try {
                            const res = await fetch(form.action, { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }, body: new FormData(form) });
                            const data = await res.json().catch(() => ({}));
-                           if (!res.ok) { this.asg.errors = data.errors || {}; this.asg.error = (data.errors && Object.values(data.errors)[0][0]) || data.message || 'บันทึกไม่ได้ ลองอีกครั้ง'; return; }
-                           this.asg.open = false;
+                           if (!res.ok) { st.errors = data.errors || {}; st.error = (data.errors && Object.values(data.errors)[0][0]) || data.message || 'บันทึกไม่ได้ ลองอีกครั้ง'; return; }
+                           st.open = false;
                            this.say(data.message || 'บันทึกแล้ว');
                            await this.refreshList();
                        } catch (e) {
-                           this.asg.error = 'บันทึกไม่ได้ ตรวจการเชื่อมต่อแล้วลองอีกครั้ง';
+                           st.error = 'บันทึกไม่ได้ ตรวจการเชื่อมต่อแล้วลองอีกครั้ง';
                        } finally {
-                           this.asg.saving = false;
+                           st.saving = false;
                        }
                    },
                    say(m) { this.toast = m; clearTimeout(this._toast); this._toast = setTimeout(() => { this.toast = ''; }, 3500); },
@@ -111,7 +114,7 @@
                            if (fresh && old) old.replaceWith(fresh);
                        }, 500);
                    },
-                   openReject(row) { this.r = row; this.rej = { reason: '', note: '' }; this.$dispatch('open-modal', 'dl-reject'); },
+                   openReject(row) { this.r = row; this.rej = { open: true, reason: '', note: '', saving: false, error: '', errors: {} }; },
                    openDeliver(row) { this.r = row; const now = new Date(); this.dlv = { date: row.delivered_date || now.toISOString().slice(0, 10), time: row.delivered_time || String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
                        receiver: row.receiver, doc_no: row.doc_no, issue: row.issue, cabinet_ids: row.cabinets.map((c) => c.id) }; this.$dispatch('open-modal', 'dl-deliver'); } }">
 
@@ -250,7 +253,7 @@
              x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
              x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
              class="fixed inset-0 z-40 flex justify-end bg-slate-900/40" @click.self="cab.open = false"
-             x-effect="const w = innerWidth - document.documentElement.clientWidth, on = cab.open || asg.open; document.body.classList.toggle('overflow-hidden', on); document.body.style.paddingRight = on && w > 0 ? w + 'px' : ''"
+             x-effect="const w = innerWidth - document.documentElement.clientWidth, on = cab.open || asg.open || rej.open; document.body.classList.toggle('overflow-hidden', on); document.body.style.paddingRight = on && w > 0 ? w + 'px' : ''"
              @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) cab.open = false">
             <div x-show="cab.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
                  x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
@@ -428,33 +431,67 @@
         <div x-show="toast" x-cloak x-transition.opacity role="status" aria-live="polite"
              class="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit max-w-[calc(100%-2rem)] rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-lg" x-text="toast"></div>
 
-        {{-- ไม่รับงาน: a reason (Settings > รถขนส่ง) or "อื่น ๆ" with its words; back to PM for another day --}}
-        <x-modal name="dl-reject" maxWidth="lg">
-            <template x-if="r">
-                <form method="POST" :action="r.urls.reject" class="space-y-4 p-6">
-                    @csrf
-                    <h3 class="text-base font-semibold text-slate-900" x-text="'ไม่รับงาน · ' + r.project + ' รอบ ' + r.round + ' · ' + r.when"></h3>
-                    <fieldset>
-                        <legend class="text-sm font-semibold text-slate-800">เหตุผล *</legend>
-                        <div class="mt-1.5 flex flex-wrap gap-2">
-                            <template x-for="why in [...reasons, 'อื่น ๆ']" :key="why">
-                                <label class="inline-flex h-9 cursor-pointer items-center rounded-full border px-3.5 text-sm font-semibold"
-                                       :class="rej.reason === why ? 'border-red-300 bg-red-100 text-red-800' : 'border-slate-300 bg-white text-slate-700'">
-                                    <input type="radio" name="reason" :value="why" x-model="rej.reason" class="sr-only"><span x-text="why"></span></label>
-                            </template>
+        {{-- ไม่รับงาน: a panel as จัดรถ / คน - a reason (Settings > รถขนส่ง) or "อื่น ๆ" with its words; back to PM for another
+             day; saved without reloading --}}
+        <div x-show="rej.open" x-cloak role="dialog" aria-modal="true" :aria-label="r ? 'ไม่รับงาน ' + r.project + ' รอบ ' + r.round : 'ไม่รับงาน'"
+             x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+             class="fixed inset-0 z-40 flex justify-end bg-slate-900/40" @click.self="rej.open = false"
+             @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) rej.open = false">
+            <div x-show="rej.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
+                 x-init="$watch('rej.open', (v) => v && $nextTick(() => $refs.closeRej.focus({ preventScroll: true })))"
+                 class="relative flex h-full w-full max-w-xl flex-col bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)] will-change-transform">
+                <template x-if="r">
+                    <form method="POST" :action="r.urls.reject" class="flex min-h-0 flex-1 flex-col" @submit.prevent="submit($el, rej)">
+                        @csrf
+                        {{-- the round sent back --}}
+                        <div class="space-y-2.5 border-b border-slate-200 p-4 pr-14 sm:p-5 sm:pr-16">
+                            <div>
+                                <p class="text-xs font-semibold text-red-700">ไม่รับงาน</p>
+                                <p class="truncate text-base font-bold text-slate-900"><span x-text="r.project"></span> <span class="font-semibold text-slate-600" x-text="r.name"></span></p>
+                                <p class="text-sm text-slate-600" x-text="'รอบ ' + r.round + ' · ' + r.when + ' · ' + r.cabinets.length + ' ตู้' + (r.site ? ' · ' + r.site : '')"></p>
+                            </div>
+                            <p x-show="r.request" class="text-sm text-slate-600">PM ขอ <span class="font-semibold text-slate-900" x-text="r.request"></span></p>
                         </div>
-                    </fieldset>
-                    <label class="block text-sm font-semibold text-slate-800">รายละเอียด <span x-show="rej.reason === 'อื่น ๆ'">*</span>
-                        <textarea name="note" x-model="rej.note" rows="3" maxlength="500" :required="rej.reason === 'อื่น ๆ'" placeholder="เช่น 10 ล้อเข้าศูนย์ 17–18/11 ว่างอีกที 19/11" class="mt-1 block w-full rounded-lg border-slate-300 text-sm font-normal"></textarea>
-                    </label>
-                    <p class="text-xs text-slate-500">ส่งกลับให้ PM เลือกวันใหม่ · ไม่รับงานได้เฉพาะรอบที่ยังไม่ได้จัดรถ</p>
-                    <div class="flex items-center gap-2 pt-1">
-                        <button type="button" @click="$dispatch('close-modal', 'dl-reject')" class="ml-auto h-10 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ยกเลิก</button>
-                        <button type="submit" :disabled="!rej.reason || (rej.reason === 'อื่น ๆ' && !rej.note.trim())" class="h-10 rounded-lg bg-red-700 px-5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">ส่งกลับให้ PM</button>
-                    </div>
-                </form>
-            </template>
-        </x-modal>
+
+                        {{-- why --}}
+                        <div class="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:p-5">
+                            <fieldset>
+                                <legend class="text-sm font-semibold text-slate-800">เหตุผล *</legend>
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    <template x-for="why in [...reasons, 'อื่น ๆ']" :key="why">
+                                        <label class="inline-flex h-11 cursor-pointer items-center rounded-full border px-4 text-sm font-semibold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-red-300"
+                                               :class="rej.reason === why ? 'border-red-300 bg-red-100 text-red-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'">
+                                            <input type="radio" name="reason" :value="why" x-model="rej.reason" class="sr-only"><span x-text="why"></span></label>
+                                    </template>
+                                </div>
+                            </fieldset>
+                            <label class="block text-sm font-semibold text-slate-800">รายละเอียด <span x-show="rej.reason === 'อื่น ๆ'">*</span>
+                                <span class="block text-xs font-normal text-slate-500">บอก PM ว่าวันไหนพร้อม จะได้เลือกวันใหม่ได้ทันที</span>
+                                <textarea name="note" x-model="rej.note" rows="4" maxlength="500" :required="rej.reason === 'อื่น ๆ'" placeholder="เช่น 10 ล้อเข้าศูนย์ 17–18/11 ว่างอีกที 19/11" class="mt-1.5 block w-full rounded-lg border-slate-300 text-sm font-normal"></textarea>
+                            </label>
+                            <p class="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">ส่งกลับให้ PM เลือกวันใหม่ · PM ได้แจ้งเตือนพร้อมเหตุผล · ไม่รับงานได้เฉพาะรอบที่ยังไม่ได้จัดรถ</p>
+                        </div>
+
+                        {{-- a refusal, send back --}}
+                        <div class="space-y-2 border-t border-slate-200 p-4 sm:px-5">
+                            <p x-show="rej.error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert" x-text="rej.error"></p>
+                            <div class="flex items-center gap-2">
+                                <button type="button" x-show="r.method === 'company' || r.method === 'external'" @click="rej.open = false; openAssign(r)" class="h-11 rounded-lg px-3 text-sm font-semibold text-slate-600 hover:bg-slate-100">กลับไปจัดรถ</button>
+                                <button type="submit" :disabled="!rej.reason || (rej.reason === 'อื่น ๆ' && !rej.note.trim()) || rej.saving"
+                                        class="ml-auto inline-flex h-11 items-center rounded-lg bg-red-700 px-5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
+                                        x-text="rej.saving ? 'กำลังส่งกลับ…' : 'ส่งกลับให้ PM'"></button>
+                            </div>
+                        </div>
+                    </form>
+                </template>
+                <button type="button" x-ref="closeRej" @click="rej.open = false" aria-label="ปิด"
+                        class="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+            </div>
+        </div>
 
         {{-- ส่งถึงแล้ว: when, who received it, the delivery note, a problem, the cabinets that arrived --}}
         <x-modal name="dl-deliver" maxWidth="lg">

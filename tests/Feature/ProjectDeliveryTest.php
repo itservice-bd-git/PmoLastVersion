@@ -208,6 +208,15 @@ class ProjectDeliveryTest extends TestCase
             ->assertOk()->assertJson(['message' => 'จัดรถแล้ว']);
         $this->assertSame('scheduled', $d->fresh()->status);
         $this->actingAs($this->member)->postJson(route('deliveries.assign', $d), ['vehicles' => [['vehicle_id' => $this->truck->id]]])->assertForbidden();
+
+        // ไม่รับงาน, the same way: refused with its reason while a vehicle is on it, then on another round
+        $this->actingAs($this->clerk)->postJson(route('deliveries.reject', $d), ['reason' => 'รถไม่ว่างวันนั้น'])->assertStatus(422)->assertJsonValidationErrors('delivery');
+        $cab3 = Cabinet::forceCreate(['project_id' => $this->project->id, 'mo_no' => 'MO-3', 'cabinet_name' => 'C', 'quantity' => 1, 'status' => 'not_started', 'progress' => 40]);
+        $other = $this->send(['cabinet_ids' => [$cab3->id], 'delivery_date' => '2026-11-25']);
+        $this->actingAs($this->clerk)->postJson(route('deliveries.reject', $other), [])->assertStatus(422)->assertJsonValidationErrors(['reason' => 'เลือกเหตุผลที่ไม่รับงาน']);
+        $this->actingAs($this->clerk)->postJson(route('deliveries.reject', $other), ['reason' => 'รถไม่ว่างวันนั้น', 'note' => 'ว่าง 26/11'])
+            ->assertOk()->assertJson(['message' => 'ส่งกลับให้ PM แล้ว']);
+        $this->assertSame(['rejected', 'รถไม่ว่างวันนั้น'], [$other->fresh()->status, $other->fresh()->rejected_reason]);
     }
 
     public function test_the_delivery_department_puts_several_vehicles_and_people_on_it_and_pm_hears_what_differs(): void

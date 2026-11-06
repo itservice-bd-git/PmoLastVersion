@@ -58,8 +58,6 @@
             $canFinance ? ['Margin', $project->margin !== null ? $baht($project->margin).($project->marginPercent() !== null ? ' · '.$project->marginPercent().' %' : '') : null, 'tabular-nums'] : null,
         ])),
     ];
-    // what the folded card still shows: the facts people look up most
-    $keyFacts = collect($groups)->flatten(1)->keyBy(0)->only(['ลูกค้า', 'วันครบกำหนด', 'ผู้จัดการโครงการ (PM)', 'เลขที่ใบสั่งซื้อ (PO)'])->values()->all();
 
     $pace = ['on_track' => ['ทันตามเวลา', 'text-emerald-700'], 'watch' => ['เฝ้าระวัง', 'text-orange-600'], 'behind' => ['ช้ากว่าเวลา', 'text-red-600']][$s['pace']] ?? null;
     $statusBar = array_filter([
@@ -77,26 +75,36 @@
 
     {{-- ===== 1. ข้อมูลโครงการ (40%) + ภาพรวมการผลิตกับสถานะโครงการ (60%) ===== --}}
     @php
-        // ข้อมูลโครงการ, folded: the facts people look up most, as label / value rows (the same values as the full list below)
+        // ข้อมูลโครงการ: every field of the project on one card (no folded / full views), in three columns. The project's
+        // number, name, customer and status are in its header, so they are not repeated; fields that belong together share
+        // a row (the due date with the days left and the first due date, the value with its VAT).
         $byLabel = collect($groups)->flatten(1)->keyBy(0);
         $sizes = $project->cabinets()->whereNotNull('size')->where('size', '!=', '')->pluck('size')->countBy()->sortDesc();
-        $facts = array_values(array_filter([
-            $byLabel['ลูกค้า'] ?? null,
-            $byLabel['เลขที่ใบสั่งซื้อ (PO)'] ?? null,
-            $byLabel['ใบสั่งขาย / อ้างอิง'] ?? null,
-            $byLabel['ประเภทงาน'] ?? null,
-            ['ขนาดตู้', $sizes->isNotEmpty() ? e($sizes->keys()->first()).($sizes->count() > 1 ? ' <span class="font-normal text-slate-500">และอีก '.($sizes->count() - 1).' ขนาด</span>' : '') : null, 'tabular-nums'],
-            ['จำนวนตู้', $s['total'].' ตู้', ''],
-            $byLabel['วันเริ่ม'] ?? null,
-            $byLabel['วันครบกำหนด'] ?? null,
-        ]));
-        // ติดต่อ: who looks after it and how to reach the customer (the same values as the full list)
-        $contacts = array_values(array_filter([
-            $byLabel['ผู้จัดการโครงการ (PM)'] ?? null,
-            $byLabel['พนักงานขาย'] ?? null,
-            $byLabel['เจ้าของโครงการ'] ?? null,
-            $byLabel['เบอร์ติดต่อลูกค้า'] ?? null,
-        ]));
+        $muted = fn (string $t) => ' <span class="font-normal text-slate-600">'.$t.'</span>';
+        $cols = [
+            'งาน' => array_values(array_filter([
+                ['เลขที่ PO', $byLabel['เลขที่ใบสั่งซื้อ (PO)'][1] ?? null, ''],
+                $project->payment_terms ? ['เงื่อนไขการชำระ', e($project->payment_terms), ''] : null,
+                $project->sales_order_no ? ['ใบสั่งขาย / อ้างอิง', e($project->sales_order_no), ''] : null,
+                ['ประเภทงาน', $byLabel['ประเภทงาน'][1] ?? null, ''],
+                ['ตู้', $s['total'].' ตู้'.($sizes->isNotEmpty() ? $muted('· '.e($sizes->keys()->first()).($sizes->count() > 1 ? ' และอีก '.($sizes->count() - 1).' ขนาด' : '')) : $muted('· ยังไม่ระบุขนาด')), 'tabular-nums'],
+            ])),
+            'วันที่และมูลค่า' => array_values(array_filter([
+                ['วันเริ่ม', $byLabel['วันเริ่ม'][1] ?? null, 'tabular-nums'],
+                ['วันครบกำหนด', $project->due_date ? ($byLabel['วันครบกำหนด'][1] ?? '')
+                    .($dates['rounds'] && $dates['firstDue'] ? ' <span class="ml-1 whitespace-nowrap text-xs font-normal text-slate-600" title="วันครบกำหนดตอนแรก">ตอนแรก <span class="line-through">'.$dates['firstDue']->thaiDate().'</span></span>' : '')
+                    .($s['workingDaysLeft'] !== null ? '<span class="mt-0.5 block text-xs font-normal text-slate-600">วันทำงานคงเหลือ '.$s['workingDaysLeft'].' วัน (จ.–ศ.)</span>' : '') : null, 'tabular-nums'],
+                $canFinance ? ['มูลค่างาน (ก่อน VAT)', $project->contract_value !== null
+                    ? $baht($project->contract_value).'<span class="mt-0.5 block text-xs font-normal text-slate-600" title="VAT 7% '.$baht($project->vatAmount()).'">รวม VAT 7% <b class="font-semibold text-ae-navy">'.$baht($project->contractValueWithVat()).'</b></span>' : null, 'tabular-nums'] : null,
+                $canFinance ? $byLabel['Margin'] : null,
+            ])),
+            'ติดต่อ' => array_values(array_filter([
+                ['PM', $byLabel['ผู้จัดการโครงการ (PM)'][1] ?? null, ''],
+                ['พนักงานขาย', $byLabel['พนักงานขาย'][1] ?? null, ''],
+                isset($byLabel['เจ้าของโครงการ']) ? $byLabel['เจ้าของโครงการ'] : null,
+                $canContact ? ['เบอร์ลูกค้า', $byLabel['เบอร์ติดต่อลูกค้า'][1] ?? null, 'tabular-nums'] : null,
+            ])),
+        ];
 
         // สถานะโครงการ: เริ่ม → ผลิต (the bar) → FAT → ส่งมอบ → ปิดโครงการ, from what the page already has
         // dates as the rest of the app writes them (Planning's dd/mm): "17/11", another year "15/02/70"
@@ -153,60 +161,33 @@
         $go = fn (array $n, string $event) => $n[3] ? '@click="$dispatch(\''.$event.'\', \''.$n[3].'\')"' : '';
     @endphp
     <section class="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        {{-- folded by default (the facts above); the choice is remembered on this browser --}}
-        <div class="flex min-w-0 flex-col rounded-[14px] border border-slate-200 bg-white px-5 pb-3.5 pt-4" aria-label="ข้อมูลโครงการ"
-             x-data="{ more: (() => { try { return localStorage.getItem('pmo.projectDetails') === 'open'; } catch (e) { return false; } })() }"
-             x-init="$watch('more', (v) => { try { localStorage.setItem('pmo.projectDetails', v ? 'open' : 'closed'); } catch (e) {} })">
+        <div class="flex min-w-0 flex-col rounded-[14px] border border-slate-200 bg-white px-5 pb-4 pt-4" aria-label="ข้อมูลโครงการ">
             <h3 class="text-[15px] font-bold text-ae-navy">ข้อมูลโครงการ</h3>
-            <div x-show="! more" class="mt-1 grid gap-x-8 sm:grid-cols-2">
-                <dl class="grid grid-cols-[7.5rem_minmax(0,1fr)] content-start text-sm">
-                    @foreach ($facts as [$label, $value, $class])
-                        <dt class="border-b border-slate-100 py-2.5 text-slate-600">{{ $label === 'เลขที่ใบสั่งซื้อ (PO)' ? 'เลขที่ PO' : $label }}</dt>
-                        <dd class="min-w-0 break-words border-b border-slate-100 py-2.5 {{ $value === null ? 'text-slate-500' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
-                    @endforeach
-                </dl>
-                <div class="content-start">
-                    <h4 class="mt-3 text-[13px] font-bold text-slate-600 sm:mt-1.5">ติดต่อ</h4>
-                    <dl class="grid grid-cols-[7.5rem_minmax(0,1fr)] text-sm">
-                        @foreach ($contacts as [$label, $value, $class])
-                            <dt class="border-b border-slate-100 py-2.5 text-slate-600">{{ $label === 'ผู้จัดการโครงการ (PM)' ? 'PM' : ($label === 'เบอร์ติดต่อลูกค้า' ? 'เบอร์ลูกค้า' : $label) }}</dt>
-                            <dd class="min-w-0 break-words border-b border-slate-100 py-2.5 {{ $value === null ? 'text-slate-500' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
-                        @endforeach
-                    </dl>
-                </div>
-                {{-- คำอธิบาย: the whole text, at reading size, under everything --}}
-                <div class="mt-3 sm:col-span-2">
-                    <h4 class="text-[13px] font-bold text-slate-600">คำอธิบาย</h4>
-                    @if ($project->description)
-                        <p class="mt-1 whitespace-pre-line text-[15px] leading-relaxed text-slate-800">{{ $project->description }}</p>
-                    @else
-                        <p class="mt-1 text-sm text-slate-500">ยังไม่มีคำอธิบาย @editplan<a href="{{ route('projects.edit', $project) }}" class="font-semibold text-blue-700 hover:underline">เพิ่มที่ แก้ไขโครงการ</a>@endeditplan</p>
-                    @endif
-                </div>
-            </div>
-            <div id="project-details" x-show="more" x-cloak class="mt-3 grid gap-x-8 gap-y-5 2xl:grid-cols-2">
-                @foreach ($groups as $title => $fields)
-                    @continue(! $fields)
-                    <div>
-                        <h4 class="mb-1.5 text-sm font-bold text-ae-navy">{{ $title }}</h4>
-                        <dl class="grid grid-cols-[8.5rem_minmax(0,1fr)] text-sm">
-                            @foreach ($fields as [$label, $value, $class])
-                                <dt class="border-b border-slate-100 py-2 text-slate-600">{{ $label }}</dt>
-                                @if ($class === 'badge')
-                                    <dd class="flex flex-wrap items-center gap-2 border-b border-slate-100 py-2"><x-project-status :status="$project->status" /><x-priority-flag :priority="$project->priority" :always="true" /></dd>
-                                @else
-                                    <dd class="min-w-0 break-words border-b border-slate-100 py-2 {{ $value === null ? 'text-slate-500' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
-                                @endif
+            <div class="mt-2 grid gap-x-6 gap-y-4 md:grid-cols-3">
+                @foreach ($cols as $title => $rows)
+                    <div class="min-w-0">
+                        <h4 class="border-b border-slate-200 pb-1 text-[13px] font-bold text-slate-600">{{ $title }}</h4>
+                        <dl class="text-sm">
+                            @foreach ($rows as [$label, $value, $class])
+                                <div class="border-b border-slate-100 py-2 last:border-0">
+                                    <dt class="text-[13px] text-slate-600">{{ $label }}</dt>
+                                    <dd class="min-w-0 break-words {{ $value === null ? 'text-slate-500' : 'font-semibold text-slate-900 '.$class }}">{!! $value ?? 'ยังไม่ระบุ' !!}</dd>
+                                </div>
                             @endforeach
                         </dl>
                     </div>
                 @endforeach
             </div>
-            <button type="button" @click="more = ! more" :aria-expanded="more" aria-controls="project-details"
-                    class="mt-auto inline-flex items-center gap-1 self-start pt-2 text-[13px] font-semibold text-blue-700 hover:underline">
-                <span x-text="more ? 'ย่อ' : 'ดูรายละเอียดเพิ่มเติม'">ดูรายละเอียดเพิ่มเติม</span>
-                <svg class="h-3.5 w-3.5 transition-transform" :class="more && 'rotate-180'" fill="none" stroke="currentColor" stroke-width="2.6" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>
-            </button>
+            {{-- คำอธิบาย: under everything, at reading size; a long one shows 3 lines until "อ่านต่อ" --}}
+            <div class="mt-3 border-t border-slate-200 pt-2.5" x-data="{ all: false, long: false }" x-init="$nextTick(() => { long = $refs.text && $refs.text.scrollHeight > $refs.text.clientHeight + 2 })">
+                <h4 class="text-[13px] font-bold text-slate-600">คำอธิบาย</h4>
+                @if ($project->description)
+                    <p x-ref="text" class="mt-1 whitespace-pre-line text-[15px] leading-relaxed text-slate-800" :class="all ? '' : 'line-clamp-3'">{{ $project->description }}</p>
+                    <button type="button" x-show="long || all" x-cloak @click="all = ! all" :aria-expanded="all" class="mt-1 text-[13px] font-semibold text-blue-700 hover:underline" x-text="all ? 'ย่อ' : 'อ่านต่อ'">อ่านต่อ</button>
+                @else
+                    <p class="mt-1 text-sm text-slate-500">ยังไม่มีคำอธิบาย @editplan @unless ($project->isLocked())<a href="{{ route('projects.edit', $project) }}" class="font-semibold text-blue-700 hover:underline">เพิ่มที่ แก้ไขโครงการ</a>@endunless @endeditplan</p>
+                @endif
+            </div>
         </div>
 
         @php

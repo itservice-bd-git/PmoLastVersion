@@ -170,11 +170,11 @@ class ProjectOverviewTest extends TestCase
             $html = $this->actingAs($admin)->get(route('projects.show', array_filter([$this->project, 'tab' => $tab])))->assertOk()
                 ->assertSee("tab: 'info'", false)
                 ->assertSeeInOrder(['ข้อมูลโครงการ', 'Comment', 'Activity Log'])->assertDontSee("tab = 'attachments'", false)
-                ->assertSeeInOrder(['ข้อมูลโครงการ', 'โครงการ', 'กำหนดการ', 'ทีมและการติดต่อ', 'สัญญาและการเงิน'])
+                ->assertSeeInOrder(['ข้อมูลโครงการ', 'งาน', 'วันที่และมูลค่า', 'ติดต่อ', 'คำอธิบาย'])
                 ->assertSee('ความคืบหน้าการผลิต')->assertSee('เวลาผ่านไป 80%')->assertSee('ต้องตาม')->assertSee('ตู้ / ใบสั่งผลิต')
                 ->assertSee('ไม่มี: ตู้ล่าช้ากว่ากำหนด', false)   // a zero alert is named quietly, not shown as a chip
                 ->assertDontSee('งานบริหารโครงการ')->assertDontSee('ยังไม่กรอก')
-                ->assertSee('id="project-details" x-show="more" x-cloak', false)   // the full details start folded
+                ->assertDontSee('ดูรายละเอียดเพิ่มเติม')   // every field is on the card: nothing folded away
                 ->getContent();
             $this->assertStringNotContainsString('>ภาพรวม<', $html, 'no ภาพรวม tab');
             // the table is filled from @js() data (quotes and Thai escaped): look for the row the same way

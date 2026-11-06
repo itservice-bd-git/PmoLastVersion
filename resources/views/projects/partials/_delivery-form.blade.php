@@ -2,7 +2,7 @@
      many people, where - sent to the delivery department, which puts the vehicles and the people on it (DeliveryController). On the project page (_delivery) and fetched into
      Planning's project window (_delivery-window, saved there as JSON). Needs $project and an x-data holding `f` (formData),
      `cabs` and `vehicles` (windowData). --}}
-<x-modal name="project-delivery" maxWidth="xl">
+<x-modal panel name="project-delivery" maxWidth="xl">
     <template x-if="f">
         <form method="POST" :action="f.url" class="space-y-4 p-6"
               x-data="{ get unfinished() { return cabs.filter((c) => f.cabinet_ids.includes(c.id) && c.progress < 100); },

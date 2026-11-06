@@ -188,25 +188,25 @@
     @endeditplan
 
     <!-- Modal: Add Cabinet -->
-    <x-modal name="add-cabinet">
+    <x-modal panel name="add-cabinet">
         <form method="POST" action="{{ route('cabinets.store', $project) }}" class="p-6">
             @csrf
-            <h3 class="text-base font-semibold text-slate-900 mb-4">Add Cabinet</h3>
+            <h3 class="text-base font-semibold text-slate-900 mb-4">เพิ่มตู้</h3>
             <div class="space-y-4">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <x-input-label value="MO Number" />
+                        <x-input-label value="เลข MO" />
                         <x-text-input name="mo_no" class="mt-1 block w-full" required />
                     </div>
                     <div>
-                        <x-input-label value="Cabinet Name" />
+                        <x-input-label value="ชื่อตู้" />
                         <x-text-input name="cabinet_name" class="mt-1 block w-full" required />
                     </div>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <x-input-label value="Cabinet Type" />
-                        <x-text-input name="cabinet_type" class="mt-1 block w-full" placeholder="MDB, DB, MCC, ..." />
+                        <x-input-label value="ประเภทตู้" />
+                        <x-text-input name="cabinet_type" class="mt-1 block w-full" placeholder="เช่น MDB, DB, MCC" />
                     </div>
                     <div>
                         <x-input-label value="ขนาดตู้" />
@@ -215,11 +215,11 @@
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <x-input-label value="Start Date" />
+                        <x-input-label value="วันเริ่ม" />
                         <x-text-input type="date" name="start_date" class="mt-1 block w-full" />
                     </div>
                     <div>
-                        <x-input-label value="Due Date" />
+                        <x-input-label value="วันครบกำหนด" />
                         <x-text-input type="date" name="due_date" class="mt-1 block w-full" />
                     </div>
                 </div>
@@ -229,7 +229,7 @@
                     <p class="text-xs text-slate-400 mt-1">ต้องไม่เกินวัน Due Date (ไม่บังคับ ใส่ทีหลังได้)</p>
                 </div>
                 <div>
-                    <x-input-label value="Production Template" />
+                    <x-input-label value="เทมเพลตการผลิต" />
                     <select name="cabinet_template_id" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
                         @foreach ($cabinetTemplates as $template)
                             <option value="{{ $template->id }}" @selected($template->is_default)>{{ $template->name }}</option>
@@ -240,14 +240,14 @@
             </div>
             <div class="mt-6 flex justify-end gap-3">
                 <button type="button" x-data @click="$dispatch('close-modal', 'add-cabinet')" class="px-4 py-2 text-sm font-medium text-slate-600">ยกเลิก</button>
-                <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">Add Cabinet</button>
+                <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">เพิ่มตู้</button>
             </div>
         </form>
     </x-modal>
 
     <!-- Modals: Copy Cabinet -->
     @foreach ($project->cabinets as $cabinet)
-        <x-modal :name="'copy-cabinet-'.$cabinet->id" :show="old('source_cabinet_id') == $cabinet->id">
+        <x-modal panel :name="'copy-cabinet-'.$cabinet->id" :show="old('source_cabinet_id') == $cabinet->id">
             <form method="POST" action="{{ route('cabinets.copy', $cabinet) }}" class="p-6">
                 @csrf
                 <input type="hidden" name="source_cabinet_id" value="{{ $cabinet->id }}">
@@ -255,7 +255,7 @@
                 <p class="text-xs text-slate-500 mb-4">ระบบจะคัดลอก Task/Sub Task/Checklist ทั้งหมดของตู้นี้ไปเป็นตู้ใหม่ (ไม่รวมวันที่ ความคืบหน้า และไฟล์แนบ)</p>
                 <div class="space-y-4">
                     <div>
-                        <x-input-label value="MO Number ใหม่" />
+                        <x-input-label value="เลข MO ใหม่" />
                         <x-text-input name="mo_no"
                                       value="{{ old('source_cabinet_id') == $cabinet->id ? old('mo_no') : '' }}"
                                       class="mt-1 block w-full" required />

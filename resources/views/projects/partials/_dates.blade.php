@@ -23,7 +23,7 @@
 <div id="project-dates" x-data="pmoProjectDates(@js($form), @js($subject->due_date?->format('Y-m-d')), @js($dates['firstDue']?->format('Y-m-d')))"
      @if ($dateErrors) x-init="$nextTick(() => $dispatch('open-modal', 'project-dates'))" @endif>
     @if ($dates['changes']->isNotEmpty())
-        <x-modal name="project-date-history" maxWidth="xl">
+        <x-modal panel name="project-date-history" maxWidth="xl">
             <div class="p-6">
                 <div class="flex flex-wrap items-center gap-2">
                     <h3 class="text-base font-semibold text-slate-900">ประวัติการเลื่อน</h3>
@@ -71,7 +71,7 @@
     @endif
 
     @if ($canDates)
-        <x-modal name="project-dates" maxWidth="lg">
+        <x-modal panel name="project-dates" maxWidth="lg">
             <form method="POST" action="{{ $dateUrl }}" class="space-y-4 p-6">
                 @csrf
                 <div>

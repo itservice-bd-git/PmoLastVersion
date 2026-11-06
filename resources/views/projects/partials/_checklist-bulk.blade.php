@@ -2,7 +2,7 @@
     "แก้ Checklist ทั้งโครงการ" (Admin / PM): the same change in the same Sub Task of every cabinet - add / rename / delete -
     always previewed first. App\Services\ChecklistBulk does the work (and the checks).
 --}}
-<x-modal name="checklist-bulk" maxWidth="2xl">
+<x-modal panel name="checklist-bulk" maxWidth="2xl">
     <div class="p-6" x-data="{
             url: @js(route('projects.checklist-bulk.run', $project)), optionsUrl: @js(route('projects.checklist-bulk.options', $project)),
             subtasks: [], subtask: '', action: 'add', names: '', find: '', replace: '', contains: false, picked: [],

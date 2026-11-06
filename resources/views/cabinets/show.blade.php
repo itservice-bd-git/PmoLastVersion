@@ -408,21 +408,21 @@
 
     @foreach ($cabinet->tasks as $task)
         <div data-edit-modal="task-{{ $task->id }}">
-        <x-modal :name="'edit-task-'.$task->id" :show="old('task_id') == $task->id">
+        <x-modal panel :name="'edit-task-'.$task->id" :show="old('task_id') == $task->id">
             <form method="POST" action="{{ route('cabinet-tasks.update', $task) }}" class="p-6">
                 @csrf @method('PUT')
                 <input type="hidden" name="task_id" value="{{ $task->id }}">
-                <h3 class="text-base font-semibold text-slate-900 mb-4">Edit Task — {{ $task->name }}</h3>
+                <h3 class="text-base font-semibold text-slate-900 mb-4">แก้ Task — {{ $task->name }}</h3>
                 <div class="space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                            <x-input-label value="Start Date" />
+                            <x-input-label value="วันเริ่ม" />
                             <input type="date" name="start_date"
                                    value="{{ old('task_id') == $task->id ? old('start_date') : optional($task->start_date)->format('Y-m-d') }}"
                                    class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
                         </div>
                         <div>
-                            <x-input-label value="Due Date" />
+                            <x-input-label value="วันครบกำหนด" />
                             <input type="date" name="due_date"
                                    value="{{ old('task_id') == $task->id ? old('due_date') : optional($task->due_date)->format('Y-m-d') }}"
                                    class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
@@ -432,7 +432,7 @@
                         </div>
                     </div>
                     <div>
-                        <x-input-label value="Remark" />
+                        <x-input-label value="หมายเหตุ" />
                         <textarea name="remark" rows="2" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">{{ $task->remark }}</textarea>
                     </div>
                 </div>
@@ -442,7 +442,7 @@
                     <button type="submit" form="delete-task-{{ $task->id }}" class="mr-auto px-3 py-2 text-sm font-medium text-red-600 hover:underline">ลบ Task นี้</button>
                     @endeditplan
                     <button type="button" x-data @click="$dispatch('close-modal', 'edit-task-{{ $task->id }}')" class="px-4 py-2 text-sm font-medium text-slate-600">ยกเลิก</button>
-                    <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">Save</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">บันทึก</button>
                 </div>
             </form>
             @editplan
@@ -461,17 +461,17 @@
 
         @foreach ($task->subtasks as $subtask)
             <div data-edit-modal="subtask-{{ $subtask->id }}">
-            <x-modal :name="'edit-subtask-'.$subtask->id" :show="old('subtask_id') == $subtask->id">
+            <x-modal panel :name="'edit-subtask-'.$subtask->id" :show="old('subtask_id') == $subtask->id">
                 <form method="POST" action="{{ route('cabinet-subtasks.update', $subtask) }}" class="p-6">
                     @csrf @method('PUT')
                     <input type="hidden" name="subtask_id" value="{{ $subtask->id }}">
-                    <h3 class="text-base font-semibold text-slate-900 mb-4">Edit Sub Task — {{ $subtask->name }}</h3>
+                    <h3 class="text-base font-semibold text-slate-900 mb-4">แก้ Sub Task — {{ $subtask->name }}</h3>
                     @error('due_date')
                         <p class="text-xs text-red-600 mb-3">{{ $message }}</p>
                     @enderror
                     <div class="space-y-4">
                         <div>
-                            <x-input-label value="Status" />
+                            <x-input-label value="สถานะ" />
                             <select name="status" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
                                 @foreach ($subtaskStatuses as $key => $label)
                                     <option value="{{ $key }}" @selected($subtask->status === $key)>{{ $label }}</option>
@@ -481,7 +481,7 @@
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <x-input-label value="Department" />
+                                <x-input-label value="แผนก" />
                                 {{-- Disabled once the department has accepted the work (backend rejects a change anyway), or if this user can't dispatch work - disabled fields aren't submitted either way. --}}
                                 <select name="department_id" data-modal-department="{{ $subtask->id }}" @disabled($subtask->is_department_locked || ! auth()->user()?->canDispatchWork())
                                         @if ($subtask->is_department_locked) title="ไม่สามารถเปลี่ยนแผนกได้ เนื่องจากแผนกรับงานแล้ว"
@@ -494,7 +494,7 @@
                                 </select>
                             </div>
                             <div>
-                                <x-input-label value="Owner" />
+                                <x-input-label value="ผู้รับผิดชอบ" />
                                 <select name="owner_id" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
                                     <option value="">-</option>
                                     @foreach ($users as $user)
@@ -527,7 +527,7 @@
                             </div>
                         </div>
                         <div>
-                            <x-input-label value="Remark" />
+                            <x-input-label value="หมายเหตุ" />
                             <textarea name="remark" rows="2" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">{{ $subtask->remark }}</textarea>
                         </div>
                     </div>
@@ -536,7 +536,7 @@
                         <button type="submit" form="delete-subtask-{{ $subtask->id }}" class="mr-auto px-3 py-2 text-sm font-medium text-red-600 hover:underline">ลบ Sub Task นี้</button>
                         @endeditplan
                         <button type="button" x-data @click="$dispatch('close-modal', 'edit-subtask-{{ $subtask->id }}')" class="px-4 py-2 text-sm font-medium text-slate-600">ยกเลิก</button>
-                        <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">Save</button>
+                        <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">บันทึก</button>
                     </div>
                 </form>
                 @editplan

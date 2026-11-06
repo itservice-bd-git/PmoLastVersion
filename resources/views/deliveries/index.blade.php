@@ -620,7 +620,7 @@
         </div>
 
         {{-- ส่งถึงแล้ว: when, who received it, the delivery note, a problem, the cabinets that arrived --}}
-        <x-modal name="dl-deliver" maxWidth="lg">
+        <x-modal panel name="dl-deliver" maxWidth="lg">
             {{-- only once ส่งถึงแล้ว is opened (openDeliver fills dlv): r alone is set by the other panels too --}}
             <template x-if="r && dlv.cabinet_ids">
                 <form method="POST" :action="r.urls.deliver" class="space-y-4 p-6">

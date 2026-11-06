@@ -1,6 +1,6 @@
 {{-- The วัน FAT window (ProjectFatController): on the project page (_fat) and fetched into Planning's project window
      (_fat-window, saved there as JSON). Needs $project, $fatCabinets, $cabName and an x-data holding `f` (formData) and `due`. --}}
-<x-modal name="project-fat" maxWidth="lg">
+<x-modal panel name="project-fat" maxWidth="lg">
     <template x-if="f">
         <form method="POST" :action="f.url" class="space-y-4 p-6"
               x-data="{ get moved() { return !!f.was && [f.fat_date, f.fat_end_date && f.fat_end_date !== f.fat_date ? f.fat_end_date : '', f.fat_time || ''].join('|') !== f.was; } }">

@@ -29,7 +29,7 @@ class ProjectController extends Controller
             ->orderByRaw('CASE WHEN due_date IS NULL THEN 1 ELSE 0 END')
             ->orderBy('due_date')
             ->latest()
-            ->with('latestFat')   // วัน FAT column (the latest round)
+            ->with('latestFat', 'jobType:id,name')   // วัน FAT column (the latest round), ประเภทงาน column
             ->paginate(15)
             ->withQueryString();
 

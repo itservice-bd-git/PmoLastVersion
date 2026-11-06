@@ -46,6 +46,15 @@ class ProjectFatTest extends TestCase
         return $over + ['fat_date' => '2026-11-04', 'fat_time' => '10:00', 'status' => 'scheduled', 'scope' => 'all', 'note' => 'ลูกค้า 3 คน'];
     }
 
+    public function test_the_projects_list_shows_the_job_type_after_the_customer(): void
+    {
+        $type = \App\Models\JobType::create(['name' => 'ตู้ MDB งานโรงงาน', 'is_active' => true]);
+        $this->project->forceFill(['job_type_id' => $type->id])->save();
+        $this->actingAs($this->pm)->get(route('projects.index'))->assertOk()
+            ->assertSeeInOrder(['<th class="px-4 py-2.5">ลูกค้า</th>', '<th class="px-4 py-2.5">ประเภทงาน</th>'], false)
+            ->assertSeeInOrder(['SO-1', 'C', 'ตู้ MDB งานโรงงาน']);
+    }
+
     public function test_the_projects_list_shows_the_latest_fat(): void
     {
         $this->actingAs($this->pm)->get(route('projects.index'))->assertOk()->assertSee('<th class="px-4 py-2.5">FAT</th>', false)->assertDontSee('นัดแล้ว');

@@ -195,6 +195,21 @@ class ProjectDeliveryTest extends TestCase
         $this->assertSame(['กระบะ', 'กระบะ'], Project::where('project_no', 'PJ-CARS')->firstOrFail()->deliveries()->firstOrFail()->vehicle_types);
     }
 
+    public function test_the_vehicles_panel_saves_without_reloading(): void
+    {
+        $d = $this->send();
+        // the page carries what the panel redraws from: the tabs, the list, the busy vehicles and the names typed before
+        $this->actingAs($this->clerk)->get(route('deliveries.index', ['tab' => 'waiting']))->assertOk()
+            ->assertSee('id="dl-tabs"', false)->assertSee('id="dl-rows"', false)->assertSee('id="dl-live"', false)->assertSee('บันทึกจัดรถ');
+
+        $this->actingAs($this->clerk)->postJson(route('deliveries.assign', $d), ['vehicles' => [['vehicle_id' => $this->truck->id], ['vehicle_id' => $this->truck->id]]])
+            ->assertStatus(422)->assertJsonValidationErrors(['vehicles.1.vehicle_id' => '6 ล้อเครน · 3กข-1234 ใส่ซ้ำ']);
+        $this->actingAs($this->clerk)->postJson(route('deliveries.assign', $d), ['vehicles' => [['vehicle_id' => $this->truck->id, 'crew' => ['วิชัย']]]])
+            ->assertOk()->assertJson(['message' => 'จัดรถแล้ว']);
+        $this->assertSame('scheduled', $d->fresh()->status);
+        $this->actingAs($this->member)->postJson(route('deliveries.assign', $d), ['vehicles' => [['vehicle_id' => $this->truck->id]]])->assertForbidden();
+    }
+
     public function test_the_delivery_department_puts_several_vehicles_and_people_on_it_and_pm_hears_what_differs(): void
     {
         $d = $this->send();

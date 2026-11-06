@@ -17,15 +17,45 @@
     </x-slot>
 
     <div class="mx-auto max-w-6xl space-y-4"
-         x-data="{ r: null, busy: @js((object) $busy), vehicles: @js($vehicles), reasons: @js($reasons), people: @js($people), asg: { rows: [], carrier: '' }, rej: {}, dlv: {},
+         x-data="{ r: null, tab: @js($tab), busy: @js((object) $busy), vehicles: @js($vehicles), reasons: @js($reasons), people: @js($people), rej: {}, dlv: {}, toast: '',
+                   asg: { open: false, rows: [], carrier: '', saving: false, error: '', errors: {} },
                    // จัดรถ / คน: the round's vehicles, or one empty line per kind PM asked for
                    openAssign(row) {
                        this.r = row;
                        const blank = (t) => ({ vehicle_id: '', label: '', driver_name: '', crew: [], want: t || '' });
                        const rows = row.vehicles.length ? row.vehicles.map((v) => ({ vehicle_id: v.vehicle_id, label: v.label, driver_name: v.driver_name, crew: [...v.crew], want: '' }))
                            : (row.method === 'company' && row.types.length ? row.types.map(blank) : [blank('')]);
-                       this.asg = { rows, carrier: row.carrier };
-                       this.$dispatch('open-modal', 'dl-assign');
+                       this.asg = { open: true, rows, carrier: row.carrier, saving: false, error: '', errors: {} };
+                   },
+                   asgErr(k) { return (this.asg.errors[k] || [])[0] || ''; },
+                   // vehicles filled in so far (a picked one, or an external one's words)
+                   get asgCars() { return this.asg.rows.filter((x) => this.r.method === 'company' ? x.vehicle_id : (x.label || '').trim()).length; },
+                   // saved without reloading: the panel closes, the tabs and the list are drawn again from a fresh copy of this tab
+                   async saveAssign(form) {
+                       if (!this.canSave || this.asg.saving) return;
+                       this.asg.saving = true; this.asg.error = ''; this.asg.errors = {};
+                       try {
+                           const res = await fetch(form.action, { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content }, body: new FormData(form) });
+                           const data = await res.json().catch(() => ({}));
+                           if (!res.ok) { this.asg.errors = data.errors || {}; this.asg.error = (data.errors && Object.values(data.errors)[0][0]) || data.message || 'บันทึกไม่ได้ ลองอีกครั้ง'; return; }
+                           this.asg.open = false;
+                           this.say(data.message || 'บันทึกแล้ว');
+                           await this.refreshList();
+                       } catch (e) {
+                           this.asg.error = 'บันทึกไม่ได้ ตรวจการเชื่อมต่อแล้วลองอีกครั้ง';
+                       } finally {
+                           this.asg.saving = false;
+                       }
+                   },
+                   say(m) { this.toast = m; clearTimeout(this._toast); this._toast = setTimeout(() => { this.toast = ''; }, 3500); },
+                   async refreshList() {
+                       const u = new URL(location.href); u.searchParams.set('tab', this.tab);
+                       const html = await fetch(u, { headers: { 'Accept': 'text/html' } }).then((x) => (x.ok ? x.text() : null)).catch(() => null);
+                       if (!html) { location.reload(); return; }
+                       const doc = new DOMParser().parseFromString(html, 'text/html');
+                       ['dl-tabs', 'dl-rows'].forEach((id) => { const n = doc.getElementById(id), o = document.getElementById(id); if (n && o) o.replaceWith(n); });
+                       const live = doc.getElementById('dl-live');
+                       if (live) { const d = JSON.parse(live.textContent); this.busy = d.busy; this.people = d.people; }
                    },
                    car(id) { return this.vehicles.find((v) => String(v.id) === String(id)); },
                    // the vehicles of the kind the line was opened for first, then the others PM asked for, then the rest
@@ -89,7 +119,7 @@
             <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{{ $errors->first() }}</p>
         @endif
 
-        <nav class="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 text-sm" aria-label="ขั้นงาน">
+        <nav id="dl-tabs" class="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 text-sm" aria-label="ขั้นงาน">
             @foreach (\App\Http\Controllers\DeliveryController::TABS as $key => $label)
                 @php $n = $tabs[$key]->count(); @endphp
                 <a href="{{ route('deliveries.index', ['tab' => $key]) }}" @if ($tab === $key) aria-current="page" @endif
@@ -102,7 +132,9 @@
             @endforeach
         </nav>
 
-        <section class="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="{{ \App\Http\Controllers\DeliveryController::TABS[$tab] }}">
+        {{-- what the panels need that changes once something is saved; read again by refreshList() --}}
+        <script type="application/json" id="dl-live">@json(['busy' => (object) $busy, 'people' => $people])</script>
+        <section id="dl-rows" class="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="{{ \App\Http\Controllers\DeliveryController::TABS[$tab] }}">
             @forelse ($rows as $row)
                 @php
                     $before = in_array($row['status'], ['waiting', 'rejected', 'scheduled'], true);   // packing / แจ้งเปิดบิล may happen
@@ -218,7 +250,8 @@
              x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
              x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
              class="fixed inset-0 z-40 flex justify-end bg-slate-900/40" @click.self="cab.open = false"
-             x-effect="document.body.classList.toggle('overflow-hidden', cab.open)" @keydown.escape.window="cab.open = false">
+             x-effect="const w = innerWidth - document.documentElement.clientWidth, on = cab.open || asg.open; document.body.classList.toggle('overflow-hidden', on); document.body.style.paddingRight = on && w > 0 ? w + 'px' : ''"
+             @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) cab.open = false">
             <div x-show="cab.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
                  x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
                  x-init="$watch('cab.open', (v) => v && $nextTick(() => $refs.closeCabs.focus({ preventScroll: true })))"
@@ -291,70 +324,109 @@
             </div>
         </div>
 
-        <x-modal name="dl-assign" maxWidth="2xl">
-            <template x-if="r">
-                <form method="POST" :action="r.urls.assign" class="space-y-4 p-6">
-                    @csrf
-                    <div>
-                        <h3 class="text-base font-semibold text-slate-900" x-text="(r.vehicles.length ? 'แก้รถ / คน' : 'จัดรถ / คน') + ' · ' + r.project + ' รอบ ' + r.round"></h3>
-                        <p class="mt-1 text-sm text-slate-600" x-text="r.cabinets.length + ' ตู้ (' + r.cabinets.map((c) => c.name).join(', ') + ')' + (r.site ? ' · ' + r.site : '')"></p>
-                        <p class="mt-1 flex flex-wrap gap-1.5 text-sm">
-                            <span class="rounded-md bg-teal-50 px-2 font-semibold text-teal-900" x-text="'ส่ง ' + r.when + ' (PM กำหนด)'"></span>
-                            <span x-show="r.request" class="rounded-md bg-slate-100 px-2 text-slate-700" x-text="'PM ขอ ' + r.request"></span>
-                        </p>
-                    </div>
-                    <label x-show="r.method === 'external'" class="block text-sm font-semibold text-slate-800">บริษัทขนส่ง
-                        <input type="text" name="carrier" x-model="asg.carrier" :disabled="r.method !== 'external'" maxlength="150" class="{{ $field }}">
-                    </label>
-                    <div class="space-y-3">
-                        <template x-for="(v, i) in asg.rows" :key="i">
-                            <fieldset class="rounded-xl border border-slate-200 p-3">
-                                <legend class="flex w-full items-center gap-2 px-1 text-sm font-semibold text-slate-800">
-                                    <span x-text="'คันที่ ' + (i + 1)"></span>
-                                    <span x-show="v.want" class="text-xs font-normal text-slate-500" x-text="'(PM ขอ ' + v.want + ')'"></span>
-                                </legend>
-                                <div class="grid gap-2 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto]">
-                                    <select x-show="r.method === 'company'" :name="'vehicles[' + i + '][vehicle_id]'" x-model="v.vehicle_id" @change="pickCar(v)" :disabled="r.method !== 'company'"
-                                            class="block h-10 w-full rounded-lg border-slate-300 text-sm" :aria-label="'รถคันที่ ' + (i + 1)">
-                                        <option value="">เลือกรถ</option>
-                                        <template x-for="c in carList(v.want)" :key="c.id">
-                                            <option :value="String(c.id)" :selected="String(c.id) === String(v.vehicle_id)"
-                                                    x-text="c.label + (c.type && c.type !== c.name ? ' · ' + c.type : '') + (c.capacity ? ' · ~' + c.capacity + ' ตู้' : '') + (c.equipment ? ' · ' + c.equipment : '') + (r.types.length && c.type && !r.types.includes(c.type) ? ' (ไม่ได้ขอ)' : '') + (c.active ? '' : ' (เลิกใช้)')"></option>
+        {{-- จัดรถ / คน: a panel (full screen on a phone) - PM's request and how much of it is filled stay on top, the save button
+             at the bottom; saved without reloading (saveAssign) --}}
+        <div x-show="asg.open" x-cloak role="dialog" aria-modal="true" :aria-label="r ? (r.vehicles.length ? 'แก้รถ / คน ' : 'จัดรถ / คน ') + r.project + ' รอบ ' + r.round : 'จัดรถ / คน'"
+             x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+             class="fixed inset-0 z-40 flex justify-end bg-slate-900/40" @click.self="asg.open = false"
+             @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) asg.open = false">
+            <div x-show="asg.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
+                 x-init="$watch('asg.open', (v) => v && $nextTick(() => $refs.closeAsg.focus({ preventScroll: true })))"
+                 class="relative flex h-full w-full max-w-xl flex-col bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)] will-change-transform">
+                <template x-if="r">
+                    <form method="POST" :action="r.urls.assign" class="flex min-h-0 flex-1 flex-col" @submit.prevent="saveAssign($el)">
+                        @csrf
+                        {{-- the round, what PM asked for, how much of it is filled --}}
+                        <div class="space-y-2.5 border-b border-slate-200 p-4 pr-14 sm:p-5 sm:pr-16">
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500" x-text="r.vehicles.length ? 'แก้รถ / คน' : 'จัดรถ / คน'"></p>
+                                <p class="truncate text-base font-bold text-slate-900"><span x-text="r.project"></span> <span class="font-semibold text-slate-600" x-text="r.name"></span></p>
+                                <p class="text-sm text-slate-600" x-text="'รอบ ' + r.round + ' · ' + r.when + ' · ' + r.cabinets.length + ' ตู้' + (r.site ? ' · ' + r.site : '')"></p>
+                            </div>
+                            <p x-show="r.request" class="text-sm text-slate-600">PM ขอ <span class="font-semibold text-slate-900" x-text="r.request"></span></p>
+                            <div x-show="r.method !== 'pickup'" class="flex flex-wrap gap-2 text-sm">
+                                <span x-show="r.method === 'company' && r.types.length" class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-semibold tabular-nums"
+                                      :class="asgCars >= r.types.length ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'"
+                                      x-text="'รถ ' + asgCars + '/' + r.types.length + ' คัน' + (asgCars >= r.types.length ? ' ✓' : '')"></span>
+                                <span x-show="r.method === 'company' && !r.types.length" class="rounded-full bg-slate-100 px-2.5 py-0.5 font-semibold tabular-nums text-slate-700" x-text="'รถ ' + asgCars + ' คัน'"></span>
+                                <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-semibold tabular-nums"
+                                      :class="!r.crew_size ? 'bg-slate-100 text-slate-700' : (going >= r.crew_size ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')"
+                                      x-text="r.crew_size ? 'คน ' + going + '/' + r.crew_size + (going >= r.crew_size ? ' ✓' : '') : going + ' คน'"></span>
+                            </div>
+                        </div>
+
+                        {{-- each vehicle: which one, its driver, who else goes --}}
+                        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:p-5">
+                            <label x-show="r.method === 'external'" class="block text-sm font-semibold text-slate-800">บริษัทขนส่ง
+                                <input type="text" name="carrier" x-model="asg.carrier" :disabled="r.method !== 'external'" maxlength="150" class="{{ $field }}">
+                            </label>
+                            <template x-for="(v, i) in asg.rows" :key="i">
+                                <fieldset class="rounded-xl border p-3" :class="asgErr('vehicles.' + i + '.vehicle_id') || takenElsewhere(v) ? 'border-red-300' : 'border-slate-200'">
+                                    <legend class="flex w-full items-center gap-2 px-1 text-sm font-semibold text-slate-800">
+                                        <span x-text="'คันที่ ' + (i + 1)"></span>
+                                        <span x-show="v.want" class="text-xs font-normal text-slate-500" x-text="'PM ขอ ' + v.want"></span>
+                                        <button type="button" @click="asg.rows.splice(i, 1)" x-show="asg.rows.length > 1" class="ml-auto h-8 rounded-lg px-2 text-xs font-semibold text-slate-500 hover:bg-red-50 hover:text-red-700" :aria-label="'เอาคันที่ ' + (i + 1) + ' ออก'">เอาออก</button>
+                                    </legend>
+                                    <div class="grid gap-2 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+                                        <select x-show="r.method === 'company'" :name="'vehicles[' + i + '][vehicle_id]'" x-model="v.vehicle_id" @change="pickCar(v)" :disabled="r.method !== 'company'"
+                                                class="block h-11 w-full rounded-lg border-slate-300 text-sm" :aria-label="'รถคันที่ ' + (i + 1)">
+                                            <option value="">เลือกรถ</option>
+                                            <template x-for="c in carList(v.want)" :key="c.id">
+                                                <option :value="String(c.id)" :selected="String(c.id) === String(v.vehicle_id)"
+                                                        x-text="c.label + (c.type && c.type !== c.name ? ' · ' + c.type : '') + (c.capacity ? ' · ~' + c.capacity + ' ตู้' : '') + (c.equipment ? ' · ' + c.equipment : '') + (r.types.length && c.type && !r.types.includes(c.type) ? ' (ไม่ได้ขอ)' : '') + (c.active ? '' : ' (เลิกใช้)')"></option>
+                                            </template>
+                                        </select>
+                                        <input x-show="r.method === 'external'" type="text" :name="'vehicles[' + i + '][label]'" x-model="v.label" :disabled="r.method !== 'external'" maxlength="150" placeholder="รถ / ทะเบียน" class="block h-11 w-full rounded-lg border-slate-300 text-sm">
+                                        <input type="text" :name="'vehicles[' + i + '][driver_name]'" x-model="v.driver_name" list="dl-people" maxlength="100" autocomplete="off"
+                                               :placeholder="car(v.vehicle_id) && car(v.vehicle_id).driver ? car(v.vehicle_id).driver + ' (ประจำรถ)' : 'คนขับ'" class="block h-11 w-full rounded-lg border-slate-300 text-sm" :aria-label="'คนขับคันที่ ' + (i + 1)">
+                                    </div>
+                                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                                        <span class="text-xs text-slate-500">ไปด้วย</span>
+                                        <template x-for="(n, j) in v.crew" :key="j">
+                                            <span class="inline-flex items-center">
+                                                <input type="text" :name="'vehicles[' + i + '][crew][]'" x-model="v.crew[j]" list="dl-people" maxlength="100" autocomplete="off" placeholder="ชื่อ" class="block h-10 w-32 rounded-lg border-slate-300 text-sm">
+                                                <button type="button" @click="v.crew.splice(j, 1)" class="h-10 px-1.5 text-slate-400 hover:text-slate-700" aria-label="เอาคนนี้ออก">✕</button>
+                                            </span>
                                         </template>
-                                    </select>
-                                    <input x-show="r.method === 'external'" type="text" :name="'vehicles[' + i + '][label]'" x-model="v.label" :disabled="r.method !== 'external'" maxlength="150" placeholder="รถ / ทะเบียน" class="block h-10 w-full rounded-lg border-slate-300 text-sm">
-                                    <input type="text" :name="'vehicles[' + i + '][driver_name]'" x-model="v.driver_name" list="dl-people" maxlength="100" autocomplete="off"
-                                           :placeholder="car(v.vehicle_id) && car(v.vehicle_id).driver ? car(v.vehicle_id).driver + ' (ประจำรถ)' : 'คนขับ'" class="block h-10 w-full rounded-lg border-slate-300 text-sm" :aria-label="'คนขับคันที่ ' + (i + 1)">
-                                    <button type="button" @click="asg.rows.splice(i, 1)" x-show="asg.rows.length > 1" class="h-10 rounded-lg px-2 text-sm text-slate-400 hover:bg-slate-100 hover:text-red-700" :aria-label="'เอาคันที่ ' + (i + 1) + ' ออก'">✕</button>
-                                </div>
-                                <div class="mt-2 flex flex-wrap items-center gap-2">
-                                    <span class="text-xs text-slate-500">ไปด้วย</span>
-                                    <template x-for="(n, j) in v.crew" :key="j">
-                                        <span class="inline-flex items-center">
-                                            <input type="text" :name="'vehicles[' + i + '][crew][]'" x-model="v.crew[j]" list="dl-people" maxlength="100" autocomplete="off" placeholder="ชื่อ" class="block h-9 w-32 rounded-lg border-slate-300 text-sm">
-                                            <button type="button" @click="v.crew.splice(j, 1)" class="h-9 px-1.5 text-slate-400 hover:text-slate-700" aria-label="เอาคนนี้ออก">✕</button>
-                                        </span>
-                                    </template>
-                                    <button type="button" @click="v.crew.push('')" class="text-sm font-semibold text-teal-700 hover:underline">+ เพิ่มคน</button>
-                                </div>
-                                <p x-show="takenElsewhere(v)" class="mt-2 rounded-lg bg-red-50 px-3 py-1.5 text-sm text-red-800">รถคันนี้ใส่ซ้ำ</p>
-                                <p x-show="v.vehicle_id && busyOn(v).length" class="mt-2 rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900" x-text="'ช่วงวันนั้นรถคันนี้มีงาน ' + busyOn(v).join(', ') + ' แล้ว (เตือนเท่านั้น)'"></p>
-                                <p x-show="notAsked(v)" class="mt-2 rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900" x-text="'PM ไม่ได้ขอ ' + notAsked(v) + ' · บันทึกได้ PM จะได้แจ้งเตือน'"></p>
-                            </fieldset>
-                        </template>
-                    </div>
-                    <button type="button" @click="asg.rows.push({ vehicle_id: '', label: '', driver_name: '', crew: [], want: '' })" class="text-sm font-semibold text-teal-700 hover:underline">+ เพิ่มรถ</button>
-                    <datalist id="dl-people"><template x-for="n in people" :key="n"><option :value="n"></option></template></datalist>
-                    <p class="text-sm font-semibold tabular-nums" :class="r.crew_size && going < r.crew_size ? 'text-amber-700' : 'text-slate-600'"
-                       x-text="asg.rows.length + ' คัน · ' + going + (r.crew_size ? '/' + r.crew_size : '') + ' คน' + (r.crew_size && going < r.crew_size ? ' · น้อยกว่าที่ PM ขอ (บันทึกได้ PM จะได้แจ้งเตือน)' : '')"></p>
-                    <div class="flex items-center gap-2 pt-1">
-                        <button type="button" x-show="r.status === 'waiting'" @click="$dispatch('close-modal', 'dl-assign'); openReject(r)" class="h-10 rounded-lg px-3 text-sm font-semibold text-red-700 hover:bg-red-50">ไม่รับงาน</button>
-                        <button type="button" @click="$dispatch('close-modal', 'dl-assign')" class="ml-auto h-10 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ปิด</button>
-                        <button type="submit" :disabled="!canSave" class="h-10 rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50">บันทึก</button>
-                    </div>
-                </form>
-            </template>
-        </x-modal>
+                                        <button type="button" @click="v.crew.push('')" class="h-10 text-sm font-semibold text-teal-700 hover:underline">+ เพิ่มคน</button>
+                                    </div>
+                                    <p x-show="asgErr('vehicles.' + i + '.vehicle_id')" class="mt-2 rounded-lg bg-red-50 px-3 py-1.5 text-sm text-red-800" x-text="asgErr('vehicles.' + i + '.vehicle_id')"></p>
+                                    <p x-show="takenElsewhere(v)" class="mt-2 rounded-lg bg-red-50 px-3 py-1.5 text-sm text-red-800">รถคันนี้ใส่ซ้ำ</p>
+                                    <p x-show="v.vehicle_id && busyOn(v).length" class="mt-2 rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900" x-text="'ช่วงวันนั้นรถคันนี้มีงาน ' + busyOn(v).join(', ') + ' แล้ว (เตือนเท่านั้น)'"></p>
+                                    <p x-show="notAsked(v)" class="mt-2 rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900" x-text="'PM ไม่ได้ขอ ' + notAsked(v) + ' · บันทึกได้ PM จะได้แจ้งเตือน'"></p>
+                                </fieldset>
+                            </template>
+                            <button type="button" @click="asg.rows.push({ vehicle_id: '', label: '', driver_name: '', crew: [], want: '' })"
+                                    class="flex h-11 w-full items-center justify-center rounded-xl border border-dashed border-slate-300 text-sm font-semibold text-teal-700 hover:bg-slate-50">+ เพิ่มรถอีกคัน</button>
+                            <datalist id="dl-people"><template x-for="n in people" :key="n"><option :value="n"></option></template></datalist>
+                        </div>
+
+                        {{-- short of what PM asked (allowed), a refusal, save --}}
+                        <div class="space-y-2 border-t border-slate-200 p-4 sm:px-5">
+                            <p x-show="r.method === 'company' && r.types.length && asgCars < r.types.length || r.crew_size && going < r.crew_size" class="text-xs text-amber-800">
+                                น้อยกว่าที่ PM ขอ · บันทึกได้ PM จะได้แจ้งเตือน</p>
+                            <p x-show="asg.error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert" x-text="asg.error"></p>
+                            <div class="flex items-center gap-2">
+                                <button type="button" x-show="r.status === 'waiting'" @click="asg.open = false; openReject(r)" class="h-11 rounded-lg px-3 text-sm font-semibold text-red-700 hover:bg-red-50">ไม่รับงาน</button>
+                                <button type="submit" :disabled="!canSave || asg.saving"
+                                        class="ml-auto inline-flex h-11 items-center rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+                                        x-text="asg.saving ? 'กำลังบันทึก…' : (r.vehicles.length ? 'บันทึกรถ / คน' : (r.method === 'pickup' ? 'รับงาน' : 'บันทึกจัดรถ'))"></button>
+                            </div>
+                        </div>
+                    </form>
+                </template>
+                <button type="button" x-ref="closeAsg" @click="asg.open = false" aria-label="ปิด"
+                        class="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+            </div>
+        </div>
+
+        {{-- saved: a short note at the bottom --}}
+        <div x-show="toast" x-cloak x-transition.opacity role="status" aria-live="polite"
+             class="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit max-w-[calc(100%-2rem)] rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-lg" x-text="toast"></div>
 
         {{-- ไม่รับงาน: a reason (Settings > รถขนส่ง) or "อื่น ๆ" with its words; back to PM for another day --}}
         <x-modal name="dl-reject" maxWidth="lg">

@@ -185,33 +185,17 @@
                     <div class="min-w-0">
                         <p class="truncate text-sm font-bold text-slate-900">{{ $row['project'] }} <span class="font-semibold text-slate-600">{{ $row['name'] }}</span></p>
                         <p class="text-[13px] text-slate-600">รอบ {{ $row['round'] }} · {{ count($row['cabinets']) }} ตู้{{ $row['site'] ? ' · '.$row['site'] : '' }}</p>
-                        {{-- the cabinets: the first few in the panel's columns (เลข MO | ชื่อตู้ · ประเภท · ขนาด), those still to pack
-                             first; all of them, ห่อ → แจ้งเปิดบิล → ออกจากโรงงาน and ย้อนขั้น in the panel. The button names what is next there --}}
+                        {{-- the cabinets: their names only, on up to two lines; every detail of them, ห่อ → แจ้งเปิดบิล → ออกจากโรงงาน
+                             and ย้อนขั้น in the panel. The button names what is next there --}}
                         @php
                             $toBill = $packable && $row['allPacked'] && $row['status'] !== 'rejected';
                             $cabLabel = $packable && ! $row['allPacked'] ? 'ห่อตู้ '.$row['packedCount'].'/'.count($row['cabinets']) : ($toBill ? 'แจ้งเปิดบิล' : 'รายการตู้ ('.count($row['cabinets']).')');
-                            $cabFirst = collect($row['cabinets'])->sortBy(fn ($c, $i) => ($c['packed'] ? 100000 : 0) + $i)->take(3);
-                            $cabMore = count($row['cabinets']) - $cabFirst->count();
-                            $cabWhat = fn ($c) => collect([$c['type'], $c['size'] ? 'ขนาด '.$c['size'] : '', $c['qty'] > 1 ? $c['qty'].' ตู้' : ''])->filter()->implode(' · ');
+                            $cabTitles = collect($row['cabinets'])->map(fn ($c) => $c['model'] ?: $c['name']);
                         @endphp
-                        <div class="mt-2">
-                            <button type="button" @click="openCabs(@js($row))" class="block w-full overflow-hidden rounded-lg border border-slate-200 text-left hover:border-slate-300 hover:bg-slate-50"
-                                    aria-label="ดูรายการตู้ทั้งหมด {{ count($row['cabinets']) }} ตู้">
-                                <span class="block divide-y divide-slate-100">
-                                    @foreach ($cabFirst as $c)
-                                        <span class="grid grid-cols-[0.875rem_minmax(0,6.75rem)_minmax(0,1fr)] items-baseline gap-x-2 px-2.5 py-1.5 text-xs">
-                                            <span class="{{ $c['packed'] ? 'text-emerald-600' : 'text-slate-300' }}" title="{{ $c['packed'] ? 'ห่อแล้ว' : 'ยังไม่ห่อ' }}">{{ $c['packed'] ? '✓' : '○' }}</span>
-                                            <span class="truncate font-bold tabular-nums text-slate-900">{{ $c['model'] ? $c['name'] : '-' }}</span>
-                                            <span class="min-w-0">
-                                                <span class="block truncate font-semibold text-slate-800">{{ $c['model'] ?: $c['name'] }}</span>
-                                                @if ($cabWhat($c))<span class="block truncate text-slate-500">{{ $cabWhat($c) }}</span>@endif
-                                            </span>
-                                        </span>
-                                    @endforeach
-                                </span>
-                                <span class="block border-t border-slate-100 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-teal-700">{{ $cabMore > 0 ? '+ อีก '.$cabMore.' ตู้ · ดูทั้งหมด' : 'ดูรายการตู้' }}</span>
-                            </button>
-                        </div>
+                        <p class="mt-1.5 flex items-baseline gap-1.5 text-[13px]">
+                            <span class="line-clamp-2 min-w-0 text-slate-700" title="{{ $cabTitles->implode(', ') }}">{{ $cabTitles->take(8)->implode(', ') }}</span>
+                            @if ($cabTitles->count() > 2)<button type="button" @click="openCabs(@js($row))" class="shrink-0 font-semibold text-teal-700 hover:underline">ดูทั้งหมด</button>@endif
+                        </p>
                         {{-- the next step's button, and the four steps --}}
                         <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
                             <button type="button" @click="openCabs(@js($row))"

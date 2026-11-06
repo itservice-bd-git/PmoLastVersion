@@ -150,7 +150,16 @@ class ProjectDeliveryTest extends TestCase
 
         // each cabinet with its name, type, size and how many
         $this->cab1->forceFill(['cabinet_name' => 'MDB-1 ตู้เมน', 'cabinet_type' => 'MDB', 'size' => '80x200x60 ซม.', 'quantity' => 2])->save();
-        $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk()->assertSeeInOrder(['○ ห่อ', 'MO-1', 'MDB-1 ตู้เมน', 'MDB · ขนาด 80x200x60 ซม. · 2 ตู้', 'MO-2', 'B']);
+        $page = $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk()->assertSee('ห่อตู้ · รายการตู้ (2)')->assertSee('MO-1, MO-2');
+        $row = collect($page->viewData('rows'))->firstWhere('id', $d->id);
+        $this->assertSame(['MO-1', 'MDB-1 ตู้เมน', 'MDB', '80x200x60 ซม.', 2, true], [$row['cabinets'][0]['name'], $row['cabinets'][0]['model'], $row['cabinets'][0]['type'], $row['cabinets'][0]['size'], $row['cabinets'][0]['qty'], $row['packable']]);
+
+        // the panel ticks without reloading: JSON back with what is packed now
+        $this->travelTo(Carbon::parse('2026-11-18 14:20'));
+        $this->actingAs($this->clerk)->postJson(route('deliveries.pack', $d), ['cabinet_ids' => [$this->cab1->id], 'packed' => 1])->assertOk()
+            ->assertJson(['count' => 1, 'total' => 2, 'packed' => [$this->cab1->id => '18/11 14:20']]);
+        $this->assertTrue($d->fresh()->isPacked($this->cab1->id));
+        $this->actingAs($this->member)->postJson(route('deliveries.pack', $d), ['cabinet_ids' => [$this->cab2->id], 'packed' => 1])->assertStatus(403);
     }
 
     public function test_the_delivery_department_puts_several_vehicles_and_people_on_it_and_pm_hears_what_differs(): void

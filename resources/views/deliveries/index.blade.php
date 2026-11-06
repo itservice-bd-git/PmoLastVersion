@@ -37,6 +37,50 @@
                    notAsked(row) { const v = this.car(row.vehicle_id); return v && v.type && this.r.types.length && !this.r.types.includes(v.type) ? v.type : ''; },
                    get going() { return this.asg.rows.flatMap((x) => [x.driver_name, ...x.crew]).filter((n) => n && n.trim()).length; },
                    get canSave() { return this.r && (this.r.method !== 'company' || this.asg.rows.some((x) => x.vehicle_id)) && !this.asg.rows.some((x) => this.takenElsewhere(x)); },
+                   // รายการตู้ / ห่อตู้: a panel; each tick saves at once (JSON) and the round's card behind it is redrawn from the page
+                   cab: { open: false, row: null, list: [], filter: 'all', q: '', error: '', saving: 0 },
+                   openCabs(row) {
+                       const list = row.cabinets.map((c) => ({ ...c, busy: false }));
+                       const todo = list.filter((c) => !c.packed).length;
+                       this.cab = { open: true, row, list, filter: row.packable && todo && todo < list.length ? 'todo' : 'all', q: '', error: '', saving: 0 };
+                   },
+                   cabCount(f) { return this.cab.list.filter((c) => f === 'todo' ? !c.packed : f === 'done' ? c.packed : true).length; },
+                   get cabShown() {
+                       const q = this.cab.q.trim().toLowerCase();
+                       return this.cab.list.filter((c) => (this.cab.filter === 'todo' ? !c.packed : this.cab.filter === 'done' ? c.packed : true)
+                           && (!q || [c.name, c.model, c.type, c.size].join(' ').toLowerCase().includes(q)));
+                   },
+                   async packCabs(list, packed) {
+                       list = list.filter((c) => c.packed !== packed && !c.busy);
+                       if (!list.length || !this.cab.row.packable) return;
+                       const row = this.cab.row;
+                       this.cab.error = ''; this.cab.saving++;
+                       list.forEach((c) => { c.busy = true; c.packed = packed; });   // shown at once, put back if refused
+                       try {
+                           const res = await fetch(row.urls.pack, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content },
+                               body: JSON.stringify({ cabinet_ids: list.map((c) => c.id), packed: packed ? 1 : 0 }) });
+                           const data = await res.json().catch(() => ({}));
+                           if (!res.ok) throw new Error((data.errors && Object.values(data.errors)[0][0]) || data.message || 'บันทึกไม่ได้ ลองอีกครั้ง');
+                           this.cab.list.forEach((c) => { if (c.busy && !list.includes(c)) return; c.packed = !!data.packed[c.id]; c.at = data.packed[c.id] || ''; });   // another tick still on its way keeps its own
+                           this.redrawRound(row.id);
+                       } catch (e) {
+                           list.forEach((c) => { c.packed = !packed; });
+                           this.cab.error = e.message;
+                       } finally {
+                           list.forEach((c) => { c.busy = false; });
+                           this.cab.saving--;
+                       }
+                   },
+                   // the round's card on the page (ห่อ n/m, แจ้งเปิดบิล) from a fresh copy of this page, without reloading it
+                   redrawRound(id) {
+                       clearTimeout(this._redraw);
+                       this._redraw = setTimeout(async () => {
+                           const html = await fetch(location.href, { headers: { 'Accept': 'text/html' } }).then((r) => r.text()).catch(() => null);
+                           const fresh = html && new DOMParser().parseFromString(html, 'text/html').getElementById('round-' + id);
+                           const old = document.getElementById('round-' + id);
+                           if (fresh && old) old.replaceWith(fresh);
+                       }, 500);
+                   },
                    openReject(row) { this.r = row; this.rej = { reason: '', note: '' }; this.$dispatch('open-modal', 'dl-reject'); },
                    openDeliver(row) { this.r = row; const now = new Date(); this.dlv = { date: row.delivered_date || now.toISOString().slice(0, 10), time: row.delivered_time || String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
                        receiver: row.receiver, doc_no: row.doc_no, issue: row.issue, cabinet_ids: row.cabinets.map((c) => c.id) }; this.$dispatch('open-modal', 'dl-deliver'); } }">
@@ -70,49 +114,16 @@
                     <div class="min-w-0">
                         <p class="truncate text-sm font-bold text-slate-900">{{ $row['project'] }} <span class="font-semibold text-slate-600">{{ $row['name'] }}</span></p>
                         <p class="text-[13px] text-slate-600">รอบ {{ $row['round'] }} · {{ count($row['cabinets']) }} ตู้{{ $row['site'] ? ' · '.$row['site'] : '' }}</p>
-                        {{-- each cabinet on its own line: MO, name, type, size, how many - the ห่อแล้ว button in front (more than 4: the rest folded) --}}
-                        <ul class="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200" x-data="{ all: false }">
-                            @foreach ($row['cabinets'] as $i => $c)
-                                @php $gone = in_array($row['status'], ['departed', 'delivered'], true); @endphp
-                                <li class="flex items-start gap-2.5 px-2.5 py-2" @if ($i >= 4) x-show="all" x-cloak @endif>
-                                    @if ($packable)
-                                        <form method="POST" action="{{ $row['urls']['pack'] }}" class="shrink-0">
-                                            @csrf
-                                            <input type="hidden" name="cabinet_ids[]" value="{{ $c['id'] }}"><input type="hidden" name="packed" value="{{ $c['packed'] ? 0 : 1 }}">
-                                            <button class="inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold {{ $c['packed'] ? 'border-transparent bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-500 hover:text-emerald-800' }}"
-                                                    title="{{ $c['packed'] ? 'ห่อแล้ว '.$c['at'].' · กดเพื่อเอาออก' : 'กดเมื่อห่อตู้นี้เสร็จ' }}" aria-pressed="{{ $c['packed'] ? 'true' : 'false' }}" aria-label="{{ $c['packed'] ? 'ห่อแล้ว' : 'ห่อ' }} {{ $c['name'] }}">
-                                                {{ $c['packed'] ? '✓ ห่อแล้ว' : '○ ห่อ' }}
-                                            </button>
-                                        </form>
-                                    @else
-                                        <span class="inline-flex h-8 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold {{ $c['packed'] || $gone ? 'bg-emerald-50 text-emerald-800' : 'border border-slate-300 text-slate-600' }}">{{ $c['packed'] || $gone ? '✓ ห่อแล้ว' : '○ ยังไม่ห่อ' }}</span>
-                                    @endif
-                                    <div class="min-w-0 flex-1">
-                                        <p class="flex flex-wrap items-baseline gap-x-2 text-sm">
-                                            <span class="font-bold tabular-nums text-slate-900">{{ $c['name'] }}</span>
-                                            @if ($c['model'])<span class="min-w-0 break-words text-slate-700">{{ $c['model'] }}</span>@endif
-                                        </p>
-                                        @if ($c['type'] || $c['size'] || $c['qty'] > 1 || ($c['packed'] && $c['at']))
-                                            <p class="text-xs text-slate-600">{{ collect([$c['type'], $c['size'] ? 'ขนาด '.$c['size'] : null, $c['qty'] > 1 ? $c['qty'].' ตู้' : null, $c['packed'] && $c['at'] ? 'ห่อ '.$c['at'] : null])->filter()->implode(' · ') }}</p>
-                                        @endif
-                                    </div>
-                                </li>
-                            @endforeach
-                            @if (count($row['cabinets']) > 4)
-                                <li><button type="button" @click="all = ! all" class="flex h-9 w-full items-center px-2.5 text-xs font-semibold text-teal-700 hover:bg-teal-50" :aria-expanded="all"
-                                            x-text="all ? 'ย่อ' : 'ดูอีก {{ count($row['cabinets']) - 4 }} ตู้'"></button></li>
-                            @endif
-                        </ul>
-                        @if ($packable && $row['packedCount'] < count($row['cabinets']) - 1)
-                            <div class="mt-1.5">
-                                <form method="POST" action="{{ $row['urls']['pack'] }}">
-                                    @csrf
-                                    @foreach ($row['cabinets'] as $c)@unless ($c['packed'])<input type="hidden" name="cabinet_ids[]" value="{{ $c['id'] }}">@endunless @endforeach
-                                    <input type="hidden" name="packed" value="1">
-                                    <button class="inline-flex h-8 items-center rounded-full px-2.5 text-xs font-semibold text-teal-700 hover:bg-teal-50">ห่อครบทุกตู้</button>
-                                </form>
-                            </div>
-                        @endif
+                        {{-- the cabinets: a short line here, every one of them (name, type, size, how many) and the ห่อ buttons in the panel --}}
+                        @php $cabNames = collect($row['cabinets'])->pluck('name'); @endphp
+                        <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                            <p class="min-w-0 flex-1 truncate text-xs text-slate-600" title="{{ $cabNames->implode(', ') }}">{{ $cabNames->take(4)->implode(', ') }}{{ $cabNames->count() > 4 ? ' +'.($cabNames->count() - 4).' ตู้' : '' }}</p>
+                            <button type="button" @click="openCabs(@js($row))"
+                                    class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold {{ $packable && ! $row['allPacked'] ? 'bg-teal-700 text-white hover:bg-teal-800' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' }}">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4"/></svg>
+                                {{ $packable ? 'ห่อตู้ · รายการตู้' : 'รายการตู้' }} ({{ count($row['cabinets']) }})
+                            </button>
+                        </div>
                         {{-- the four steps --}}
                         <ol class="mt-2 grid max-w-sm grid-cols-4 gap-1" aria-label="ขั้น: {{ $row['step']['text'] }}">
                             @foreach ($steps as $i => $label)
@@ -201,6 +212,84 @@
         </section>
 
         {{-- จัดรถ / คน: as many vehicles as it takes, each with its driver and the people who go on it; the day is PM's --}}
+        {{-- รายการตู้ / ห่อตู้: every cabinet of the round, big rows to tap (gloves, phones); a tick saves at once --}}
+        <div x-show="cab.open" x-cloak role="dialog" aria-modal="true" :aria-label="cab.row ? 'รายการตู้ ' + cab.row.project + ' รอบ ' + cab.row.round : 'รายการตู้'"
+             x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+             class="fixed inset-0 z-40 flex justify-end bg-slate-900/40" @click.self="cab.open = false"
+             x-effect="document.body.classList.toggle('overflow-hidden', cab.open)" @keydown.escape.window="cab.open = false">
+            <div x-show="cab.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
+                 x-init="$watch('cab.open', (v) => v && $nextTick(() => $refs.closeCabs.focus({ preventScroll: true })))"
+                 class="relative flex h-full w-full max-w-xl flex-col bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)] will-change-transform">
+                <template x-if="cab.row">
+                    <div class="flex min-h-0 flex-1 flex-col">
+                        {{-- what round, how far, which ones --}}
+                        <div class="space-y-3 border-b border-slate-200 p-4 pr-14 sm:p-5 sm:pr-16">
+                            <div>
+                                <p class="truncate text-base font-bold text-slate-900"><span x-text="cab.row.project"></span> <span class="font-semibold text-slate-600" x-text="cab.row.name"></span></p>
+                                <p class="text-sm text-slate-600" x-text="'รอบ ' + cab.row.round + ' · ' + cab.row.when + ' · ' + cab.list.length + ' ตู้'"></p>
+                            </div>
+                            <div>
+                                <div class="flex items-baseline justify-between text-sm"><span class="font-semibold text-slate-800">ห่อแล้ว</span><span class="font-bold tabular-nums text-slate-900" x-text="cabCount('done') + ' / ' + cab.list.length"></span></div>
+                                <div class="mt-1 h-2 overflow-hidden rounded-full bg-slate-200"><div class="h-full rounded-full bg-emerald-600 transition-[width] duration-300" :style="'width:' + (cab.list.length ? cabCount('done') / cab.list.length * 100 : 0) + '%'"></div></div>
+                            </div>
+                            <p x-show="!cab.row.packable" class="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700" x-text="cab.row.billed ? 'แจ้งเปิดบิลแล้ว · ดูได้อย่างเดียว (ย้อนขั้นก่อนถึงจะแก้การห่อได้)' : 'รอบนี้ออกจากโรงงานแล้ว · ดูได้อย่างเดียว'"></p>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <div class="inline-flex rounded-lg bg-slate-100 p-1 text-sm" role="group" aria-label="แสดง">
+                                    <template x-for="f in [['todo', 'ยังไม่ห่อ'], ['done', 'ห่อแล้ว'], ['all', 'ทั้งหมด']]" :key="f[0]">
+                                        <button type="button" @click="cab.filter = f[0]" :aria-pressed="cab.filter === f[0]"
+                                                class="inline-flex h-9 items-center gap-1.5 rounded-md px-3 font-semibold" :class="cab.filter === f[0] ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'">
+                                            <span x-text="f[1]"></span><span class="tabular-nums text-xs" :class="cab.filter === f[0] ? 'text-slate-600' : 'text-slate-500'" x-text="cabCount(f[0])"></span>
+                                        </button>
+                                    </template>
+                                </div>
+                                <label x-show="cab.list.length > 8" class="min-w-[10rem] flex-1">
+                                    <span class="sr-only">ค้นหาตู้</span>
+                                    <input type="search" x-model="cab.q" placeholder="ค้นหา MO / ชื่อ / ขนาด" autocomplete="off" class="block h-11 w-full rounded-lg border-slate-300 text-sm">
+                                </label>
+                            </div>
+                        </div>
+
+                        {{-- the cabinets --}}
+                        <ul class="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain">
+                            <template x-for="c in cabShown" :key="c.id">
+                                <li>
+                                    <button type="button" @click="packCabs([c], !c.packed)" :disabled="!cab.row.packable || c.busy" :aria-pressed="c.packed"
+                                            class="flex min-h-[3.75rem] w-full items-center gap-3 px-4 py-2.5 text-left enabled:hover:bg-slate-50 disabled:cursor-default sm:px-5" :class="c.busy ? 'opacity-60' : ''">
+                                        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors" :class="c.packed ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white text-transparent'" aria-hidden="true">
+                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5 9-10"/></svg>
+                                        </span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="flex flex-wrap items-baseline gap-x-2"><span class="font-bold tabular-nums text-slate-900" x-text="c.name"></span><span x-show="c.model" class="min-w-0 break-words text-sm text-slate-700" x-text="c.model"></span></span>
+                                            <span x-show="c.type || c.size || c.qty > 1" class="block text-xs text-slate-600" x-text="[c.type, c.size ? 'ขนาด ' + c.size : '', c.qty > 1 ? c.qty + ' ตู้' : ''].filter(Boolean).join(' · ')"></span>
+                                        </span>
+                                        <span class="shrink-0 text-right text-xs font-semibold" :class="c.packed ? 'text-emerald-700' : 'text-slate-500'" x-text="c.packed ? 'ห่อแล้ว' + (c.at ? ' ' + c.at : '') : 'ยังไม่ห่อ'"></span>
+                                    </button>
+                                </li>
+                            </template>
+                            <li x-show="!cabShown.length" class="px-5 py-10 text-center text-sm text-slate-500" x-text="cab.q ? 'ไม่พบตู้ที่ค้นหา' : (cab.filter === 'todo' ? 'ห่อครบทุกตู้แล้ว' : 'ยังไม่มีตู้ที่ห่อ')"></li>
+                        </ul>
+
+                        {{-- saving / a refusal, and every one left in one go --}}
+                        <div class="space-y-2 border-t border-slate-200 p-4 sm:px-5">
+                            <p x-show="cab.error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert" x-text="cab.error"></p>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-slate-500" aria-live="polite" x-text="cab.saving ? 'กำลังบันทึก…' : (cab.row.packable ? 'กดที่ตู้เพื่อห่อ / เอาออก · บันทึกทันที' : '')"></span>
+                                <button type="button" x-show="cab.row.packable && cabCount('todo')" @click="packCabs(cab.list, true)"
+                                        class="ml-auto inline-flex h-11 items-center rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800" x-text="'ห่อครบทุกตู้ที่เหลือ (' + cabCount('todo') + ')'"></button>
+                                <button type="button" x-show="!cab.row.packable || !cabCount('todo')" @click="cab.open = false" class="ml-auto inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">ปิด</button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                <button type="button" x-ref="closeCabs" @click="cab.open = false" aria-label="ปิด"
+                        class="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+            </div>
+        </div>
+
         <x-modal name="dl-assign" maxWidth="2xl">
             <template x-if="r">
                 <form method="POST" :action="r.urls.assign" class="space-y-4 p-6">

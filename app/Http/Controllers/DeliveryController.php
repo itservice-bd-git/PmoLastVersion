@@ -92,9 +92,14 @@ class DeliveryController extends Controller
     public function pack(Request $request, ProjectDelivery $delivery)
     {
         $data = $request->validate(['cabinet_ids' => ['required', 'array', 'min:1'], 'cabinet_ids.*' => ['integer'], 'packed' => ['required', 'boolean']]);
-        $this->flow->pack($delivery, $data['cabinet_ids'], (bool) $data['packed'], $request->user());
+        $d = $this->flow->pack($delivery, $data['cabinet_ids'], (bool) $data['packed'], $request->user());
+        $message = $data['packed'] ? 'บันทึกห่อตู้แล้ว' : 'เอาการห่อออกแล้ว';
 
-        return $this->done($request, $data['packed'] ? 'บันทึกห่อตู้แล้ว' : 'เอาการห่อออกแล้ว');
+        // the cabinets panel ticks without reloading: it gets back what is packed now, and when
+        return $request->wantsJson()
+            ? response()->json(['message' => $message, 'packed' => collect($d->packed ?? [])->map(fn ($at) => Carbon::parse($at)->format('d/m H:i')),
+                'count' => $d->packedCount(), 'total' => count($d->cabinet_ids ?? [])])
+            : back()->with('success', $message);
     }
 
     public function bill(Request $request, ProjectDelivery $delivery)
@@ -147,6 +152,7 @@ class DeliveryController extends Controller
                 'model' => $c && $c->mo_no ? (string) $c->cabinet_name : '', 'type' => (string) $c?->cabinet_type, 'size' => (string) $c?->size, 'qty' => (int) ($c?->quantity ?? 1),
                 'packed' => $d->isPacked((int) $id),
                 'at' => isset(($d->packed ?? [])[$id]) ? Carbon::parse($d->packed[$id])->format('d/m H:i') : ''])->values()->all(),
+            'packable' => $d->beforeDeparture() && ! $d->billed_at,   // ห่อ / เอาการห่อออก still allowed (the panel's buttons)
             'site' => (string) $d->site, 'contact' => collect([$d->contact_name, $d->contact_phone])->filter()->implode(' '), 'note' => (string) $d->note,
             'method' => $d->method, 'transport' => $d->transport() ?? 'ยังไม่มีรถ', 'carrier' => (string) $d->carrier,
             'vehicles' => $d->vehicles->map(fn ($v) => ['vehicle_id' => $v->vehicle_id ? (string) $v->vehicle_id : '', 'label' => (string) $v->label,

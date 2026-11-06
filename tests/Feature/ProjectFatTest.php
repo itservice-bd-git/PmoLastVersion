@@ -66,7 +66,7 @@ class ProjectFatTest extends TestCase
         ProjectFat::forceCreate(['project_id' => $this->project->id, 'round' => 1, 'fat_date' => '2026-11-04', 'status' => 'failed']);
         ProjectFat::forceCreate(['project_id' => $this->project->id, 'round' => 2, 'fat_date' => '2026-11-20', 'fat_time' => '13:30', 'status' => 'scheduled']);
         $this->actingAs($this->pm)->get(route('projects.index'))->assertOk()
-            ->assertSeeInOrder(['20/11/2569', 'นัดแล้ว', '13:30 · รอบ 2', 'หลังวันกำหนดส่ง'])->assertDontSee('04/11/2569');
+            ->assertSeeInOrder(['20/11/2569', '· 13:30 น.', 'นัดแล้ว', 'รอบ 2', 'หลังวันกำหนดส่ง'])->assertDontSee('04/11/2569');
     }
 
     public function test_pm_sets_moves_and_reschedules_a_fat(): void

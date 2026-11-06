@@ -24,6 +24,9 @@
         // เลื่อน / แก้วัน of this cabinet (App\Services\ProjectDates; windows: projects.partials._dates)
         $dates = app(\App\Services\ProjectDates::class)->summary($cabinet);
         $canDates = $canPair;
+        // its วัน FAT once it is in a round (the latest one; a round of every cabinet counts)
+        $cabFat = \App\Models\ProjectFat::latestFor($cabinet->project->fats()->get(), $cabinet->id);
+        $cabFatDays = $cabFat?->daysTo();
     @endphp
 
     {{-- every checklist editor and the status summaries below draw their chips from this --}}
@@ -134,6 +137,19 @@
                         @endif
                         <dt class="text-slate-500">คาดว่าจะเสร็จ</dt>
                         <dd class="font-semibold {{ $expectedLate ? 'text-red-700' : 'text-slate-800' }}">{{ optional($cabinet->expected_completion_date)->thaiDate() ?? '-' }}@if ($expectedLate) (+{{ $cabinet->due_date->diffInDays($cabinet->expected_completion_date) }} วัน)@endif</dd>
+                        @if ($cabFat)
+                            {{-- as the project page's table: the day, then days to it or its result (words, not the colour alone) --}}
+                            <dt class="text-slate-500">วัน FAT</dt>
+                            <dd class="min-w-0 text-slate-800">
+                                <span class="font-semibold tabular-nums">{{ $cabFat->dateRange() }}</span>
+                                @if ($cabFatDays !== null)
+                                    <span class="text-xs font-semibold {{ $cabFatDays < 0 ? 'text-red-600' : ($cabFatDays <= 7 ? 'text-orange-600' : 'text-slate-500') }}">· {{ $cabFatDays < 0 ? 'เลย '.abs($cabFatDays).' วัน' : ($cabFatDays === 0 ? 'วันนี้' : $cabFatDays.' วัน') }}</span>
+                                @else
+                                    <span class="text-xs font-semibold {{ $cabFat->status === \App\Models\ProjectFat::FAILED ? 'text-red-600' : 'text-emerald-700' }}">· {{ $cabFat->statusLabel() }}</span>
+                                @endif
+                                <a href="{{ route('projects.show', $cabinet->project_id) }}#fat" class="mt-0.5 block text-xs font-semibold text-blue-700 hover:underline">{{ collect([$cabFat->round > 1 ? 'รอบที่ '.$cabFat->round : null, $cabFat->fat_time ? $cabFat->fat_time.' น.' : null, $cabFat->cabinet_ids ? count($cabFat->cabinet_ids).' ตู้' : 'ทุกตู้'])->filter()->implode(' · ') }} · ดู FAT ›</a>
+                            </dd>
+                        @endif
                         <dt class="text-slate-500">วันเริ่ม</dt><dd class="text-slate-800">{{ optional($cabinet->start_date)->thaiDate() ?? '-' }}</dd>
                         <dt class="text-slate-500">วันทำงาน</dt><dd class="text-slate-800">{{ $cabinet->total_working_days !== null ? $cabinet->total_working_days.' วัน (ไม่รวมเสาร์-อาทิตย์)' : '-' }}</dd>
                     </dl>

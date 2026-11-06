@@ -20,7 +20,7 @@
 {{-- A panel over the page when asked (หัวโครงการ › "รายละเอียด", สถานะโครงการ › FAT: the pmo-fat event, 'show'); 'edit' opens the
      form of the latest round, or of a new one when there is none / it failed. The form's window stays in the page. --}}
 <section aria-label="วัน FAT" id="fat"
-         x-data="{ due: @js($project->due_date?->format('Y-m-d')), f: null, shown: false,
+         x-data="{ due: @js($project->due_date?->format('Y-m-d')), f: null, shown: location.hash === '#fat',
                    open(v) { this.f = JSON.parse(JSON.stringify(v)); this.$dispatch('open-modal', 'project-fat'); } }"
          @pmo-fat.window="if ($event.detail === 'edit') { @if ($canFat) open(@js($form($fat && $fat->status !== 'failed' ? $fat : null))) @endif } else { shown = true }"
          @if ($errors->hasAny(['fat_date', 'fat_end_date', 'fat_time', 'status', 'cabinet_ids', 'note']) && $old)

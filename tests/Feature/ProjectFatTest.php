@@ -116,6 +116,13 @@ class ProjectFatTest extends TestCase
         $this->assertSame(['12–13/11/2569', 2, 11, null, null], array_values(\Illuminate\Support\Arr::only($rows['MO-2']['fat'], ['date', 'round', 'days', 'result', 'resultText'])));
 
         $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('<th class="hidden px-2 py-2 lg:table-cell">FAT</th>', false);
+
+        // the cabinet page: the same day, once the cabinet is in a round
+        $this->actingAs($this->pm)->get(route('cabinets.show', $this->cab2))->assertOk()->assertSeeInOrder(['วัน FAT', '12–13/11/2569', '· 11 วัน', 'รอบที่ 2 · 1 ตู้ · ดู FAT ›']);
+        $this->actingAs($this->pm)->get(route('cabinets.show', $this->cab1))->assertOk()->assertSeeInOrder(['วัน FAT', '04/11/2569', '· ไม่ผ่าน', 'ทุกตู้ · ดู FAT ›']);
+        $other = Cabinet::forceCreate(['project_id' => $this->project->id, 'mo_no' => 'MO-3', 'cabinet_name' => 'C', 'quantity' => 1, 'status' => 'not_started', 'progress' => 0]);
+        ProjectFat::where('round', 1)->update(['cabinet_ids' => json_encode([$this->cab1->id])]);
+        $this->actingAs($this->pm)->get(route('cabinets.show', $other))->assertOk()->assertDontSee('วัน FAT');
     }
 
     public function test_only_admin_and_pm_may_set_it_and_a_closed_project_refuses(): void

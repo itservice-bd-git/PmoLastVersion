@@ -62,6 +62,25 @@ class ProjectFat extends Model
         return $due && $this->status !== self::PASSED && $this->lastDay()->gt($due);
     }
 
+    /** The latest round cabinet $id is in (a round listing no cabinets is every cabinet's): the project table, the cabinet page. */
+    public static function latestFor(\Illuminate\Support\Collection $fats, int $id): ?self
+    {
+        return $fats->sortByDesc('round')->first(fn (self $f) => ! $f->cabinet_ids || in_array($id, array_map('intval', $f->cabinet_ids), true));
+    }
+
+    /** Days to it while it has no result: 0 from its first to its last day, negative once that passed; null once passed / failed. */
+    public function daysTo(?Carbon $today = null): ?int
+    {
+        if ($this->status !== self::SCHEDULED) {
+            return null;
+        }
+        $today ??= today();
+        $in = (int) $today->diffInDays($this->fat_date, false);
+        $left = (int) $today->diffInDays($this->lastDay(), false);
+
+        return $in > 0 ? $in : ($left >= 0 ? 0 : $left);
+    }
+
     /** The FAT's last day: its end date when it runs over several days, else its one day. */
     public function lastDay(): Carbon
     {

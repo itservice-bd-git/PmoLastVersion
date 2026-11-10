@@ -177,7 +177,7 @@
                                     <td class="max-w-[14rem] px-4 py-3 text-slate-600"><span class="line-clamp-2" x-text="(t.info && t.info.customer) || '-'"></span></td>
                                     <td class="max-w-[10rem] px-4 py-3 text-slate-600"><span class="line-clamp-2" x-text="(t.info && t.info.jobType) || '-'"></span></td>
                                     <td class="whitespace-nowrap px-4 py-3">
-                                        <div class="tabular-nums text-slate-700" x-text="dueFor(t) ? fmtBE(dueFor(t)) : '-'"></div>
+                                        <div x-show="!(t.pending && !dept)" class="tabular-nums text-slate-700" x-text="dueFor(t) ? fmtBE(dueFor(t)) : '-'"></div>
                                         {{-- รอฝ่ายขายแจ้งกำหนดส่ง: not late, no new date yet (as the projects list) --}}
                                         <template x-if="t.pending && !dept">
                                             <span class="mt-0.5 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-[12px] font-semibold text-indigo-800" x-text="t.pending.label"></span>
@@ -191,7 +191,7 @@
                                         <span x-show="!t.fat" class="text-slate-400">-</span>
                                         <template x-if="t.fat">
                                             <div>
-                                                <div class="tabular-nums text-slate-700"><span x-text="fmtRangeBE(t.fat.date, t.fat.end)"></span><span x-show="t.fat.time" class="text-slate-500" x-text="' · ' + t.fat.time + ' น.'"></span></div>
+                                                <div x-show="!t.fat.pending" class="tabular-nums text-slate-700"><span x-text="fmtRangeBE(t.fat.date, t.fat.end)"></span><span x-show="t.fat.time" class="text-slate-500" x-text="' · ' + t.fat.time + ' น.'"></span></div>
                                                 <span class="st-pill mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold" :style="'--c:' + fatColor(t)" x-text="fatStatus(t)"></span>
                                                 <span class="text-[12px] tabular-nums text-slate-500" x-text="[t.fat.end && t.fat.end !== t.fat.date ? (fatDays(t.fat)) + ' วัน' : '', t.fat.round > 1 ? 'รอบ ' + t.fat.round : ''].filter(Boolean).join(' · ')"></span>
                                                 <div x-show="fatLate(t)" class="mt-0.5 text-[12px] font-semibold text-amber-700">หลังวันกำหนดส่ง</div>

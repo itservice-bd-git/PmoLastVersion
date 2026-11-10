@@ -39,7 +39,7 @@
             $fatTile = match (true) {
                 ! $hdrFat => [null, $project->due_date ? 'ครบกำหนดโครงการ '.$project->due_date->thaiDate() : '', 'text-slate-600', '+ ลงวัน FAT'],
                 // รอฝ่ายขายแจ้งกำหนดส่ง (ProjectDates): no day to count to - the old one said as such
-                (bool) $hdrFat->date_pending_at => ['รอกำหนดส่ง', \App\Models\Project::PENDING_LABEL.' · วันเดิม '.$range($hdrFat->fat_date, $hdrFat->fat_end_date), 'text-indigo-700', 'แก้วัน FAT'],
+                (bool) $hdrFat->date_pending_at => ['รอกำหนดส่ง', \App\Models\Project::PENDING_LABEL, 'text-indigo-700', 'แก้วัน FAT'],
                 $hdrFat->status === 'passed' => [$range($hdrFat->fat_date, $hdrFat->fat_end_date), 'ผ่านแล้ว', 'text-emerald-700', 'แก้วัน FAT'],
                 $hdrFat->status === 'failed' => [$range($hdrFat->fat_date, $hdrFat->fat_end_date), 'ไม่ผ่าน · นัดรอบใหม่', 'text-red-700', 'นัด FAT รอบใหม่'],
                 $fatEnd < 0 => [$range($hdrFat->fat_date, $hdrFat->fat_end_date), 'เลย '.abs($fatEnd).' วัน · ยังไม่บันทึกผล', 'text-red-700', 'บันทึกผล FAT'],
@@ -52,7 +52,7 @@
             $dlTile = match (true) {
                 ! $hdrRounds->count() => [null, '', 'text-slate-600'],
                 ! $hdrNext => [$range($hdrRounds->max(fn ($d) => $d->lastDay()), null), 'ส่งครบแล้ว · '.$hdrRounds->count().' รอบ', 'text-emerald-700'],
-                (bool) $hdrNext->date_pending_at => ['รอกำหนดส่ง', \App\Models\Project::PENDING_LABEL.' · วันเดิม '.$range($hdrNext->firstDay(), $hdrNext->lastDay()), 'text-indigo-700'],
+                (bool) $hdrNext->date_pending_at => ['รอกำหนดส่ง', \App\Models\Project::PENDING_LABEL, 'text-indigo-700'],
                 $dlEnd < 0 => [$range($hdrNext->firstDay(), $hdrNext->lastDay()), 'เลย '.abs($dlEnd).' วัน · ยังไม่บันทึกว่าส่งถึง', 'text-red-700'],
                 $dlDays <= 0 => [$range($hdrNext->firstDay(), $hdrNext->lastDay()), 'วันนี้'.($dlTime ? ' · '.$dlTime : ''), 'text-blue-700'],
                 default => [$range($hdrNext->firstDay(), $hdrNext->lastDay()), 'อีก '.$dlDays.' วัน'.($dlTime ? ' · '.$dlTime : ''), 'text-slate-700'],

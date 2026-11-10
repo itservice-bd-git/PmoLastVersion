@@ -26,6 +26,8 @@ use Illuminate\Validation\ValidationException;
  * A project's dates may also be put off with no new ones yet ("pending", รอฝ่ายขายแจ้งกำหนดส่งอีกครั้ง): nothing is counted
  * or chased meanwhile and it is not late anywhere; its FAT and delivery rounds still to come wait with it. When sales has
  * the dates, the postponement that brings them gives the project AND every waiting round its new day, and counts once.
+ * A delivery round sent to the delivery department is taken back as a draft while it waits (its vehicles, people and
+ * packing cleared; one already billed stays theirs) and PM sends it again with its new day, the usual way.
  * A plain postponement can take the rounds still to come along too (events: keep / shift by the same days / a day of
  * their own / wait); each move is kept in that round's own history (EventDates).
  */
@@ -134,8 +136,8 @@ class ProjectDates
         $moves = [];
         $change = DB::transaction(function () use ($project, $actor, $reason, $note, &$moves) {
             Project::withoutEvents(fn () => $project->forceFill(['due_pending_at' => now(), 'updated_by' => $actor->id])->save());
-            // every round still to come waits too
-            $all = self::linkedEvents($project)->map(fn ($e) => ['type' => $e['type'], 'id' => $e['id'], 'action' => 'pending'])->all();
+            // every round still to come waits too - but a delivery round already billed stays with the delivery department
+            $all = self::linkedEvents($project)->reject(fn ($e) => $e['billed'])->map(fn ($e) => ['type' => $e['type'], 'id' => $e['id'], 'action' => 'pending'])->all();
             $moves = $this->moveEvents($project, $actor, $all, 0, $reason, $note, waitOnly: true);
 
             return ProjectDateChange::create([
@@ -157,14 +159,16 @@ class ProjectDates
         return $change;
     }
 
-    /** Ends a wait: the project and every waiting round keep their old days. Logged, not a round. */
+    /**
+     * Ends a wait: the project and every waiting round keep their old days. Logged, not a round. A delivery round taken back
+     * stays a draft: PM sends it again (the usual way).
+     */
     public function cancelPending(Project $project, User $actor): void
     {
         ProjectLock::assertOpen($project->id);
         if (! $project->due_pending_at) {
             return;
         }
-        $rounds = ProjectDelivery::where('project_id', $project->id)->whereNotNull('date_pending_at')->get();
         DB::transaction(function () use ($project, $actor) {
             Project::withoutEvents(fn () => $project->forceFill(self::NOT_PENDING + ['updated_by' => $actor->id])->save());
             ProjectFat::where('project_id', $project->id)->whereNotNull('date_pending_at')->update(['date_pending_at' => null]);
@@ -172,10 +176,6 @@ class ProjectDates
         });
         ActivityLog::record($project->id, $actor->id, $project, 'rescheduled', 'ยกเลิกการ'.Project::PENDING_LABEL.' · ใช้วันเดิมทั้งหมด (วันครบกำหนด '.$project->due_date?->thaiDate().')');
         PlanningBoard::touch();
-        // the delivery department: its rounds are work again, on their old days
-        foreach ($rounds->reject(fn (ProjectDelivery $d) => $d->status === ProjectDelivery::DRAFT) as $d) {
-            $this->notifications->deliveryForDepartment($d->refresh(), $actor, 'ใช้วันส่งเดิม '.$d->when().' · จัดรถได้แล้ว', todo: $d->status === ProjectDelivery::WAITING);
-        }
     }
 
     /** The dates come in: every round waiting with the project needs its day (a day of its own, or the project's days). */
@@ -204,12 +204,13 @@ class ProjectDates
         $fats = ProjectFat::where('project_id', $project->id)->where('status', ProjectFat::SCHEDULED)->orderBy('round')->get()
             ->filter(fn (ProjectFat $f) => $f->date_pending_at || $f->fat_date->gt($today))
             ->map(fn (ProjectFat $f) => ['type' => EventDates::FAT, 'id' => $f->id, 'label' => 'FAT รอบ '.$f->round, 'when' => $f->when(),
-                'state' => $f->date_pending_at ? Project::PENDING_LABEL : $f->statusLabel(), 'date' => $f->fat_date->format('Y-m-d'), 'pending' => (bool) $f->date_pending_at]);
+                'state' => $f->date_pending_at ? Project::PENDING_LABEL : $f->statusLabel(), 'date' => $f->fat_date->format('Y-m-d'), 'pending' => (bool) $f->date_pending_at, 'billed' => false]);
         $deliveries = ProjectDelivery::where('project_id', $project->id)
             ->whereIn('status', [ProjectDelivery::DRAFT, ProjectDelivery::WAITING, ProjectDelivery::REJECTED, ProjectDelivery::SCHEDULED])->orderBy('round')->get()
             ->filter(fn (ProjectDelivery $d) => $d->date_pending_at || $d->firstDay()->gt($today))
             ->map(fn (ProjectDelivery $d) => ['type' => EventDates::DELIVERY, 'id' => $d->id, 'label' => 'ส่งมอบ รอบ '.$d->round, 'when' => $d->when(),
-                'state' => $d->date_pending_at ? Project::PENDING_LABEL : ProjectDelivery::statusName($d->status), 'date' => $d->firstDay()->format('Y-m-d'), 'pending' => (bool) $d->date_pending_at]);
+                'state' => $d->date_pending_at ? Project::PENDING_LABEL : ProjectDelivery::statusName($d->status), 'date' => $d->firstDay()->format('Y-m-d'), 'pending' => (bool) $d->date_pending_at,
+                'billed' => (bool) $d->billed_at]);
 
         return $fats->concat($deliveries)->values();
     }
@@ -235,10 +236,14 @@ class ProjectDates
             $before = EventDates::snapshot($e);
             $when = $e->when();
             if ($action === 'pending') {
+                $was = $e instanceof ProjectDelivery ? $e->status : null;
                 if (! $e->date_pending_at) {
                     $e::withoutEvents(fn () => $e->forceFill(['date_pending_at' => now()])->save());
                 }
-                $moves[] = ['event' => $e, 'text' => $offered[$key]['label'].' รอด้วย', 'pending' => true, 'before' => $when];
+                if ($e instanceof ProjectDelivery && $was !== ProjectDelivery::DRAFT) {
+                    $this->takeBack($e, $actor);
+                }
+                $moves[] = ['event' => $e, 'text' => $offered[$key]['label'].' รอด้วย'.($was && $was !== ProjectDelivery::DRAFT ? ' (ดึงกลับเป็นร่าง)' : ''), 'pending' => true, 'before' => $when, 'was' => $was];
 
                 continue;
             }
@@ -264,6 +269,25 @@ class ProjectDates
         return $moves;
     }
 
+    /**
+     * A delivery round sent to the delivery department, taken back while its project waits for sales: a draft again, as
+     * before PM sent it - its vehicles and people, its packing (and the pack ticks of the cabinets' checklist) and its
+     * refusal cleared. PM sends it again with its new day, the usual way (ProjectDeliveryController).
+     */
+    private function takeBack(ProjectDelivery $d, User $actor): void
+    {
+        $cabinets = array_map('intval', $d->cabinet_ids ?? []);
+        $packed = (bool) $d->packed;
+        $d->vehicles()->delete();
+        ProjectDelivery::withoutEvents(fn () => $d->forceFill([
+            'status' => ProjectDelivery::DRAFT, 'packed' => null, 'scheduled_by' => null, 'scheduled_at' => null,
+            'rejected_by' => null, 'rejected_at' => null, 'rejected_reason' => null, 'rejected_note' => null,
+        ])->save());
+        if ($packed && $cabinets) {
+            app(DeliveryChecklist::class)->mark($cabinets, DeliveryChecklist::PACK, false, $actor);
+        }
+    }
+
     private function movesText(array $moves): string
     {
         return $moves ? ' · '.implode(' · ', array_column($moves, 'text')) : '';
@@ -274,13 +298,21 @@ class ProjectDates
     {
         foreach ($moves as $m) {
             $d = $m['event'];
-            if (! $d instanceof ProjectDelivery || $d->status === ProjectDelivery::DRAFT) {
+            if (! $d instanceof ProjectDelivery) {
+                continue;
+            }
+            if ($m['pending']) {   // taken back: no longer theirs until PM sends it again
+                if (($m['was'] ?? ProjectDelivery::DRAFT) !== ProjectDelivery::DRAFT) {
+                    $this->notifications->deliveryForDepartment($d, $actor, 'ดึงรอบนี้กลับ · '.Project::PENDING_LABEL, todo: false);
+                }
+
+                continue;
+            }
+            if ($d->status === ProjectDelivery::DRAFT) {
                 continue;
             }
             $scheduled = $d->status === ProjectDelivery::SCHEDULED;
-            $this->notifications->deliveryForDepartment($d, $actor, $m['pending']
-                ? Project::PENDING_LABEL.' · ยังไม่ต้องจัดรถ'
-                : ($scheduled ? 'PM เลื่อนวันส่ง · ตรวจรถ / คนอีกครั้ง' : 'PM เลื่อนวันส่ง'), todo: $scheduled && ! $m['pending']);
+            $this->notifications->deliveryForDepartment($d, $actor, $scheduled ? 'PM เลื่อนวันส่ง · ตรวจรถ / คนอีกครั้ง' : 'PM เลื่อนวันส่ง', todo: $scheduled);
         }
     }
 

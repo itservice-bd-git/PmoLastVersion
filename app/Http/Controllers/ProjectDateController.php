@@ -36,7 +36,7 @@ class ProjectDateController extends Controller
     {
         $request->validate(['action' => ['required', Rule::in(['cancel'])]]);
         $dates->cancelPending($project, $request->user());
-        $message = 'ยกเลิกการรอแล้ว · ใช้วันเดิม';
+        $message = 'ยกเลิกการรอแล้ว · ใช้วันเดิม · รอบส่งที่ดึงกลับยังเป็นร่าง ส่งให้แผนกจัดส่งอีกครั้งที่ "การจัดส่ง"';
 
         return $request->wantsJson() ? response()->json(['message' => $message]) : back()->with('success', $message);
     }

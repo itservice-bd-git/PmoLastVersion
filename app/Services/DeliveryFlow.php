@@ -87,7 +87,7 @@ class DeliveryFlow
             $this->assert(in_array($d->status, [ProjectDelivery::DRAFT, ProjectDelivery::WAITING, ProjectDelivery::REJECTED, ProjectDelivery::SCHEDULED], true),
                 'รอบนี้ออกจากโรงงานแล้ว แก้วัน / รถไม่ได้ · ย้อนสถานะได้ที่หน้า "งานจัดส่ง"');
             if ($d->status === ProjectDelivery::DRAFT) {
-                $d->fill($data + ($send ? ['status' => ProjectDelivery::WAITING, 'sent_by' => $actor->id] : []))->save();
+                $d->fill($data + ['date_pending_at' => null] + ($send ? ['status' => ProjectDelivery::WAITING, 'sent_by' => $actor->id] : []))->save();   // saved with its day: no longer waiting
                 $this->log($actor, $d, ($send ? "ส่งให้แผนกจัดส่ง รอบที่ {$d->round}: " : "แก้ร่างการจัดส่ง รอบที่ {$d->round}: ").$this->describe($d));
                 if ($send) {
                     $this->notices->deliveryForDepartment($d, $actor, 'งานจัดส่งใหม่ · จัดรถ / คน');

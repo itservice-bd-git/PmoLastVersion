@@ -54,7 +54,7 @@
                 <span class="flex gap-0.5" aria-hidden="true">@for ($i = 0; $i < $total; $i++)<span class="h-2 w-5 rounded-sm {{ $i < $arrived ? 'bg-teal-600' : 'bg-slate-200' }}"></span>@endfor</span>
             @endif
             @if ($next && $next->isOpen())
-                <span class="text-sm {{ $next->status === 'rejected' ? 'font-semibold text-red-700' : ($next->status === 'draft' ? 'text-slate-500' : 'text-slate-600') }}">รอบถัดไป {{ $next->when() }} · {{ $next->stateLabel() }}</span>
+                <span class="text-sm {{ $next->status === 'rejected' ? 'font-semibold text-red-700' : ($next->status === 'draft' ? 'text-slate-500' : 'text-slate-600') }}">รอบถัดไป {{ $next->date_pending_at ? \App\Models\Project::PENDING_LABEL : $next->when().' · '.$next->stateLabel() }}</span>
             @elseif ($next)
                 @php $in = (int) today()->diffInDays($next->delivery_date, false); @endphp
                 <span class="text-sm {{ $in < 0 ? 'font-semibold text-orange-700' : 'text-slate-600' }}">รอบถัดไป {{ $next->when() }} · {{ $in > 0 ? 'อีก '.$in.' วัน' : ($in === 0 ? 'วันนี้' : 'เลยวันนัด '.abs($in).' วัน · ยังไม่ได้บันทึกว่าส่งถึง') }}</span>
@@ -74,7 +74,7 @@
                     <span class="text-sm font-bold text-teal-700">รอบที่ {{ $d->round }}</span>
                     <div class="min-w-0 space-y-1.5 text-sm text-slate-700">
                         <p class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span class="font-bold tabular-nums text-slate-900">{{ $d->status === 'delivered' && $d->delivered_at ? $d->delivered_at->thaiDate().' · ถึง '.$d->delivered_at->format('H:i').' น.' : $d->when() }}</span>
+                            <span class="font-bold tabular-nums {{ $d->date_pending_at ? 'text-indigo-700' : 'text-slate-900' }}">{{ $d->date_pending_at ? 'รอกำหนดส่ง' : ($d->status === 'delivered' && $d->delivered_at ? $d->delivered_at->thaiDate().' · ถึง '.$d->delivered_at->format('H:i').' น.' : $d->when()) }}</span>
                             <span class="st-pill rounded-full px-2.5 py-0.5 text-xs font-bold" style="--c: {{ $d->stateColor() }}">{{ $d->stateLabel() }}{{ $d->status === 'departed' && $d->departed_at ? ' '.$d->departed_at->format('H:i') : '' }}</span>
                             @if ($d->status === 'delivered')<span class="text-xs text-slate-500">นัด {{ $d->when() }}</span>@endif
                             @if ($d->date_pending_at)

@@ -47,7 +47,7 @@
         ],
         'กำหนดการ' => array_values(array_filter([
             ['วันเริ่ม', $project->start_date?->thaiDate(), 'tabular-nums'],
-            ['วันครบกำหนด', $project->due_date ? $project->due_date->thaiDate().($daysLeft !== null
+            ['วันครบกำหนด', $project->due_date ? ($project->isDuePending() ? '' : $project->due_date->thaiDate()).($daysLeft !== null
                 ? ' <span class="ml-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold '.($daysLeft < 0 ? 'bg-red-100 text-red-700' : ($daysLeft <= 7 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600')).'">'
                     .($daysLeft < 0 ? 'เลยกำหนด '.abs($daysLeft).' วัน' : ($daysLeft === 0 ? 'ครบกำหนดวันนี้' : 'เหลือ '.$daysLeft.' วัน')).'</span>' : '').$pendingTools.$dateTools : null, 'tabular-nums'],
             $dates['rounds'] && $dates['firstDue'] ? ['วันครบกำหนดตอนแรก', '<span class="text-slate-500 line-through">'.$dates['firstDue']->thaiDate().'</span>', 'tabular-nums'] : null,

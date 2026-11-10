@@ -112,7 +112,7 @@
                                 <td class="min-w-[8.5rem] max-w-[11rem] px-3 py-3 text-slate-600"><span class="line-clamp-2" title="{{ $project->customer_name }}">{{ $project->customer_name }}</span></td>
                                 <td class="whitespace-nowrap px-3 py-3 text-slate-600">{{ $project->jobType?->name ?? '-' }}</td>
                                 <td class="whitespace-nowrap px-3 py-3">
-                                    <div class="tabular-nums text-slate-700">{{ optional($project->due_date)->thaiDate() ?? '-' }}</div>
+                                    @unless ($project->isDuePending())<div class="tabular-nums text-slate-700">{{ optional($project->due_date)->thaiDate() ?? '-' }}</div>@endunless
                                     @if ($project->due_date && ! $done && $project->isDuePending())
                                         {{-- รอฝ่ายขายแจ้งกำหนดส่ง (ProjectDates): put off with no new date yet - not late, nothing counted --}}
                                         <span class="mt-0.5 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-[12px] font-semibold text-indigo-800">{{ $project->duePendingLabel() }}</span>
@@ -126,7 +126,7 @@
                                 {{-- วัน FAT: the latest round (ProjectFatController), as in หน้าโครงการ's FAT card --}}
                                 <td class="whitespace-nowrap px-3 py-3">
                                     @if ($fat = $project->latestFat)
-                                        <div class="tabular-nums {{ $fat->date_pending_at ? 'text-slate-400 line-through' : 'text-slate-700' }}">{{ $fat->dateRange() }}@if ($fat->fat_time) <span class="text-slate-500">· {{ $fat->fat_time }} น.</span>@endif</div>
+                                        <div class="tabular-nums text-slate-700 {{ $fat->date_pending_at ? 'hidden' : '' }}">{{ $fat->dateRange() }}@if ($fat->fat_time) <span class="text-slate-500">· {{ $fat->fat_time }} น.</span>@endif</div>
                                         @if ($fat->date_pending_at)<span class="mt-0.5 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-[12px] font-semibold text-indigo-800">รอกำหนดส่ง</span>@endif
                                         @unless ($fat->date_pending_at)
                                         <span class="st-pill mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold" style="--c: {{ $fat->stateColor($project) }}">{{ $fat->statusLabel() }}</span>

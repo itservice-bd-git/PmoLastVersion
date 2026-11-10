@@ -312,7 +312,8 @@ export default function registerPlanningBoard() {
             // project; the due date (end) stays, only the drawn range grows
             withFat(t, c, r) {
                 if (!r) return r;
-                const f = t.fat, days = this.dels(t, c).flatMap((d) => [d.date, d.end || d.date]);   // its delivery days too (a round after the due date)
+                // its delivery days too (a round after the due date); a round waiting for sales has no day to draw
+                const f = t.fat && !t.fat.pending ? t.fat : null, days = this.dels(t, c).filter((d) => !d.pending).flatMap((d) => [d.date, d.end || d.date]);
                 if (f && !(c && f.cabinets && !f.cabinets.includes(c.id))) days.push(f.date, f.end || f.date);
                 if (!days.length) return r;
                 days.sort();
@@ -337,7 +338,7 @@ export default function registerPlanningBoard() {
             },
             shownBars(week) { return this.openWeeks[week[0].date] ? this.weekBars(week) : this.weekBars(week).filter((b) => b.lane < MAX_LANES); },
             // ---- วัน FAT (the latest round of a project, set on the project page): a "FAT" tag on its day ----
-            fatOn(date) { return this.visible().filter((t) => t.fat && t.fat.date <= date && date <= (t.fat.end || t.fat.date)); },
+            fatOn(date) { return this.visible().filter((t) => t.fat && !t.fat.pending && t.fat.date <= date && date <= (t.fat.end || t.fat.date)); },
             fatLate(t) { return t.fat.status !== 'passed' && !!t.date && (t.fat.end || t.fat.date) > t.date; },
             // the FAT / delivery states' names and colours (Settings > สถานะงาน): '--c' / '--fat' / '--del' on the element, app.css does the rest
             evState(group, key) { return (this.evs[group] || {})[key] || { name: key, color: '#64748b' }; },
@@ -359,7 +360,7 @@ export default function registerPlanningBoard() {
             // the FAT days as a striped band over a bar of the month (a cabinet's bar only when that cabinet is in the round)
             fatBand(b) {
                 const f = b.t.fat;
-                if (!f || (b.c && f.cabinets && !f.cabinets.includes(b.c.id))) return null;
+                if (!f || f.pending || (b.c && f.cabinets && !f.cabinets.includes(b.c.id))) return null;
                 const from = f.date > b.cs ? f.date : b.cs, to = (f.end || f.date) < b.ce ? (f.end || f.date) : b.ce;
                 if (from > to) return null;
                 const days = diffDays(b.ce, b.cs) + 1, a = diffDays(from, b.cs), e = diffDays(to, b.cs) + 1;
@@ -453,7 +454,7 @@ export default function registerPlanningBoard() {
             delColor(d) { return this.evState('delivery', this.delKey(d)).color; },
             delState(d) { return d.pending ? 'รอฝ่ายขายแจ้งกำหนดส่ง' : this.evState('delivery', this.delKey(d)).name + (d.status === 'departed' && d.dep ? ' ' + d.dep : ''); },
             delCls() { return 'st-pill'; },
-            delWhen(d) { return d.status === 'delivered' && d.at ? this.fmtShort(d.at.slice(0, 10)) + ' · ถึง ' + d.at.slice(11) : this.delRange(d) + (d.time ? ' · ' + d.time : ''); },
+            delWhen(d) { if (d.pending) return 'รอกำหนดส่ง'; return d.status === 'delivered' && d.at ? this.fmtShort(d.at.slice(0, 10)) + ' · ถึง ' + d.at.slice(11) : this.delRange(d) + (d.time ? ' · ' + d.time : ''); },
             // the four steps after the vehicles (ห่อ n/m → แจ้งเปิดบิล → ออกจากโรงงาน → ส่งถึง): [{ label, fill %, now, done }]
             delSteps(d) {
                 const n = d.step || 0, all = d.cabs.length || 1;
@@ -489,7 +490,7 @@ export default function registerPlanningBoard() {
             // the month: each round on this bar's days (a cabinet's bar: the rounds it is in)
             delBands(b) {
                 const days = diffDays(b.ce, b.cs) + 1;
-                return this.dels(b.t, b.c).filter((d) => d.date <= b.ce && (d.end || d.date) >= b.cs)   // a round over several days: its days on this bar
+                return this.dels(b.t, b.c).filter((d) => !d.pending && d.date <= b.ce && (d.end || d.date) >= b.cs)   // a round over several days: its days on this bar
                     .map((d) => { const a = d.date < b.cs ? b.cs : d.date, z = (d.end || d.date) > b.ce ? b.ce : (d.end || d.date); return { a, z, d }; })
                     .map(({ a, z, d }) => ({ id: d.id, left: (diffDays(a, b.cs) / days) * 100, width: ((diffDays(z, a) + 1) / days) * 100, cls: this.delBandCls(d), color: this.delColor(d), label: this.delLabel(d), title: this.delTitle(b.t, d) }));
             },
@@ -497,8 +498,8 @@ export default function registerPlanningBoard() {
             evAll(kind) {
                 const out = [];
                 this.visible().forEach((t) => {
-                    if (kind === 'fat' && t.fat) out.push({ key: 'f' + t.id, kind, from: t.fat.date, to: t.fat.end || t.fat.date, time: t.fat.time, t, f: t.fat });
-                    if (kind === 'del') this.dels(t).forEach((d) => out.push({ key: 'd' + d.id, kind, from: d.date, to: d.end || d.date, time: d.time, t, d }));
+                    if (kind === 'fat' && t.fat && !t.fat.pending) out.push({ key: 'f' + t.id, kind, from: t.fat.date, to: t.fat.end || t.fat.date, time: t.fat.time, t, f: t.fat });
+                    if (kind === 'del') this.dels(t).filter((d) => !d.pending).forEach((d) => out.push({ key: 'd' + d.id, kind, from: d.date, to: d.end || d.date, time: d.time, t, d }));
                 });
                 return out;
             },
@@ -545,13 +546,13 @@ export default function registerPlanningBoard() {
             evGo(e) { if (!this.canFat(e.t)) return this.openModal(e.t.id); return e.kind === 'fat' ? this.openFat(e.t) : this.openDelivery(e.t, e.d); },
             tlDels(r) {
                 const days = this.tlDays();
-                return this.dels(r.t, r.c).map((d) => ({ d, i: days.findIndex((x) => x.date >= d.date), z: days.findLastIndex((x) => x.date <= (d.end || d.date)) })).filter((x) => x.i >= 0 && x.z >= x.i)
+                return this.dels(r.t, r.c).filter((d) => !d.pending).map((d) => ({ d, i: days.findIndex((x) => x.date >= d.date), z: days.findLastIndex((x) => x.date <= (d.end || d.date)) })).filter((x) => x.i >= 0 && x.z >= x.i)
                     .map(({ d, i, z }) => ({ id: d.id, col: i + 1, span: z - i + 1, cls: this.delBandCls(d), color: this.delColor(d), label: this.delLabel(d), title: this.delTitle(r.t, d) }));
             },
             // the timeline: the day column of a row's FAT (a cabinet row only when that cabinet is in the round), else 0
             tlFat(r) {
                 const f = r.t.fat, days = this.tlDays();
-                if (!f || (r.c && f.cabinets && !f.cabinets.includes(r.c.id))) return null;
+                if (!f || f.pending || (r.c && f.cabinets && !f.cabinets.includes(r.c.id))) return null;
                 const a = days.findIndex((d) => d.date >= f.date), z = days.findLastIndex((d) => d.date <= (f.end || f.date));
                 return a < 0 || z < a ? null : { col: a + 1, span: z - a + 1, label: this.fatLabel(f) };
             },

@@ -50,7 +50,7 @@
         <span class="st-tag inline-flex h-6 items-center rounded px-2 text-xs font-extrabold tracking-wide" style="--c: {{ $colour($fat) }}">FAT</span>
         <h3 class="text-base font-bold text-ae-navy">วัน FAT</h3>
         @if ($fat)
-            <span class="text-base font-bold tabular-nums text-slate-900">{{ $fat->when() }}</span>
+            <span class="text-base font-bold tabular-nums {{ $fat->date_pending_at ? 'text-indigo-700' : 'text-slate-900' }}">{{ $fat->date_pending_at ? 'รอกำหนดส่ง' : $fat->when() }}</span>
             <span class="st-pill rounded-full px-2.5 py-0.5 text-xs font-bold" style="--c: {{ $colour($fat) }}">{{ $fat->round > 1 ? 'รอบที่ '.$fat->round.' · ' : '' }}{{ $fat->statusLabel() }}</span>
             @if ($fat->date_pending_at)<span class="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-bold text-indigo-800">{{ \App\Models\Project::PENDING_LABEL }}</span>@endif
             @if ($latestMoves)<span class="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-800">เลื่อน {{ $latestMoves }} ครั้ง</span>@endif

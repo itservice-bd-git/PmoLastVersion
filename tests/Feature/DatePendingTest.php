@@ -23,9 +23,10 @@ use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 /**
- * "รอฝ่ายขายแจ้งกำหนดส่งอีกครั้ง": a project's dates put off with no new ones yet - nothing counted or chased, never late,
- * its FAT and delivery rounds still to come waiting with it; when sales has the dates, the project and every waiting round
- * get theirs in one postponement, counted once.
+ * "รอฝ่ายขายแจ้งกำหนดส่งอีกครั้ง": a project's dates put off with no new ones yet - no date shown, nothing counted or
+ * chased, never late; its FAT rounds wait with it and its delivery rounds are taken back as drafts (vehicles, people and
+ * packing cleared; one already billed stays with the delivery department). When sales has the dates, the project and
+ * every waiting round get theirs in one postponement, counted once, and PM sends the drafts again the usual way.
  */
 class DatePendingTest extends TestCase
 {
@@ -58,8 +59,10 @@ class DatePendingTest extends TestCase
             'start_date' => '2026-10-01', 'due_date' => '2026-11-05', 'project_manager_id' => $this->pm->id]);
         $this->project->followers()->attach($this->follower->id);
         $this->fat = ProjectFat::forceCreate(['project_id' => $this->project->id, 'round' => 1, 'fat_date' => '2026-11-17', 'fat_end_date' => '2026-11-18', 'status' => 'scheduled']);
+        // sent to the delivery department, vehicles on it, a cabinet packed
         $this->round = ProjectDelivery::forceCreate(['project_id' => $this->project->id, 'round' => 1, 'delivery_date' => '2026-11-24', 'delivery_end_date' => '2026-11-25',
-            'status' => 'waiting', 'cabinet_ids' => [], 'method' => 'company', 'created_by' => $this->pm->id]);
+            'status' => 'scheduled', 'cabinet_ids' => [], 'packed' => ['7' => '2026-11-09 10:00'], 'method' => 'company', 'created_by' => $this->pm->id]);
+        $this->round->vehicles()->create(['label' => 'รถ 6 ล้อ', 'driver_name' => 'สมชาย', 'sequence' => 1]);
     }
 
     private function reason(): ProjectDateReason
@@ -81,20 +84,23 @@ class DatePendingTest extends TestCase
 
         $p = $this->project->fresh();
         $this->assertTrue($p->isDuePending());
-        $this->assertSame('2026-11-05', $p->due_date->format('Y-m-d'), 'the old date stays underneath');
+        $this->assertSame('2026-11-05', $p->due_date->format('Y-m-d'), 'the old date kept underneath');
         $this->assertSame(0, Project::runningLate()->count(), 'not late while waiting');
         $this->assertSame('pending', $p->risk_level);
         $this->assertSame(0, app(ProjectDates::class)->summary($p)['rounds'], 'not a round');
         $this->assertSame(ProjectDateChange::PENDING, ProjectDateChange::latest('id')->value('kind'));
-        $this->assertSame('รอฝ่ายขายแจ้งกำหนดส่งอีกครั้ง · วันครบกำหนดเดิม 05/11/2569 · สาเหตุ: ลูกค้าขอเลื่อน — ลูกค้ายังไม่ยืนยันวันเข้าพื้นที่ · FAT รอบ 1 รอด้วย · ส่งมอบ รอบ 1 รอด้วย',
+        $this->assertSame('รอฝ่ายขายแจ้งกำหนดส่งอีกครั้ง · วันครบกำหนดเดิม 05/11/2569 · สาเหตุ: ลูกค้าขอเลื่อน — ลูกค้ายังไม่ยืนยันวันเข้าพื้นที่ · FAT รอบ 1 รอด้วย · ส่งมอบ รอบ 1 รอด้วย (ดึงกลับเป็นร่าง)',
             ActivityLog::where('action', 'rescheduled')->latest('id')->value('description'));
 
-        // every round still to come waits with it; the delivery department hears it and cannot put vehicles on it
+        // FAT waits; the delivery round is taken back as a draft - no vehicles, nothing packed - and the delivery department told
         $this->assertNotNull($this->fat->fresh()->date_pending_at);
-        $this->assertNotNull($this->round->fresh()->date_pending_at);
-        $this->assertSame('รอฝ่ายขายแจ้งกำหนดส่ง · ยังไม่ต้องจัดรถ', $this->clerk->notifications()->first()->data['title']);
+        $round = $this->round->fresh();
+        $this->assertSame(['draft', null, 0], [$round->status, $round->packed, $round->vehicles()->count()]);
+        $this->assertNotNull($round->date_pending_at);
+        $this->assertSame('ดึงรอบนี้กลับ · รอฝ่ายขายแจ้งกำหนดส่ง', $this->clerk->notifications()->first()->data['title']);
+        $this->assertSame([], collect($this->actingAs($this->clerk)->get(route('deliveries.index', ['tab' => 'scheduled']))->viewData('rows'))->all(), 'no longer theirs');
         try {
-            app(DeliveryFlow::class)->assign($this->round->fresh(), ['vehicles' => []], $this->clerk);
+            app(DeliveryFlow::class)->assign($round, ['vehicles' => []], $this->clerk);
             $this->fail('a waiting round takes no vehicles');
         } catch (ValidationException $e) {
             $this->assertSame(DeliveryFlow::PENDING_TEXT, collect($e->errors())->flatten()->first());
@@ -104,23 +110,33 @@ class DatePendingTest extends TestCase
         $this->assertSame(1, $this->follower->notifications()->count());
         $this->assertFalse(PmoNotice::todoOf($this->follower->notifications()->first()->data));
         $sent = DatabaseNotification::count();
-        foreach (['2026-11-13', '2026-11-20', '2026-12-10'] as $day) {
+        foreach (['2026-11-13', '2026-11-20'] as $day) {
             $this->travelTo($day.' 08:00:00');
             app(NotificationService::class)->sendReminders();
         }
         $this->assertSame($sent, DatabaseNotification::count(), 'no reminder, ever');
 
-        // the pages say so - no count of days
-        $this->actingAs($this->pm)->get(route('projects.index'))->assertOk()->assertSee('รอฝ่ายขายแจ้งกำหนดส่ง')->assertDontSee('data-countdown', false);   // no late countdown
-        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('ได้วันแล้ว · ลงวันใหม่')->assertSee('ยกเลิกการรอ · ใช้วันเดิม')
-            ->assertSee('รอฝ่ายขายแจ้งกำหนดส่ง · วันเดิม 17–18/11/2569')->assertSee('รอฝ่ายขายแจ้งกำหนดส่ง · วันเดิม 24–25/11/2569')->assertDontSee('อีก 7 วัน');   // the head's FAT / delivery tiles
+        // no date shown while waiting: the pages say รอฝ่ายขายแจ้งกำหนดส่ง / รอกำหนดส่ง
+        $this->actingAs($this->pm)->get(route('projects.index'))->assertOk()->assertSee('รอฝ่ายขายแจ้งกำหนดส่ง')->assertDontSee('05/11/2569')->assertDontSee('data-countdown', false);
+        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()
+            ->assertSee('ได้วันแล้ว · ลงวันใหม่')->assertSee('ยกเลิกการรอ · ใช้วันเดิม')->assertSee('รอกำหนดส่ง')
+            ->assertDontSee('อีก 7 วัน')->assertDontSee('วันเดิม 17–18/11/2569');
         $task = collect(app(PlanningBoard::class)->tasks($this->pm))->firstWhere('id', 'p'.$this->project->id);
         $this->assertSame(['label' => 'รอฝ่ายขายแจ้งกำหนดส่ง'], $task['pending']);
         $this->assertTrue($task['deliveries'][0]['pending']);
         $this->assertTrue($task['fat']['pending']);
     }
 
-    public function test_the_dates_come_in_together_for_the_project_its_fat_and_its_deliveries_and_count_once(): void
+    public function test_a_round_already_billed_stays_with_the_delivery_department(): void
+    {
+        $this->round->forceFill(['billed_at' => now(), 'billed_by' => $this->clerk->id])->save();
+        $this->wait()->assertSessionHasNoErrors();
+        $round = $this->round->fresh();
+        $this->assertSame(['scheduled', null, 1], [$round->status, $round->date_pending_at, $round->vehicles()->count()]);
+        $this->assertNotNull($this->fat->fresh()->date_pending_at, 'FAT still waits');
+    }
+
+    public function test_the_dates_come_in_together_and_the_rounds_go_out_again_the_usual_way(): void
     {
         $this->wait();
         $this->travelTo('2026-11-14 10:00:00');
@@ -143,38 +159,27 @@ class DatePendingTest extends TestCase
         $this->assertSame(1, app(ProjectDates::class)->summary($p)['rounds'], 'the wait and its dates: one round');
         $this->assertSame('ลูกค้ายืนยันแล้ว · ได้วันจากฝ่ายขายแล้ว', ProjectDateChange::where('kind', 'postpone')->value('note'));
 
-        // FAT and the delivery on their own new days (their length kept), no longer waiting, each remembered
         $fat = $this->fat->fresh();
         $this->assertSame(['2026-12-01', '2026-12-02', null], [$fat->fat_date->format('Y-m-d'), $fat->fat_end_date->format('Y-m-d'), $fat->date_pending_at]);
+        // the delivery round has its day and stays a draft: PM sends it again, the usual way
         $round = $this->round->fresh();
-        $this->assertSame(['2026-12-15', '2026-12-16', null], [$round->delivery_date->format('Y-m-d'), $round->delivery_end_date->format('Y-m-d'), $round->date_pending_at]);
+        $this->assertSame(['2026-12-15', '2026-12-16', null, 'draft'], [$round->delivery_date->format('Y-m-d'), $round->delivery_end_date->format('Y-m-d'), $round->date_pending_at, $round->status]);
         $this->assertSame(2, EventDateChange::where('project_id', $p->id)->where('kind', 'postpone')->count());
-        $this->assertSame('PM เลื่อนวันส่ง', $this->clerk->notifications()->latest()->first()->data['title']);
-    }
 
-    public function test_the_delivery_department_sees_a_waiting_round_on_its_own_tab_not_as_work(): void
-    {
-        $tab = fn (string $t) => collect($this->actingAs($this->clerk)->get(route('deliveries.index', ['tab' => $t]))->assertOk()->viewData('rows'))->pluck('id')->all();
-        $this->assertSame([$this->round->id], $tab('waiting'));
-        $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertDontSee('รอกำหนดส่ง', false);   // the tab shows only when used
-
-        $this->wait();
-        $this->assertSame([], $tab('waiting'), 'not work yet');
-        $this->assertSame([$this->round->id], $tab('pending'));
-        $this->actingAs($this->clerk)->get(route('deliveries.index', ['round' => $this->round->id]))->assertOk()->assertViewHas('tab', 'pending');
-
-        // the project's people see the wait on Planning's FAT and delivery too
-        $this->actingAs($this->pm)->get(route('projects.index'))->assertSee('รอกำหนดส่ง');
+        app(DeliveryFlow::class)->revise($round, ['delivery_date' => '2026-12-15'], $this->pm, send: true);
+        $this->assertSame('waiting', $round->fresh()->status);
+        $this->assertSame([$round->id], collect($this->actingAs($this->clerk)->get(route('deliveries.index', ['tab' => 'waiting']))->viewData('rows'))->pluck('id')->all());
     }
 
     public function test_calling_the_wait_off_keeps_every_old_date(): void
     {
         $this->wait();
-        $this->actingAs($this->pm)->post(route('projects.dates.pending', $this->project), ['action' => 'cancel'])->assertSessionHas('success', 'ยกเลิกการรอแล้ว · ใช้วันเดิม');
-        $this->assertContains('ใช้วันส่งเดิม 24–25/11/2569 · จัดรถได้แล้ว', $this->clerk->notifications()->get()->pluck('data.title')->all(), 'the delivery department: work again');
+        $this->actingAs($this->pm)->post(route('projects.dates.pending', $this->project), ['action' => 'cancel'])
+            ->assertSessionHas('success', 'ยกเลิกการรอแล้ว · ใช้วันเดิม · รอบส่งที่ดึงกลับยังเป็นร่าง ส่งให้แผนกจัดส่งอีกครั้งที่ "การจัดส่ง"');
         $this->assertFalse($this->project->fresh()->isDuePending());
         $this->assertNull($this->fat->fresh()->date_pending_at);
-        $this->assertNull($this->round->fresh()->date_pending_at);
+        $round = $this->round->fresh();
+        $this->assertSame([null, 'draft', '2026-11-24'], [$round->date_pending_at, $round->status, $round->delivery_date->format('Y-m-d')], 'its old day; PM sends it again');
         $this->assertSame(1, Project::runningLate()->count(), 'late again: the old date stands');
     }
 
@@ -189,12 +194,5 @@ class DatePendingTest extends TestCase
 
         $this->wait()->assertSessionHasNoErrors();
         $this->wait()->assertSessionHasErrors(['kind' => 'โครงการนี้รอฝ่ายขายแจ้งกำหนดส่งอยู่แล้ว']);
-    }
-
-    public function test_pm_saving_a_waiting_round_with_its_day_ends_its_wait(): void
-    {
-        $this->wait();
-        app(DeliveryFlow::class)->revise($this->round->fresh(), ['delivery_date' => '2026-12-01'], $this->pm);
-        $this->assertNull($this->round->fresh()->date_pending_at);
     }
 }

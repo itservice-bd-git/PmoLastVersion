@@ -477,6 +477,11 @@
                                 <p class="text-xs font-semibold text-slate-500" x-text="r.vehicles.length ? 'แก้รถ / คน' : 'จัดรถ / คน'"></p>
                                 <p class="truncate text-base font-bold text-slate-900"><span x-text="r.project"></span> <span class="font-semibold text-slate-600" x-text="r.name"></span></p>
                                 <p class="text-sm text-slate-600" x-text="'รอบ ' + r.round + ' · ' + r.when + ' · ' + r.cabinets.length + ' ตู้' + (r.site ? ' · ' + r.site : '')"></p>
+                                {{-- the cabinets' names, as on the card (all of them here; a long list opens in place) --}}
+                                <div x-data="{ all: false, cut: false }" x-effect="r.id; all = false; $nextTick(() => cut = $refs.names.scrollHeight > $refs.names.clientHeight + 1)" class="mt-1 text-sm text-slate-800">
+                                    <p x-ref="names" :class="all ? 'max-h-40 overflow-y-auto' : 'line-clamp-3'" x-text="r.cabinets.map((c) => c.model || c.name).join(', ')"></p>
+                                    <button type="button" x-show="cut && !all" @click="all = true" class="text-sm font-semibold text-teal-700 hover:underline">ดูทั้งหมด</button>
+                                </div>
                             </div>
                             <p x-show="r.request" class="text-sm text-slate-600">PM ขอ <span class="font-semibold text-slate-900" x-text="r.request"></span></p>
                             <div x-show="r.method !== 'pickup'" class="flex flex-wrap gap-2 text-sm">
@@ -583,6 +588,11 @@
                                 <p class="text-xs font-semibold text-red-700">ไม่รับงาน</p>
                                 <p class="truncate text-base font-bold text-slate-900"><span x-text="r.project"></span> <span class="font-semibold text-slate-600" x-text="r.name"></span></p>
                                 <p class="text-sm text-slate-600" x-text="'รอบ ' + r.round + ' · ' + r.when + ' · ' + r.cabinets.length + ' ตู้' + (r.site ? ' · ' + r.site : '')"></p>
+                                {{-- the cabinets' names, as on the card (all of them here; a long list opens in place) --}}
+                                <div x-data="{ all: false, cut: false }" x-effect="r.id; all = false; $nextTick(() => cut = $refs.names.scrollHeight > $refs.names.clientHeight + 1)" class="mt-1 text-sm text-slate-800">
+                                    <p x-ref="names" :class="all ? 'max-h-40 overflow-y-auto' : 'line-clamp-3'" x-text="r.cabinets.map((c) => c.model || c.name).join(', ')"></p>
+                                    <button type="button" x-show="cut && !all" @click="all = true" class="text-sm font-semibold text-teal-700 hover:underline">ดูทั้งหมด</button>
+                                </div>
                             </div>
                             <p x-show="r.request" class="text-sm text-slate-600">PM ขอ <span class="font-semibold text-slate-900" x-text="r.request"></span></p>
                         </div>

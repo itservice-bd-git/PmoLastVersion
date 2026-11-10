@@ -436,7 +436,7 @@
                         <textarea name="remark" rows="2" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">{{ $task->remark }}</textarea>
                     </div>
                 </div>
-                <div class="mt-6 flex items-center justify-end gap-3">
+                <div class="panel-foot mt-6 flex items-center justify-end gap-3">
                     {{-- submits the separate delete form below (a form cannot sit inside another) --}}
                     @editplan
                     <button type="submit" form="delete-task-{{ $task->id }}" class="mr-auto px-3 py-2 text-sm font-medium text-red-600 hover:underline">ลบ Task นี้</button>
@@ -531,7 +531,7 @@
                             <textarea name="remark" rows="2" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">{{ $subtask->remark }}</textarea>
                         </div>
                     </div>
-                    <div class="mt-6 flex items-center justify-end gap-3">
+                    <div class="panel-foot mt-6 flex items-center justify-end gap-3">
                         @editplan
                         <button type="submit" form="delete-subtask-{{ $subtask->id }}" class="mr-auto px-3 py-2 text-sm font-medium text-red-600 hover:underline">ลบ Sub Task นี้</button>
                         @endeditplan

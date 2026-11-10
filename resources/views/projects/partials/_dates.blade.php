@@ -60,7 +60,7 @@
                         @endforeach
                     </ol>
                 </div>
-                <div class="mt-4 flex justify-end gap-2">
+                <div class="panel-foot mt-4 flex justify-end gap-2">
                     <button type="button" @click="$dispatch('close-modal', 'project-date-history')" class="h-11 rounded-lg px-4 text-sm font-semibold text-slate-700 hover:bg-slate-100">ปิด</button>
                     @if ($canDates)
                         <button type="button" @click="$dispatch('close-modal', 'project-date-history'); $dispatch('open-modal', 'project-dates')" class="h-11 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700">เลื่อน / แก้วัน</button>
@@ -148,7 +148,7 @@
                 </label>
                 <p class="text-xs text-slate-600">{{ $isCabinet ? 'วันของงานย่อยในตู้ไม่เปลี่ยนตาม — เลื่อนเองที่ Sub Task หรือ Planning' : 'วันของงานย่อยและตู้ไม่เปลี่ยนตาม — เลื่อนเองที่หน้าตู้หรือ Planning' }}</p>
 
-                <div class="flex items-center justify-end gap-2 pt-1">
+                <div class="panel-foot flex items-center justify-end gap-2">
                     <button type="button" @click="$dispatch('close-modal', 'project-dates')" class="h-11 rounded-lg px-4 text-sm font-semibold text-slate-700 hover:bg-slate-100">ยกเลิก</button>
                     <button type="submit" class="h-11 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700"
                             x-text="f.kind === 'postpone' ? 'บันทึกการเลื่อน (ครั้งที่ {{ $dates['rounds'] + 1 }})' : 'บันทึกการแก้ไข'">บันทึก</button>

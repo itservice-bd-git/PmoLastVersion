@@ -76,7 +76,7 @@
             </div>
         </template>
 
-        <div class="mt-5 flex justify-end gap-2">
+        <div class="panel-foot mt-5 flex justify-end gap-2">
             <button type="button" @click="$dispatch('close-modal', 'checklist-bulk')" class="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100">ยกเลิก</button>
             <button type="button" x-show="!preview" @click="go(true)" :disabled="!subtask || busy" class="rounded-lg border border-blue-600 px-4 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50">ดูตัวอย่าง</button>
             <button type="button" x-show="preview" @click="go(false)" :disabled="busy || !preview || !preview.changes" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50" x-text="'ยืนยัน ' + (preview ? preview.changes : '') + ' รายการ'"></button>

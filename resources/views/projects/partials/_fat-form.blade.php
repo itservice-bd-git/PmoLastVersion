@@ -54,7 +54,7 @@
             <label class="block text-sm font-semibold text-slate-800">หมายเหตุ
                 <textarea name="note" x-model="f.note" rows="2" maxlength="500" placeholder="เช่น ลูกค้า 3 คน · เหตุผลที่ไม่ผ่าน" class="mt-1 block w-full rounded-lg border-slate-300 text-sm font-normal"></textarea>
             </label>
-            <div class="flex items-center gap-2 pt-1">
+            <div class="panel-foot flex items-center gap-2">
                 <button type="button" x-show="f.deleteUrl" @click="if (confirm('ลบวัน FAT รอบนี้?')) { const d = document.getElementById('fat-delete-form'); d.action = f.deleteUrl; d.requestSubmit(); }"
                         class="h-10 rounded-lg px-3 text-sm font-semibold text-red-700 hover:bg-red-50">ลบรอบนี้</button>
                 <button type="button" @click="$dispatch('close-modal', 'project-fat')" class="ml-auto h-10 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ยกเลิก</button>

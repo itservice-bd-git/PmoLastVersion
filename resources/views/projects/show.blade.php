@@ -238,7 +238,7 @@
                     <p class="text-xs text-slate-400 mt-1">ระบบจะคัดลอก Task/Sub Task/Checklist จากเทมเพลตนี้มาเป็นของตู้นี้โดยเฉพาะ</p>
                 </div>
             </div>
-            <div class="mt-6 flex justify-end gap-3">
+            <div class="panel-foot mt-6 flex justify-end gap-3">
                 <button type="button" x-data @click="$dispatch('close-modal', 'add-cabinet')" class="px-4 py-2 text-sm font-medium text-slate-600">ยกเลิก</button>
                 <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">เพิ่มตู้</button>
             </div>
@@ -270,7 +270,7 @@
                                       class="mt-1 block w-full" required />
                     </div>
                 </div>
-                <div class="mt-6 flex justify-end gap-3">
+                <div class="panel-foot mt-6 flex justify-end gap-3">
                     <button type="button" x-data @click="$dispatch('close-modal', 'copy-cabinet-{{ $cabinet->id }}')" class="px-4 py-2 text-sm font-medium text-slate-600">ยกเลิก</button>
                     <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">คัดลอกตู้</button>
                 </div>

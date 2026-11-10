@@ -41,6 +41,14 @@ details.group[open] > summary {
     display: none !important;
 }
 
+/* The buttons of a form in an x-modal panel stay in view at the panel's foot while a long form scrolls. The form (or
+   its p-6 box) is the panel's scroll content, so the bar reaches its edges with -mx-6 / -mb-6. */
+@layer components {
+    .panel-foot {
+        @apply sticky bottom-0 z-10 -mx-6 -mb-6 border-t border-slate-200 bg-white px-6 py-3;
+    }
+}
+
 /*
  * Collapsible sidebar (desktop only, >=1024px - Tailwind's `lg` breakpoint).
  * `html.sidebar-collapsed` is the single source of truth for the collapsed
@@ -255,7 +263,8 @@ details.group[open] > summary {
     cursor: grabbing;
 }
 
-/* keep the page width the same whether or not it scrolls (pages and settings tabs do not jump sideways) */
+/* keep the page width the same whether or not it scrolls (pages and settings tabs do not jump sideways); it also keeps
+   the page still when a panel / window locks it - so no padding for the scrollbar on top (that pushed the page 15px) */
 html { scrollbar-gutter: stable; }
 
 /* the app has one (light) look: native controls (select lists, date / number fields, scrollbars) don't follow the computer's dark mode */

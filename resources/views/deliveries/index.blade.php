@@ -315,7 +315,7 @@
         <div x-show="cab.open" x-cloak role="dialog" aria-modal="true" :aria-label="cab.row ? 'รายการตู้ ' + cab.row.project + ' รอบ ' + cab.row.round : 'รายการตู้'"
              x-transition:leave="transition-[visibility] duration-150"
              class="fixed inset-0 z-40 flex justify-end"
-             x-effect="const w = innerWidth - document.documentElement.clientWidth, on = cab.open || asg.open || rej.open; document.body.classList.toggle('overflow-hidden', on); document.body.style.paddingRight = on && w > 0 ? w + 'px' : ''"
+             x-effect="document.body.classList.toggle('overflow-hidden', cab.open || asg.open || rej.open)"
              @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) cab.open = false">
             <div x-show="cab.open" @click="cab.open = false" aria-hidden="true" class="absolute inset-0 bg-slate-900/40"
                  x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
@@ -659,7 +659,7 @@
                     <label class="block text-sm font-semibold text-slate-800">ปัญหาที่หน้างาน <span class="font-normal text-slate-500">(มีแล้ว PM ได้แจ้งเตือนแบบต้องทำ)</span>
                         <input type="text" name="issue" x-model="dlv.issue" maxlength="500" placeholder="เช่น ตู้มีรอยขีดข่วนด้านซ้าย · ลูกค้ารับไว้ก่อน" class="{{ $field }}">
                     </label>
-                    <div class="flex items-center gap-2 pt-1">
+                    <div class="panel-foot flex items-center gap-2">
                         <button type="button" @click="$dispatch('close-modal', 'dl-deliver')" class="ml-auto h-10 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ปิด</button>
                         <button type="submit" :disabled="!dlv.cabinet_ids.length" class="h-10 rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50">บันทึก</button>
                     </div>

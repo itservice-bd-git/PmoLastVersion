@@ -37,14 +37,10 @@ $panelWidth = ['sm' => 'max-w-md', 'md' => 'max-w-lg', 'lg' => 'max-w-xl', 'xl' 
     }"
     x-init="$watch('show', value => {
         if (value) {
-            // the page is locked without jumping: the scrollbar's width is kept (none when a panel below already locked it)
-            const w = innerWidth - document.documentElement.clientWidth;
-            if (w > 0) { document.body.style.paddingRight = w + 'px'; $el.dataset.pad = '1'; }
             document.body.classList.add('overflow-y-hidden');
             {{ $attributes->has('focusable') ? 'setTimeout(() => firstFocusable().focus(), 100)' : ($panel ? '$nextTick(() => $refs.closePanel && $refs.closePanel.focus({ preventScroll: true }))' : '') }}
         } else {
             document.body.classList.remove('overflow-y-hidden');
-            if ($el.dataset.pad) { document.body.style.paddingRight = ''; delete $el.dataset.pad; }
         }
     })"
     x-on:open-modal.window="$event.detail == '{{ $name }}' ? show = true : null"

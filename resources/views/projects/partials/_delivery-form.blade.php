@@ -99,7 +99,7 @@
                     <input type="text" name="note" x-model="f.note" maxlength="500" placeholder="เช่น ต้องใช้เครน · เข้าได้หลัง 8 โมง" class="mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal">
                 </label>
             </fieldset>
-            <div class="flex items-center gap-2 pt-1">
+            <div class="panel-foot flex items-center gap-2">
                 <button type="button" x-show="f.deleteUrl" @click="if (confirm('ยกเลิกรอบส่งนี้?')) { const d = document.getElementById('delivery-delete-form'); d.action = f.deleteUrl; d.requestSubmit(); }"
                         class="h-10 rounded-lg px-3 text-sm font-semibold text-red-700 hover:bg-red-50">ยกเลิกรอบนี้</button>
                 <button type="button" @click="$dispatch('close-modal', 'project-delivery')" class="ml-auto h-10 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ปิด</button>

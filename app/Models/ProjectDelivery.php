@@ -89,6 +89,15 @@ class ProjectDelivery extends Model
      * @param  iterable<int>  $ids
      * @return \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, CommentAttachment>>
      */
+    /** One of those files as <x-file-chip> / the panels show it: a photo or a PDF opens over the page (kind), the rest is a link. */
+    public static function fileView(CommentAttachment $f): array
+    {
+        $ext = strtolower(pathinfo((string) $f->path, PATHINFO_EXTENSION));
+
+        return ['url' => $f->url, 'name' => (string) $f->original_name, 'size' => $f->size_for_humans,
+            'kind' => in_array($ext, ['jpg', 'jpeg', 'png'], true) ? 'image' : ($ext === 'pdf' ? 'pdf' : null)];
+    }
+
     public static function filesOf(iterable $ids): \Illuminate\Support\Collection
     {
         $ids = collect($ids)->map(fn ($id) => (int) $id)->filter()->unique()->values();

@@ -11,7 +11,6 @@
         'truck' => 'M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12',
         'people' => 'M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z',
         'phone' => 'M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z',
-        'clip' => 'm18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13',
     ];
     $icon = fn (string $k) => '<svg class="mt-[3px] h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="'.$icons[$k].'"/></svg>';
     $check = '<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>';
@@ -267,9 +266,9 @@
                             <p class="text-slate-500">ผู้รับ {{ $row['receiver'] }}{{ $row['doc_no'] ? ' · ใบส่งของ '.$row['doc_no'] : '' }}</p>
                             @if ($row['files'])
                                 {{-- what was sent with ส่งถึงแล้ว (ใบส่งของที่เซ็นรับ, รูป): opens in a new tab --}}
-                                <ul class="mt-1 space-y-0.5" aria-label="ไฟล์ที่แนบ">
+                                <ul class="mt-1.5 flex flex-wrap gap-1.5" aria-label="ไฟล์ที่แนบ">
                                     @foreach ($row['files'] as $f)
-                                        <li><a href="{{ $f['url'] }}" target="_blank" rel="noopener" class="flex min-w-0 gap-1.5 font-semibold text-teal-700 hover:underline" title="{{ $f['name'] }} ({{ $f['size'] }})">{!! $icon('clip') !!}<span class="truncate">{{ $f['name'] }}</span></a></li>
+                                        <li class="min-w-0 max-w-full"><x-file-chip :file="$f" /></li>
                                     @endforeach
                                 </ul>
                             @endif
@@ -738,9 +737,13 @@
                     <div>
                         <p class="text-sm font-semibold text-slate-800" id="dl-files-label">แนบไฟล์ <span class="font-normal text-slate-500">(ใบส่งของที่เซ็นรับ รูปหน้างาน · ไม่บังคับ)</span></p>
                         <template x-if="r.files && r.files.length">
-                            <ul class="mt-1.5 space-y-1 text-sm" aria-label="ไฟล์ที่แนบไว้แล้ว">
+                            {{-- as <x-file-chip>: a photo / PDF opens over the panel (<x-file-viewer> below) --}}
+                            <ul class="mt-1.5 flex flex-wrap gap-1.5" aria-label="ไฟล์ที่แนบไว้แล้ว">
                                 <template x-for="(f, i) in r.files" :key="i">
-                                    <li><a :href="f.url" target="_blank" rel="noopener" class="flex min-w-0 gap-1.5 text-teal-700 hover:underline" :title="f.name + ' (' + f.size + ')'">{!! $icon('clip') !!}<span class="truncate font-semibold" x-text="f.name"></span><span class="shrink-0 text-slate-500" x-text="f.size"></span></a></li>
+                                    <li class="min-w-0 max-w-full"><a :href="f.url" target="_blank" rel="noopener" :title="f.name" @click="if (f.kind) { $event.preventDefault(); $dispatch('pmo-file', { url: f.url, name: f.name, kind: f.kind }) }"
+                                           class="inline-flex max-w-full items-center gap-1 overflow-hidden rounded-lg border border-slate-200 bg-white text-[12px] text-slate-600 hover:border-blue-400">
+                                        <img x-show="f.kind === 'image'" :src="f.kind === 'image' ? f.url : ''" alt="" loading="lazy" class="h-14 w-14 shrink-0 object-cover">
+                                        <span class="truncate px-2 py-1" x-text="'📎 ' + f.name + (f.size ? ' · ' + f.size : '')"></span></a></li>
                                 </template>
                             </ul>
                         </template>
@@ -767,4 +770,5 @@
             </template>
         </x-modal>
     </div>
+    <x-file-viewer />
 </x-app-layout>

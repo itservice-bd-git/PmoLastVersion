@@ -1,6 +1,10 @@
 <x-guest-layout>
     <!-- Session Status -->
     <x-auth-session-status class="mb-4" :status="session('status')" />
+    {{-- shown by resources/js/session-expiry.js when a page was sent here because its login ran out --}}
+    @unless (session('status'))
+        <p id="session-expired-note" hidden class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">หมดเวลาเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่ แล้วระบบจะพากลับไปหน้าเดิม</p>
+    @endunless
 
     <form method="POST" action="{{ route('login') }}">
         @csrf

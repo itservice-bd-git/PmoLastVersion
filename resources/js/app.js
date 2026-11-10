@@ -5,6 +5,7 @@ import checklistEditor from './checklist-editor';
 import registerPlanningBoard from './planning-board';
 import { registerWorkDays } from './work-days';
 import pmoProjectDates from './project-dates';
+import watchSession from './session-expiry';
 
 window.Alpine = Alpine;
 window.Sortable = Sortable;
@@ -27,6 +28,7 @@ Alpine.store('checklistTags', {
 });
 registerPlanningBoard();                           // /planning/board's x-data="planningBoard(...)" 
 registerWorkDays();                                // "จำนวนวัน" beside a Sub Task's start / due dates (work-days.js)
+watchSession();                                    // logged out (left open too long): back to log in, then to this page - before Alpine starts, so its first calls are watched too
 Alpine.start();
 
 /**

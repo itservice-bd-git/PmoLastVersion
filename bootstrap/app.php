@@ -28,5 +28,23 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // A form sent after the login ran out (or from a page left open too long) - not the bare "419 Page Expired":
+        // logged out → log in again, then back to the page the form was on; still logged in → back to the form with
+        // what was typed, to send again. A call from a page's script keeps its 419 (resources/js/session-expiry.js).
+        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\HttpException $e, \Illuminate\Http\Request $request) {
+            // the framework has already made the TokenMismatchException a 419 by now
+            if (! $e->getPrevious() instanceof \Illuminate\Session\TokenMismatchException || $request->expectsJson()) {
+                return null;
+            }
+            if ($request->user()) {
+                return back()->withInput($request->except('password', 'password_confirmation', '_token'))
+                    ->with('error', 'หน้านี้เปิดค้างไว้นานเกินไป ข้อมูลยังไม่ถูกบันทึก ลองกดบันทึกอีกครั้ง');
+            }
+            $from = url()->previous();
+            if (rtrim(parse_url($from, PHP_URL_PATH) ?? '', '/') !== rtrim(parse_url(route('login'), PHP_URL_PATH) ?? '', '/')) {
+                redirect()->setIntendedUrl($from);
+            }
+
+            return redirect()->route('login')->with('status', 'หมดเวลาเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่ แล้วระบบจะพากลับไปหน้าเดิม');
+        });
     })->create();

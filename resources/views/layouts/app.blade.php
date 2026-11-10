@@ -4,6 +4,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
+        <meta name="login-url" content="{{ route('login') }}">{{-- resources/js/session-expiry.js: a call sent here = logged out --}}
 
         <title>{{ config('app.name', 'Avatar Electric PMO') }}</title>
         <link rel="icon" type="image/png" href="{{ asset('images/logo.png') }}">

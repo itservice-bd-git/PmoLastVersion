@@ -21,6 +21,11 @@
      'new' opens the window of a new round. The window stays in the page. --}}
 <section id="delivery" class="scroll-mt-20" aria-label="การจัดส่ง"
          x-data="{ f: null, cabs: @js($win['cabinets']), vehicles: @js($win['vehicles']), shown: location.hash === '#delivery',
+                   // a round's photos, one at a time over the panel (the ส่งถึงแล้ว files): { list, i, from }
+                   view: null,
+                   see(list, i, from) { this.view = { list, i, from }; this.$nextTick(() => this.$refs.viewClose?.focus({ preventScroll: true })); },
+                   unsee() { const from = this.view?.from; this.view = null; from?.focus({ preventScroll: true }); },
+                   step(n) { if (this.view) this.view.i = (this.view.i + n + this.view.list.length) % this.view.list.length; },
                    open(v) { this.f = JSON.parse(JSON.stringify(v)); this.$dispatch('open-modal', 'project-delivery'); } }"
          @pmo-delivery.window="if ($event.detail === 'new') { @if ($canDeliver) open(@js($form(null))) @endif } else { shown = true }"
          @if ($errors->hasAny($errorKeys) && $old)
@@ -33,7 +38,7 @@
        x-transition:leave="transition-[visibility] duration-150"
        class="fixed inset-0 z-40 flex justify-end"
        x-effect="document.body.classList.toggle('overflow-hidden', shown)"
-       @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) shown = false">
+       @keydown.escape.window="if (view) unsee(); else if (! document.body.classList.contains('overflow-y-hidden')) shown = false">
     <div x-show="shown" @click="shown = false" aria-hidden="true" class="absolute inset-0 bg-slate-900/40"
          x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
          x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"></div>
@@ -153,11 +158,29 @@
                                 <dd>{{ collect([$d->receiver, $d->doc_no ? 'ใบส่งของ '.$d->doc_no : null])->filter()->implode(' · ') }}</dd>
                                 @if ($roundFiles->has($d->id))
                                     <dt class="text-slate-500">ไฟล์</dt>
-                                    <dd><ul class="space-y-0.5">
-                                        @foreach ($roundFiles[$d->id] as $f)
-                                            <li><a href="{{ $f->url }}" target="_blank" rel="noopener" class="flex min-w-0 items-baseline gap-1.5 font-semibold text-teal-700 hover:underline" title="{{ $f->original_name }}"><span class="truncate">{{ $f->original_name }}</span><span class="shrink-0 text-xs font-normal text-slate-500">{{ $f->size_for_humans }}</span></a></li>
-                                        @endforeach
-                                    </ul></dd>
+                                    @php
+                                        // photos as small pictures (they open over the panel); PDF and the rest by name, in a new tab
+                                        [$photos, $docs] = $roundFiles[$d->id]->partition(fn ($f) => in_array(strtolower(pathinfo($f->path, PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png'], true));
+                                        $photoList = $photos->values()->map(fn ($f) => ['url' => $f->url, 'name' => $f->original_name, 'size' => $f->size_for_humans])->all();
+                                    @endphp
+                                    <dd class="space-y-1.5">
+                                        @if ($photos->isNotEmpty())
+                                            <ul class="flex flex-wrap gap-1.5 pt-0.5" aria-label="รูปตอนส่งถึง {{ $photos->count() }} รูป">
+                                                @foreach ($photoList as $i => $p)
+                                                    <li><button type="button" @click="see(@js($photoList), {{ $i }}, $el)" title="{{ $p['name'] }}" aria-label="ดูรูป {{ $p['name'] }}"
+                                                                class="block h-16 w-16 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 hover:border-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-1 sm:h-20 sm:w-20">
+                                                        <img src="{{ $p['url'] }}" alt="" loading="lazy" decoding="async" class="h-full w-full object-cover"></button></li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
+                                        @if ($docs->isNotEmpty())
+                                            <ul class="space-y-0.5">
+                                                @foreach ($docs as $f)
+                                                    <li><a href="{{ $f->url }}" target="_blank" rel="noopener" class="flex min-w-0 items-baseline gap-1.5 font-semibold text-teal-700 hover:underline" title="{{ $f->original_name }}"><span class="truncate">{{ $f->original_name }}</span><span class="shrink-0 text-xs font-normal text-slate-500">{{ $f->size_for_humans }}</span></a></li>
+                                                @endforeach
+                                            </ul>
+                                        @endif
+                                    </dd>
                                 @endif
                             @endif
                             @if ($d->issue)
@@ -198,6 +221,29 @@
 
       </div>
     </div>
+    {{-- one photo over the panel: ‹ › (or ← →) between the round's photos, Esc / the backdrop / ปิด closes it and only it --}}
+    <template x-if="view">
+      <div class="fixed inset-0 z-50 flex flex-col bg-slate-950/90" role="dialog" aria-modal="true" :aria-label="'รูป ' + view.list[view.i].name"
+           @keydown.arrow-left.window="step(-1)" @keydown.arrow-right.window="step(1)">
+        <div class="flex items-center gap-3 px-4 py-3 text-sm text-white">
+          <p class="min-w-0 flex-1"><span class="block truncate font-semibold" x-text="view.list[view.i].name"></span>
+             <span class="text-xs text-slate-300" x-text="(view.list.length > 1 ? (view.i + 1) + ' / ' + view.list.length + ' · ' : '') + view.list[view.i].size"></span></p>
+          <a :href="view.list[view.i].url" target="_blank" rel="noopener" class="inline-flex h-10 shrink-0 items-center rounded-lg px-3 font-semibold text-white hover:bg-white/10">เปิดไฟล์เต็ม</a>
+          <button type="button" x-ref="viewClose" @click="unsee()" class="inline-flex h-10 shrink-0 items-center rounded-lg bg-white px-4 font-semibold text-slate-900 hover:bg-slate-200">ปิด</button>
+        </div>
+        <div class="relative min-h-0 flex-1" @click.self="unsee()">
+          <img :src="view.list[view.i].url" :alt="view.list[view.i].name" class="absolute inset-0 m-auto max-h-full max-w-full object-contain px-2 pb-4 sm:px-16" @click.stop>
+          <template x-if="view.list.length > 1">
+            <div>
+              <button type="button" @click="step(-1)" aria-label="รูปก่อนหน้า" class="absolute left-2 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+              <button type="button" @click="step(1)" aria-label="รูปถัดไป" class="absolute right-2 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25">
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
   </div>
 
     @if ($canDeliver)

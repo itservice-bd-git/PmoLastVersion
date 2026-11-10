@@ -354,9 +354,12 @@ class DeliveryFlow
                     $this->uploader->store($note, $file, $actor->id);
                 }
             }
-            if (! $again || $d->issue) {
-                $this->notices->deliveryForManager($d, $actor, $d->issue ? 'ส่งถึงแล้ว · มีปัญหาที่หน้างาน' : ProjectDelivery::statusName(ProjectDelivery::DELIVERED),
-                    $d->issue ? 'ปัญหา: '.$d->issue : ($left ? 'ไม่ได้ส่ง '.$this->names($left)->implode(', ') : null), todo: (bool) $d->issue);
+            // PM hears it arrived (again: only a problem, or files added); the files are named so PM knows to look (the notice opens the panel)
+            if (! $again || $d->issue || $files) {
+                $attached = $files ? ($again ? 'แนบไฟล์เพิ่ม ' : 'แนบไฟล์ ').count($files).' ไฟล์' : null;
+                $title = $d->issue ? 'ส่งถึงแล้ว · มีปัญหาที่หน้างาน' : ProjectDelivery::statusName(ProjectDelivery::DELIVERED).($attached ? ' · '.$attached : '');
+                $extra = collect([$d->issue ? 'ปัญหา: '.$d->issue : null, $left ? 'ไม่ได้ส่ง '.$this->names($left)->implode(', ') : null, $d->issue ? $attached : null])->filter()->implode(' · ');
+                $this->notices->deliveryForManager($d, $actor, $title, $extra ?: null, todo: (bool) $d->issue);
             }
 
             return $d;

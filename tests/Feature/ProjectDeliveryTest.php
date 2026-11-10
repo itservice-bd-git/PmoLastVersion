@@ -436,11 +436,20 @@ class ProjectDeliveryTest extends TestCase
             $this->assertSame([Project::class, $this->project->id, $this->clerk->id, ['delivery_id' => $d->id], 'ไฟล์การจัดส่งรอบที่ 1 · ส่งถึงแล้ว 20/11/2569 · ผู้รับ คุณสมชาย'],
                 [$note->loggable_type, $note->loggable_id, $note->user_id, $note->changes, $note->description], 'a comment of the project, so its Comment tab has it');
             $this->assertStringEndsWith('· แนบไฟล์ 2 ไฟล์', $this->lastLog());
+            $said = fn () => $this->pm->fresh()->notifications()->get()->map(fn ($n) => $n->data['title'].' → '.$n->data['url'])->all();
+            $this->assertContains('ส่งถึงแล้ว · แนบไฟล์ 2 ไฟล์ → '.route('projects.show', $this->project).'#delivery', $said(), 'PM is told there are files; the notice opens the panel');
+            $this->pm->unreadNotifications->markAsRead();
 
             // แก้การส่งถึง adds; what was there stays
             $arrive([\Illuminate\Http\UploadedFile::fake()->image('เพิ่ม.png')])->assertSessionHasNoErrors();
             $this->assertSame(['DO-0412 เซ็นรับ.pdf', 'หน้างาน.jpg', 'เพิ่ม.png'], ProjectDelivery::filesOf([$d->id])->get($d->id)->pluck('original_name')->all());
             $this->assertTrue(ProjectDelivery::filesOf([$d->id + 1])->isEmpty());
+            $this->assertContains('ส่งถึงแล้ว · แนบไฟล์เพิ่ม 1 ไฟล์ → '.route('projects.show', $this->project).'#delivery', $said(), 'files added later are told too');
+
+            // the project page: the photos as pictures that open over the panel, the PDF by name
+            $page = $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('aria-label="รูปตอนส่งถึง 2 รูป"', false);
+            $this->assertSame(2, substr_count($page->getContent(), 'aria-label="ดูรูป '));
+            $this->assertMatchesRegularExpression('/<a href="[^"]+\.pdf" target="_blank"[^>]*title="DO-0412 เซ็นรับ.pdf"/u', $page->getContent());
 
             foreach ([route('deliveries.index', ['tab' => 'delivered']), route('projects.show', $this->project), route('projects.show', ['project' => $this->project, 'tab' => 'comment'])] as $url) {
                 $this->actingAs($this->pm)->get($url)->assertOk()->assertSee('DO-0412 เซ็นรับ.pdf')->assertSee('เพิ่ม.png');

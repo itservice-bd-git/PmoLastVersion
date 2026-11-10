@@ -386,6 +386,7 @@ class DeliveryFlow
                     $this->checklist->mark(array_map('intval', $d->cabinet_ids ?? []), $step, false, $actor);
                 }
             }
+            $d->vehicles()->delete();   // not left to the foreign key: prod's MyISAM tables have none
             $d->delete();
         });
     }

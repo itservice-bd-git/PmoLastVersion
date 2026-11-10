@@ -21,14 +21,17 @@ class ProjectController extends Controller
     {
         $query = $this->filteredProjects($request);
 
-        // Nearest due date first (overdue projects surface at the top). Projects
-        // with no due date come after those with one, and finished/cancelled
-        // projects sink to the bottom since their due date no longer matters.
+        // The same order as Planning's dashboard table (planning-board.js dash().rows): late first - not done and its
+        // due date passed (done = Completed / Cancelled, or a Planning status marked done) - then the nearest due date,
+        // then the order Planning loads them in (id). Not on that table, so here at the bottom: projects with no due
+        // date, then Completed / Cancelled ones.
+        $locked = [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED];
         $projects = $query
-            ->orderByRaw('CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END', [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED])
+            ->orderByRaw('CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END', $locked)
+            ->orderByRaw('CASE WHEN due_date < ? AND NOT EXISTS (SELECT 1 FROM board_statuses bs WHERE bs.id = projects.board_status_id AND bs.is_done = ?) THEN 0 ELSE 1 END', [today()->toDateString(), true])
             ->orderByRaw('CASE WHEN due_date IS NULL THEN 1 ELSE 0 END')
             ->orderBy('due_date')
-            ->latest()
+            ->orderBy('id')
             ->with('latestFat', 'jobType:id,name')   // วัน FAT column (the latest round), ประเภทงาน column
             ->paginate(15)
             ->withQueryString();

@@ -20,6 +20,24 @@ class CommentAttachmentUploader
 
     public const ALLOWED_MIMES = 'pdf,doc,docx,xls,xlsx,jpg,jpeg,png,dwg,dxf';
 
+    /**
+     * The folder is there and the web server may write to it (with its .htaccess). Asked before anything is saved where a
+     * failed upload would leave half a save behind (activity_logs is MyISAM: no rollback), e.g. DeliveryFlow::deliver().
+     */
+    public function ready(): bool
+    {
+        $destination = public_path(self::UPLOAD_DIR);
+        if (! is_dir($destination)) {
+            @mkdir($destination, 0755, true);
+        }
+        $htaccess = $destination.'/.htaccess';
+        if (is_dir($destination) && ! file_exists($htaccess)) {
+            @file_put_contents($htaccess, "php_flag engine off\nRemoveHandler .php .phtml .php3 .php4 .php5 .php7 .phar\n");
+        }
+
+        return is_dir($destination) && is_writable($destination) && file_exists($htaccess);
+    }
+
     public function store(ActivityLog $log, UploadedFile $file, ?int $userId): CommentAttachment
     {
         $destination = public_path(self::UPLOAD_DIR);

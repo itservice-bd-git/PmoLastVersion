@@ -452,6 +452,21 @@ class ProjectDeliveryTest extends TestCase
         }
     }
 
+    public function test_files_the_server_cannot_keep_save_nothing(): void
+    {
+        $d = $this->send();
+        $this->pack($d, [$this->cab1, $this->cab2]);
+        $this->assign($d);
+        $this->actingAs($this->clerk)->post(route('deliveries.bill', $d));
+        $this->actingAs($this->clerk)->post(route('deliveries.depart', $d))->assertSessionHasNoErrors();
+        $this->mock(\App\Services\CommentAttachmentUploader::class, fn ($m) => $m->shouldReceive('ready')->andReturn(false)->shouldNotReceive('store'));
+        $logs = ActivityLog::count();
+
+        $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-20', 'receiver' => 'คุณสมชาย', 'cabinet_ids' => [$this->cab1->id],
+            'files' => [\Illuminate\Http\UploadedFile::fake()->image('a.jpg')]])->assertSessionHasErrors('files');
+        $this->assertSame(['departed', $logs], [$d->fresh()->status, ActivityLog::count()], 'no history line, no empty comment: the log cannot roll back on MyISAM');
+    }
+
     public function test_a_round_is_late_after_its_day(): void
     {
         $d = $this->send(['delivery_date' => '2026-11-16', 'delivery_time' => '']);

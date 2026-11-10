@@ -316,6 +316,9 @@ class DeliveryFlow
     public function deliver(ProjectDelivery $delivery, array $data, User $actor, array $files = []): ProjectDelivery
     {
         $this->assert(self::canDeliver($actor), 'บันทึกได้เฉพาะแผนกจัดส่ง');
+        if ($files && ! $this->uploader->ready()) {   // before anything is written: the log is MyISAM, a failed upload would leave half a save
+            throw ValidationException::withMessages(['files' => 'เซิร์ฟเวอร์เก็บไฟล์ไม่ได้ (โฟลเดอร์ uploads/comment-attachments เขียนไม่ได้) · ยังไม่ได้บันทึก · แจ้งผู้ดูแลระบบ หรือบันทึกโดยไม่แนบไฟล์']);
+        }
 
         return DB::transaction(function () use ($delivery, $data, $actor, $files) {
             $d = $this->lock($delivery);

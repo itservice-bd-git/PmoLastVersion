@@ -53,7 +53,11 @@
             </div>
         </details>
         <label class="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none" title="แต่ละตู้เป็นแถบของตัวเองตามวันของตู้นั้น"><input type="checkbox" :checked="byCabinet" @change="setByCabinet($event.target.checked)" class="rounded border-slate-300 text-blue-600"> แยกรายตู้</label>
-        <label class="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none"><input type="checkbox" x-model="hideDone" class="rounded border-slate-300 text-blue-600"> ซ่อนงานที่เสร็จแล้ว</label>
+        {{-- finished work: left out of the calendars unless asked (not the dashboard, which counts it) --}}
+        <button type="button" x-show="mode !== 'dashboard'" @click="setShowDone(hideDone)" :aria-pressed="!hideDone"
+                :class="hideDone ? 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50' : 'bg-emerald-600 border-emerald-600 text-white'"
+                class="h-8 inline-flex items-center gap-1 rounded-lg border px-2.5 text-xs font-medium"
+                x-text="hideDone ? 'แสดงงานที่เสร็จแล้ว' + (doneHidden() ? ' (' + doneHidden() + ')' : '') : 'ซ่อนงานที่เสร็จแล้ว'"></button>
         <button type="button" @click="mineOnly = !mineOnly" :aria-pressed="mineOnly" :class="mineOnly ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'" class="h-8 inline-flex items-center gap-1 rounded-lg border px-2.5 text-xs font-medium" title="งานของแผนกฉันที่ยังไม่เสร็จ โครงการที่ฉันเป็น PM หรือมีคนแท็ก / แจ้งเตือนถึงฉัน">👤 ของฉัน</button>
         <button type="button" @click="starOnly = !starOnly" :aria-pressed="starOnly" :class="starOnly ? 'bg-amber-500 border-amber-500 text-white' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'" class="h-8 inline-flex items-center gap-1 rounded-lg border px-3 text-xs font-medium" title="เฉพาะโครงการที่ติดดาว (เก็บไว้ในเบราว์เซอร์นี้)">★ ดาว</button>
 

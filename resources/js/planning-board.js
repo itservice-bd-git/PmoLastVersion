@@ -99,7 +99,8 @@ export default function registerPlanningBoard() {
             search: '',
             priority: 'all',                  // 'all' | 'urgent' | 'high'
             dept: config.myDept || '',        // '' = every department; a department user always starts on their own
-            hideDone: false,
+            // the calendars (month / timeline / FAT / จัดส่ง) leave finished work out unless asked; remembered on this computer
+            hideDone: (() => { try { return localStorage.getItem('planning.showDone') !== '1'; } catch (e) { return true; } })(),
             moreOpen: false,
             modalId: null,                    // open project modal
             stageDept: null,                  // open department popover (inside the modal)
@@ -242,10 +243,11 @@ export default function registerPlanningBoard() {
             cabProgress(c, deptId) { const it = c.checklist.filter((i) => !deptId || i.deptId === deptId); const done = it.filter((i) => i.done).length; return { done, total: it.length, pct: it.length ? Math.round(done / it.length * 100) : 0 }; },
 
             // =================================================== filtering
-            visible() {
+            // withDone: finished work counted too (the dashboard always; the "แสดงงานที่เสร็จแล้ว (n)" count)
+            visible(withDone = this.mode === 'dashboard') {
                 const q = this.search.trim().toLowerCase();
                 return this.tasks.filter((t) => {
-                    if (this.hideDone && this.doneFor(t)) return false;
+                    if (!withDone && this.hideDone && this.doneFor(t)) return false;
                     if (this.priority !== 'all' && t.priority !== this.priority) return false;
                     if (this.starOnly && !this.isStarred(t)) return false;
                     if (this.mineOnly && !this.mine.includes(Number(t.id.slice(1)))) return false;
@@ -300,7 +302,8 @@ export default function registerPlanningBoard() {
                 const out = [];
                 for (const t of this.visible()) {
                     if (this.byCabinet && t.subtasks.length) {
-                        t.subtasks.forEach((c) => { const r = this.withFat(t, c, this.rangeOf(t, c)); if (r) out.push({ t, c, key: t.id + c.id, ...r }); });
+                        // "แยกรายตู้": a finished cabinet is left out too while finished work is hidden
+                        t.subtasks.filter((c) => !(this.hideDone && this.cabDone(c))).forEach((c) => { const r = this.withFat(t, c, this.rangeOf(t, c)); if (r) out.push({ t, c, key: t.id + c.id, ...r }); });
                     } else {
                         const r = this.withFat(t, null, this.rangeOf(t, null));
                         if (r) out.push({ t, c: null, key: t.id, ...r });
@@ -319,6 +322,9 @@ export default function registerPlanningBoard() {
                 days.sort();
                 return { ...r, from: days[0] < r.from ? days[0] : r.from, to: days[days.length - 1] > r.to ? days[days.length - 1] : r.to };
             },
+            // "แสดงงานที่เสร็จแล้ว": how many the calendars leave out now, and the switch (remembered)
+            doneHidden() { return this.hideDone ? this.visible(true).filter((t) => this.doneFor(t)).length : 0; },
+            setShowDone(on) { this.hideDone = !on; try { localStorage.setItem('planning.showDone', on ? '1' : ''); } catch (e) { /* not remembered */ } },
             setByCabinet(on) { this.byCabinet = on; try { localStorage.setItem('planning.byCabinet', on ? '1' : ''); } catch (e) { /* not remembered */ } },
             // how much is going on that day (unfinished entries running through it) and whether any of it is late - the badge on the day
             weekBars(week) {

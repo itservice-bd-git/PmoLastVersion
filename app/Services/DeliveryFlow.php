@@ -28,7 +28,7 @@ use Illuminate\Validation\ValidationException;
  */
 class DeliveryFlow
 {
-    public function __construct(private NotificationService $notices, private DeliveryChecklist $checklist) {}
+    public function __construct(private NotificationService $notices, private DeliveryChecklist $checklist, private CommentAttachmentUploader $uploader) {}
 
     public static function canBook(User $user): bool
     {
@@ -307,11 +307,17 @@ class DeliveryFlow
      *
      * @param  array{delivered_date: string, delivered_time?: ?string, receiver: string, doc_no?: ?string, issue?: ?string, cabinet_ids: list<int>}  $data
      */
-    public function deliver(ProjectDelivery $delivery, array $data, User $actor): ProjectDelivery
+    /**
+     * ส่งถึงแล้ว (again = แก้การส่งถึง). $files (ใบส่งของที่เซ็นรับ, รูปหน้างาน …) go up as a project comment carrying the
+     * round's id (ProjectDelivery::filesOf): seen in the Comment tab and on the round; each save adds, none is replaced.
+     *
+     * @param  array<int, \Illuminate\Http\UploadedFile>  $files
+     */
+    public function deliver(ProjectDelivery $delivery, array $data, User $actor, array $files = []): ProjectDelivery
     {
         $this->assert(self::canDeliver($actor), 'บันทึกได้เฉพาะแผนกจัดส่ง');
 
-        return DB::transaction(function () use ($delivery, $data, $actor) {
+        return DB::transaction(function () use ($delivery, $data, $actor, $files) {
             $d = $this->lock($delivery);
             $this->assert(! $d->isOpen(), 'รอบนี้ยังไม่ได้จัดรถ');
             // straight from จัดรถแล้ว (it left unrecorded) still needs แจ้งเปิดบิล; one already out (rounds from before the step too) does not
@@ -336,8 +342,15 @@ class DeliveryFlow
 
             $line = ($again ? 'แก้การส่งถึง' : ProjectDelivery::statusName(ProjectDelivery::DELIVERED)).' '.$at->thaiDate().($at->format('H:i') !== '00:00' ? ' '.$at->format('H:i').' น.' : '')
                 .' · '.$this->describe($d).' · ผู้รับ '.$d->receiver.($d->doc_no ? ' · ใบส่งของ '.$d->doc_no : '').($d->issue ? ' · ปัญหา: '.$d->issue : '')
-                .($left ? ' · ไม่ได้ส่ง '.$this->names($left)->implode(', ') : '');
+                .($left ? ' · ไม่ได้ส่ง '.$this->names($left)->implode(', ') : '').($files ? ' · แนบไฟล์ '.count($files).' ไฟล์' : '');
             $this->log($actor, $d, "การจัดส่งรอบที่ {$d->round}: {$line}");
+            if ($files) {
+                $note = ActivityLog::record($d->project_id, $actor->id, $d->project, 'note',
+                    "ไฟล์การจัดส่งรอบที่ {$d->round} · ".ProjectDelivery::statusName(ProjectDelivery::DELIVERED).' '.$at->thaiDate().' · ผู้รับ '.$d->receiver, ['delivery_id' => $d->id]);
+                foreach ($files as $file) {
+                    $this->uploader->store($note, $file, $actor->id);
+                }
+            }
             if (! $again || $d->issue) {
                 $this->notices->deliveryForManager($d, $actor, $d->issue ? 'ส่งถึงแล้ว · มีปัญหาที่หน้างาน' : ProjectDelivery::statusName(ProjectDelivery::DELIVERED),
                     $d->issue ? 'ปัญหา: '.$d->issue : ($left ? 'ไม่ได้ส่ง '.$this->names($left)->implode(', ') : null), todo: (bool) $d->issue);

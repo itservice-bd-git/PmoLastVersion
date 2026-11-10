@@ -11,6 +11,7 @@
         'truck' => 'M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12',
         'people' => 'M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z',
         'phone' => 'M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z',
+        'clip' => 'm18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13',
     ];
     $icon = fn (string $k) => '<svg class="mt-[3px] h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="'.$icons[$k].'"/></svg>';
     $check = '<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>';
@@ -183,7 +184,12 @@
                    },
                    openReject(row) { this.r = row; this.rej = { open: true, reason: '', note: '', saving: false, error: '', errors: {} }; },
                    openDeliver(row) { this.r = row; const now = new Date(); this.dlv = { date: row.delivered_date || now.toISOString().slice(0, 10), time: row.delivered_time || String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
-                       receiver: row.receiver, doc_no: row.doc_no, issue: row.issue, cabinet_ids: row.cabinets.map((c) => c.id) }; this.$dispatch('open-modal', 'dl-deliver'); } }">
+                       receiver: row.receiver, doc_no: row.doc_no, issue: row.issue, cabinet_ids: row.cabinets.map((c) => c.id), files: [], fileError: '', saving: false }; this.$dispatch('open-modal', 'dl-deliver'); },
+                   // the files picked for ส่งถึงแล้ว: shown by name, checked here first (the server checks again)
+                   pickFiles(input) { const max = {{ \App\Models\ProjectDelivery::FILES_MAX }}, big = [...input.files].filter((f) => f.size > 20 * 1024 * 1024);
+                       this.dlv.fileError = input.files.length > max ? 'แนบได้ครั้งละไม่เกิน ' + max + ' ไฟล์' : (big.length ? big.map((f) => f.name).join(', ') + ' ใหญ่เกิน 20 MB' : '');
+                       if (this.dlv.fileError) input.value = '';
+                       this.dlv.files = [...input.files].map((f) => ({ name: f.name, size: f.size < 1048576 ? Math.max(1, Math.round(f.size / 1024)) + ' KB' : (f.size / 1048576).toFixed(1) + ' MB' })); } }">
 
         @if ($errors->any())
             <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{{ $errors->first() }}</p>
@@ -259,6 +265,14 @@
                         @if ($row['status'] === 'delivered')
                             <p class="font-semibold text-slate-800">ส่งถึง {{ $row['delivered'] }}</p>
                             <p class="text-slate-500">ผู้รับ {{ $row['receiver'] }}{{ $row['doc_no'] ? ' · ใบส่งของ '.$row['doc_no'] : '' }}</p>
+                            @if ($row['files'])
+                                {{-- what was sent with ส่งถึงแล้ว (ใบส่งของที่เซ็นรับ, รูป): opens in a new tab --}}
+                                <ul class="mt-1 space-y-0.5" aria-label="ไฟล์ที่แนบ">
+                                    @foreach ($row['files'] as $f)
+                                        <li><a href="{{ $f['url'] }}" target="_blank" rel="noopener" class="flex min-w-0 gap-1.5 font-semibold text-teal-700 hover:underline" title="{{ $f['name'] }} ({{ $f['size'] }})">{!! $icon('clip') !!}<span class="truncate">{{ $f['name'] }}</span></a></li>
+                                    @endforeach
+                                </ul>
+                            @endif
                         @elseif ($row['pending'])
                             {{-- รอฝ่ายขายแจ้งกำหนดส่ง (ProjectDates): the old day struck out until the new one comes --}}
                             <p class="text-slate-500 line-through">{{ $row['when'] }}</p>
@@ -688,7 +702,7 @@
         <x-modal panel name="dl-deliver" maxWidth="lg">
             {{-- only once ส่งถึงแล้ว is opened (openDeliver fills dlv): r alone is set by the other panels too --}}
             <template x-if="r && dlv.cabinet_ids">
-                <form method="POST" :action="r.urls.deliver" class="space-y-4 p-6">
+                <form method="POST" :action="r.urls.deliver" enctype="multipart/form-data" @submit="dlv.saving = true" class="space-y-4 p-6">
                     @csrf
                     <h3 class="text-base font-semibold text-slate-900" x-text="'{{ \App\Models\ProjectDelivery::statusName('delivered') }} · ' + r.project + ' รอบ ' + r.round"></h3>
                     <div class="grid grid-cols-2 gap-3">
@@ -720,9 +734,34 @@
                     <label class="block text-sm font-semibold text-slate-800">ปัญหาที่หน้างาน <span class="font-normal text-slate-500">(มีแล้ว PM ได้แจ้งเตือนแบบต้องทำ)</span>
                         <input type="text" name="issue" x-model="dlv.issue" maxlength="500" placeholder="เช่น ตู้มีรอยขีดข่วนด้านซ้าย · ลูกค้ารับไว้ก่อน" class="{{ $field }}">
                     </label>
+                    {{-- ใบส่งของที่เซ็นรับ / รูปหน้างาน: saved as a project comment for this round (DeliveryFlow::deliver) --}}
+                    <div>
+                        <p class="text-sm font-semibold text-slate-800" id="dl-files-label">แนบไฟล์ <span class="font-normal text-slate-500">(ใบส่งของที่เซ็นรับ รูปหน้างาน · ไม่บังคับ)</span></p>
+                        <template x-if="r.files && r.files.length">
+                            <ul class="mt-1.5 space-y-1 text-sm" aria-label="ไฟล์ที่แนบไว้แล้ว">
+                                <template x-for="(f, i) in r.files" :key="i">
+                                    <li><a :href="f.url" target="_blank" rel="noopener" class="flex min-w-0 gap-1.5 text-teal-700 hover:underline" :title="f.name + ' (' + f.size + ')'">{!! $icon('clip') !!}<span class="truncate font-semibold" x-text="f.name"></span><span class="shrink-0 text-slate-500" x-text="f.size"></span></a></li>
+                                </template>
+                            </ul>
+                        </template>
+                        <label class="mt-1.5 flex min-h-[2.75rem] cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-teal-600 hover:bg-teal-50 focus-within:ring-2 focus-within:ring-teal-600">
+                            <svg class="h-4 w-4 shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
+                            <span x-text="r.files && r.files.length ? 'เพิ่มไฟล์' : 'เลือกไฟล์ หรือถ่ายรูป'"></span>
+                            <input type="file" name="files[]" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.dwg,.dxf,image/jpeg,image/png" aria-labelledby="dl-files-label"
+                                   @change="pickFiles($event.target)" class="sr-only">
+                        </label>
+                        <ul x-show="dlv.files.length" class="mt-1.5 space-y-0.5 text-[13px] text-slate-700" aria-live="polite">
+                            <template x-for="(f, i) in dlv.files" :key="i">
+                                <li class="flex min-w-0 gap-1.5"><span class="truncate" x-text="f.name"></span><span class="shrink-0 text-slate-500" x-text="f.size"></span></li>
+                            </template>
+                        </ul>
+                        <p x-show="dlv.fileError" x-text="dlv.fileError" class="mt-1 text-[13px] font-semibold text-red-700" role="alert"></p>
+                        <p class="mt-1 text-xs text-slate-500">ครั้งละไม่เกิน {{ \App\Models\ProjectDelivery::FILES_MAX }} ไฟล์ · PDF, Word, Excel, รูป JPG / PNG, DWG / DXF · ไม่เกิน 20 MB ต่อไฟล์ · เห็นได้ที่คอมเมนต์ของโครงการด้วย</p>
+                    </div>
                     <div class="panel-foot flex items-center gap-2">
                         <button type="button" @click="$dispatch('close-modal', 'dl-deliver')" class="ml-auto h-10 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ปิด</button>
-                        <button type="submit" :disabled="!dlv.cabinet_ids.length" class="h-10 rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50">บันทึก</button>
+                        <button type="submit" :disabled="!dlv.cabinet_ids.length || dlv.saving" class="h-10 rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+                                x-text="dlv.saving ? (dlv.files.length ? 'กำลังอัปโหลด…' : 'กำลังบันทึก…') : 'บันทึก'">บันทึก</button>
                     </div>
                 </form>
             </template>

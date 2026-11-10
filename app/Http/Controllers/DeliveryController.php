@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Cabinet;
 use App\Models\ProjectDelivery;
+use App\Services\CommentAttachmentUploader;
 use App\Services\DeliveryFlow;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -54,9 +55,11 @@ class DeliveryController extends Controller
         // what the delivery department loads: each cabinet's MO, its name, type, size and how many
         $names = Cabinet::whereIn('id', $all->flatMap(fn ($d) => $d->cabinet_ids ?? [])->unique())->get(['id', 'mo_no', 'cabinet_name', 'cabinet_type', 'size', 'quantity'])->keyBy('id');
 
+        $files = ProjectDelivery::filesOf($tabs[$tab]->where('status', ProjectDelivery::DELIVERED)->pluck('id'));   // ใบส่งของ / รูป sent with ส่งถึงแล้ว
+
         return view('deliveries.index', [
             'tabs' => $tabs, 'tab' => $tab, 'round' => $round,
-            'rows' => $tabs[$tab]->values()->map(fn ($d) => $this->row($d, $names, $today))->all(),
+            'rows' => $tabs[$tab]->values()->map(fn ($d) => $this->row($d, $names, $today, $files))->all(),
             'vehicles' => $vehicles,
             'busy' => $this->busy($all),
             'reasons' => ProjectDelivery::rejectReasons(),
@@ -124,8 +127,13 @@ class DeliveryController extends Controller
             'issue' => ['nullable', 'string', 'max:500'],
             'cabinet_ids' => ['required', 'array', 'min:1'],
             'cabinet_ids.*' => ['integer'],
-        ], ['delivered_date.required' => 'ใส่วันที่ส่งถึง', 'receiver.required' => 'ใส่ชื่อผู้รับ', 'cabinet_ids.required' => 'ติ๊กตู้ที่ส่งถึงอย่างน้อย 1 ตู้']);
-        $this->flow->deliver($delivery, $data, $request->user());
+            'files' => ['nullable', 'array', 'max:'.ProjectDelivery::FILES_MAX],
+            'files.*' => ['file', 'max:20480', 'mimes:'.CommentAttachmentUploader::ALLOWED_MIMES],
+        ], ['delivered_date.required' => 'ใส่วันที่ส่งถึง', 'receiver.required' => 'ใส่ชื่อผู้รับ', 'cabinet_ids.required' => 'ติ๊กตู้ที่ส่งถึงอย่างน้อย 1 ตู้',
+            'files.max' => 'แนบได้ครั้งละไม่เกิน '.ProjectDelivery::FILES_MAX.' ไฟล์', 'files.*.max' => 'ไฟล์ :attribute ใหญ่เกิน 20 MB',
+            'files.*.mimes' => 'แนบได้เฉพาะ PDF, Word, Excel, รูปภาพ (JPG / PNG), DWG / DXF', 'files.*.uploaded' => 'อัปโหลดไฟล์ไม่สำเร็จ (ไฟล์อาจใหญ่เกินไป)'],
+            ['files.*' => 'ที่แนบ']);
+        $this->flow->deliver($delivery, $data, $request->user(), $request->file('files', []));
 
         return $this->done($request, 'บันทึกส่งถึงแล้ว');
     }
@@ -138,7 +146,7 @@ class DeliveryController extends Controller
     }
 
     /** One round as the page shows it and its windows fill in. */
-    private function row(ProjectDelivery $d, Collection $names, $today): array
+    private function row(ProjectDelivery $d, Collection $names, $today, ?Collection $files = null): array
     {
         $left = (int) $today->diffInDays($d->delivery_date, false);   // to its first day
         $end = (int) $today->diffInDays($d->lastDay(), false);
@@ -167,6 +175,7 @@ class DeliveryController extends Controller
             'departed' => $d->departed_at?->format('d/m H:i'), 'delivered' => $d->delivered_at ? $d->delivered_at->thaiDate().($d->delivered_at->format('H:i') !== '00:00' ? ' '.$d->delivered_at->format('H:i').' น.' : '') : '',
             'delivered_date' => $d->delivered_at?->format('Y-m-d') ?? '', 'delivered_time' => $d->delivered_at && $d->delivered_at->format('H:i') !== '00:00' ? $d->delivered_at->format('H:i') : '',
             'receiver' => (string) $d->receiver, 'doc_no' => (string) $d->doc_no, 'issue' => (string) $d->issue,
+            'files' => ($files ?? collect())->get($d->id, collect())->map(fn ($f) => ['name' => $f->original_name, 'url' => $f->url, 'size' => $f->size_for_humans])->values()->all(),
             'rejected' => $d->status === ProjectDelivery::REJECTED ? trim($d->rejected_reason.($d->rejected_note ? ' · '.$d->rejected_note : '').' · โดย '.$d->rejecter?->name.' '.$d->rejected_at?->format('d/m H:i')) : '',
             'urls' => ['assign' => route('deliveries.assign', $d), 'reject' => route('deliveries.reject', $d), 'pack' => route('deliveries.pack', $d), 'bill' => route('deliveries.bill', $d),
                 'depart' => route('deliveries.depart', $d), 'deliver' => route('deliveries.deliver', $d), 'back' => route('deliveries.back', $d)],
@@ -197,6 +206,6 @@ class DeliveryController extends Controller
         $d = $d?->fresh(['project', 'vehicles.vehicle', 'sender', 'rejecter', 'biller']);
         $names = $d ? Cabinet::whereIn('id', $d->cabinet_ids ?? [])->get(['id', 'mo_no', 'cabinet_name', 'cabinet_type', 'size', 'quantity'])->keyBy('id') : collect();
 
-        return response()->json(['message' => $message] + ($d ? ['row' => $this->row($d, $names, today())] : []));
+        return response()->json(['message' => $message] + ($d ? ['row' => $this->row($d, $names, today(), ProjectDelivery::filesOf([$d->id]))] : []));
     }
 }

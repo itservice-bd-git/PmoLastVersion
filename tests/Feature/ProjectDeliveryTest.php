@@ -413,6 +413,45 @@ class ProjectDeliveryTest extends TestCase
         $this->assertSame(['MO-1' => [], 'MO-2' => ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล']], $this->ticked());
     }
 
+    public function test_arriving_takes_files_kept_as_a_project_comment_for_the_round(): void
+    {
+        $d = $this->send();
+        $this->pack($d, [$this->cab1, $this->cab2]);
+        $this->assign($d);
+        $this->actingAs($this->clerk)->post(route('deliveries.bill', $d))->assertSessionHasNoErrors();
+        $this->actingAs($this->clerk)->post(route('deliveries.depart', $d))->assertSessionHasNoErrors();
+        $arrive = fn (array $files) => $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-20', 'receiver' => 'คุณสมชาย',
+            'cabinet_ids' => [$this->cab1->id, $this->cab2->id], 'files' => $files]);
+        $uploads = public_path('uploads/comment-attachments');
+        $before = is_dir($uploads) ? scandir($uploads) : [];
+
+        try {
+            $arrive([\Illuminate\Http\UploadedFile::fake()->create('x.exe', 5)])->assertSessionHasErrors('files.0');
+            $arrive(array_fill(0, 6, \Illuminate\Http\UploadedFile::fake()->image('a.jpg')))->assertSessionHasErrors(['files' => 'แนบได้ครั้งละไม่เกิน 5 ไฟล์']);
+            $this->assertSame(['departed', 0], [$d->fresh()->status, \App\Models\CommentAttachment::count()], 'a refused save keeps nothing');
+
+            $arrive([\Illuminate\Http\UploadedFile::fake()->create('DO-0412 เซ็นรับ.pdf', 30, 'application/pdf'), \Illuminate\Http\UploadedFile::fake()->image('หน้างาน.jpg')])
+                ->assertSessionHasNoErrors()->assertSessionHas('success', 'บันทึกส่งถึงแล้ว');
+            $note = ActivityLog::where('action', 'note')->sole();
+            $this->assertSame([Project::class, $this->project->id, $this->clerk->id, ['delivery_id' => $d->id], 'ไฟล์การจัดส่งรอบที่ 1 · ส่งถึงแล้ว 20/11/2569 · ผู้รับ คุณสมชาย'],
+                [$note->loggable_type, $note->loggable_id, $note->user_id, $note->changes, $note->description], 'a comment of the project, so its Comment tab has it');
+            $this->assertStringEndsWith('· แนบไฟล์ 2 ไฟล์', $this->lastLog());
+
+            // แก้การส่งถึง adds; what was there stays
+            $arrive([\Illuminate\Http\UploadedFile::fake()->image('เพิ่ม.png')])->assertSessionHasNoErrors();
+            $this->assertSame(['DO-0412 เซ็นรับ.pdf', 'หน้างาน.jpg', 'เพิ่ม.png'], ProjectDelivery::filesOf([$d->id])->get($d->id)->pluck('original_name')->all());
+            $this->assertTrue(ProjectDelivery::filesOf([$d->id + 1])->isEmpty());
+
+            foreach ([route('deliveries.index', ['tab' => 'delivered']), route('projects.show', $this->project), route('projects.show', ['project' => $this->project, 'tab' => 'comment'])] as $url) {
+                $this->actingAs($this->pm)->get($url)->assertOk()->assertSee('DO-0412 เซ็นรับ.pdf')->assertSee('เพิ่ม.png');
+            }
+        } finally {
+            foreach (array_diff(is_dir($uploads) ? scandir($uploads) : [], $before) as $f) {
+                @unlink($uploads.'/'.$f);   // the uploader writes to public/: leave the folder as it was
+            }
+        }
+    }
+
     public function test_a_round_is_late_after_its_day(): void
     {
         $d = $this->send(['delivery_date' => '2026-11-16', 'delivery_time' => '']);

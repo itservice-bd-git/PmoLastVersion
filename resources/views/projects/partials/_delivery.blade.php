@@ -4,6 +4,7 @@
      on "งานจัดส่ง" (DeliveryController). Planning shows the same rounds. --}}
 @php
     $rounds = $project->deliveries()->with('vehicles.vehicle', 'rejecter', 'biller')->get();
+    $roundFiles = \App\Models\ProjectDelivery::filesOf($rounds->where('status', 'delivered')->pluck('id'));   // sent with ส่งถึงแล้ว
     $canDeliver = auth()->user()->canDispatchWork() && ! $project->isLocked();
     $win = \App\Http\Controllers\ProjectDeliveryController::windowData($project);
     $cabName = collect($win['cabinets'])->pluck('name', 'id');
@@ -150,6 +151,14 @@
                             @if ($d->status === 'delivered')
                                 <dt class="text-slate-500">ผู้รับ</dt>
                                 <dd>{{ collect([$d->receiver, $d->doc_no ? 'ใบส่งของ '.$d->doc_no : null])->filter()->implode(' · ') }}</dd>
+                                @if ($roundFiles->has($d->id))
+                                    <dt class="text-slate-500">ไฟล์</dt>
+                                    <dd><ul class="space-y-0.5">
+                                        @foreach ($roundFiles[$d->id] as $f)
+                                            <li><a href="{{ $f->url }}" target="_blank" rel="noopener" class="flex min-w-0 items-baseline gap-1.5 font-semibold text-teal-700 hover:underline" title="{{ $f->original_name }}"><span class="truncate">{{ $f->original_name }}</span><span class="shrink-0 text-xs font-normal text-slate-500">{{ $f->size_for_humans }}</span></a></li>
+                                        @endforeach
+                                    </ul></dd>
+                                @endif
                             @endif
                             @if ($d->issue)
                                 <dt class="text-orange-700">ปัญหา</dt><dd class="text-orange-800">{{ $d->issue }}</dd>

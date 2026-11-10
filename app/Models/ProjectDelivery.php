@@ -30,6 +30,9 @@ class ProjectDelivery extends Model
 
     public const DELIVERED = 'delivered';
 
+    /** how many files ส่งถึงแล้ว takes in one save (filesOf) */
+    public const FILES_MAX = 5;
+
     public const STATUSES = [self::DRAFT, self::WAITING, self::REJECTED, self::SCHEDULED, self::DEPARTED, self::DELIVERED];
 
     public const COMPANY = 'company';
@@ -77,6 +80,25 @@ class ProjectDelivery extends Model
     public function rejecter()
     {
         return $this->belongsTo(User::class, 'rejected_by');
+    }
+
+    /**
+     * The files sent with ส่งถึงแล้ว (DeliveryFlow::deliver), per round id: they are a project comment (action 'note',
+     * so they show in the project's Comment tab too) whose changes carry the round's id. Oldest first.
+     *
+     * @param  iterable<int>  $ids
+     * @return \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, CommentAttachment>>
+     */
+    public static function filesOf(iterable $ids): \Illuminate\Support\Collection
+    {
+        $ids = collect($ids)->map(fn ($id) => (int) $id)->filter()->unique()->values();
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return CommentAttachment::whereHas('activityLog', fn ($q) => $q->where('action', 'note')->whereIn('changes->delivery_id', $ids->all()))
+            ->with('activityLog:id,changes')->orderBy('id')->get()
+            ->groupBy(fn ($a) => (int) ($a->activityLog->getAttribute('changes')['delivery_id'] ?? 0));   // getAttribute: inside a model ->changes is Eloquent's own
     }
 
     protected function activityProjectId(): ?int

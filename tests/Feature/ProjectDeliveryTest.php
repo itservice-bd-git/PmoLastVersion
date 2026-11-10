@@ -152,8 +152,9 @@ class ProjectDeliveryTest extends TestCase
         $this->cab1->forceFill(['cabinet_name' => 'MDB-1 ตู้เมน', 'cabinet_type' => 'MDB', 'size' => '80x200x60 ซม.', 'quantity' => 2])->save();
         $page = $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk()->assertSee('ห่อตู้ 0/2')
             ->assertSee('MDB-1 ตู้เมน, B');   // the card: the cabinets' names only; the rest of it in the panel
-        // จัดรถ / คน and ไม่รับงาน name the cabinets too (the same names as the card)
-        $this->assertSame(2, substr_count($page->getContent(), 'x-text="r.cabinets.map((c) => c.model || c.name).join(\', \')"'));
+        // ไม่รับงาน names the cabinets (as the card); จัดรถ / คน lists them with type, size and how many, sizes together
+        $this->assertSame(1, substr_count($page->getContent(), 'x-text="r.cabinets.map((c) => c.model || c.name).join(\', \')"'));
+        $page->assertSee('aria-label="ตู้ในรอบนี้"', false)->assertSee('x-for="g in cabSizes(r.cabinets)"', false)->assertSee("'รถที่เลือกจุ ~' + asgRoom", false);
         $row =collect($page->viewData('rows'))->firstWhere('id', $d->id);
         $this->assertSame(['MO-1', 'MDB-1 ตู้เมน', 'MDB', '80x200x60 ซม.', 2, true], [$row['cabinets'][0]['name'], $row['cabinets'][0]['model'], $row['cabinets'][0]['type'], $row['cabinets'][0]['size'], $row['cabinets'][0]['qty'], $row['packable']]);
 

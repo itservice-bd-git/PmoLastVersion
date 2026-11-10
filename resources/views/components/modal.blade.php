@@ -70,7 +70,7 @@ $panelWidth = ['sm' => 'max-w-md', 'md' => 'max-w-lg', 'lg' => 'max-w-xl', 'xl' 
                 class="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-lg bg-white/90 text-slate-500 hover:bg-slate-100 hover:text-slate-800">
             <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
-        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain break-words">
             {{ $slot }}
         </div>
     </div>

@@ -86,6 +86,12 @@
                        if (live) { const d = JSON.parse(live.textContent); this.busy = d.busy; this.people = d.people; }
                    },
                    car(id) { return this.vehicles.find((v) => String(v.id) === String(id)); },
+                   // จัดรถ / คน: what goes, to judge the vehicles - how many cabinets (each one's quantity), the same sizes
+                   // together (biggest group first), and how many the chosen vehicles carry (รถขนส่ง's ~n ตู้; 0 = not set)
+                   cabUnits(cs) { return cs.reduce((n, c) => n + (c.qty || 1), 0); },
+                   cabSizes(cs) { const m = new Map(); cs.forEach((c) => { const k = (c.size || '').trim() || 'ไม่ระบุขนาด'; m.set(k, (m.get(k) || 0) + (c.qty || 1)); });
+                                  return [...m].map(([size, n]) => ({ size, n })).sort((a, b) => b.n - a.n); },
+                   get asgRoom() { return this.asg.rows.reduce((n, v) => n + (Number((this.car(v.vehicle_id) || {}).capacity) || 0), 0); },
                    // the vehicles of the kind the line was opened for first, then the others PM asked for, then the rest
                    carList(want) { const t = this.r ? this.r.types : []; const rank = (v) => (want && v.type === want ? 2 : (t.includes(v.type) ? 1 : 0)); return [...this.vehicles].sort((a, b) => rank(b) - rank(a)); },
                    pickCar(row) { const v = this.car(row.vehicle_id); if (v && !row.driver_name) row.driver_name = v.driver; },
@@ -207,7 +213,7 @@
                     $before = in_array($row['status'], ['waiting', 'rejected', 'scheduled'], true);   // packing / แจ้งเปิดบิล may happen
                     $packable = $before && ! $row['billed'];
                 @endphp
-                <article class="grid gap-x-4 gap-y-3 border-t border-slate-100 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] {{ $round === $row['id'] ? 'bg-amber-50/60 ring-2 ring-inset ring-amber-300' : '' }}"
+                <article class="grid gap-x-4 gap-y-3 break-words border-t border-slate-100 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] {{ $round === $row['id'] ? 'bg-amber-50/60 ring-2 ring-inset ring-amber-300' : '' }}"
                          id="round-{{ $row['id'] }}">
                     @php
                         $toBill = $packable && $row['allPacked'] && $row['status'] !== 'rejected';
@@ -219,8 +225,8 @@
                     @endphp
                     {{-- what goes: the cabinets' names (every detail in the panel), and how far it is --}}
                     <div class="min-w-0">
-                        <p class="truncate text-sm font-bold text-slate-900">{{ $row['project'] }} <span class="font-semibold text-slate-600">{{ $row['name'] }}</span></p>
-                        <p class="text-[13px] text-slate-600">รอบ {{ $row['round'] }} · {{ count($row['cabinets']) }} ตู้{{ $row['site'] ? ' · '.$row['site'] : '' }}</p>
+                        <p class="truncate text-sm font-bold text-slate-900" title="{{ $row['project'] }} {{ $row['name'] }}">{{ $row['project'] }} <span class="font-semibold text-slate-600">{{ $row['name'] }}</span></p>
+                        <p class="flex min-w-0 text-[13px] text-slate-600"><span class="shrink-0">รอบ {{ $row['round'] }} · {{ count($row['cabinets']) }} ตู้</span>@if ($row['site'])<span class="truncate" title="{{ $row['site'] }}">&nbsp;· {{ $row['site'] }}</span>@endif</p>
                         <p class="mt-1.5 flex items-baseline gap-1.5 text-[13px]">
                             <span class="line-clamp-2 min-w-0 text-slate-700" title="{{ $cabTitles->implode(', ') }}">{{ $cabTitles->take(8)->implode(', ') }}</span>
                             @if ($cabTitles->count() > 2)<button type="button" @click="openCabs(@js($row))" class="shrink-0 font-semibold text-teal-700 hover:underline">ดูทั้งหมด</button>@endif
@@ -238,7 +244,7 @@
                     <div class="order-2 min-w-0 space-y-1 text-[13px] text-slate-700 md:order-none">
                         @if ($row['request'])<p class="text-slate-500">PM ขอ <span class="font-semibold text-slate-700">{{ $row['request'] }}</span></p>@endif
                         @forelse ($row['vehicles'] as $v)
-                            <p class="flex gap-1.5">@if ($row['method'] === 'company'){!! $icon('truck') !!}@endif<span class="min-w-0"><span class="font-semibold">{{ $v['name'] }}</span>
+                            <p class="flex gap-1.5">@if ($row['method'] === 'company'){!! $icon('truck') !!}@endif<span class="line-clamp-2 min-w-0" title="{{ $v['name'] }}{{ ($v['driver_name'] || $v['crew']) ? ' · '.implode(', ', array_filter([$v['driver_name'], ...$v['crew']])) : '' }}"><span class="font-semibold">{{ $v['name'] }}</span>
                                 @if ($v['type'] && $row['types'] && ! in_array($v['type'], $row['types'], true))<span class="ml-1 rounded bg-amber-100 px-1 text-xs font-bold text-amber-800">ไม่ได้ขอ</span>@endif
                                 @if ($v['driver_name'] || $v['crew'])<span class="text-slate-500"> · {{ implode(', ', array_filter([$v['driver_name'], ...$v['crew']])) }}</span>@endif</span></p>
                         @empty
@@ -246,7 +252,7 @@
                         @endforelse
                         @if ($row['fewer'])<p class="font-semibold text-amber-800">{{ $row['fewer'] }} · น้อยกว่าที่ขอ</p>@endif
                         @if ($row['people'])<p class="flex gap-1.5 {{ $row['short'] ? 'font-semibold text-amber-800' : 'text-slate-500' }}">{!! $icon('people') !!}<span class="min-w-0">{{ $row['people'] }}</span></p>@endif
-                        @if ($row['contact'])<p class="flex gap-1.5 text-slate-500">{!! $icon('phone') !!}<span class="min-w-0">{!! $phone($row['contact']) !!}</span></p>@endif
+                        @if ($row['contact'])<p class="flex gap-1.5 text-slate-500">{!! $icon('phone') !!}<span class="line-clamp-2 min-w-0" title="{{ $row['contact'] }}">{!! $phone($row['contact']) !!}</span></p>@endif
                     </div>
                     {{-- when: PM's day (right under the cabinets on a phone) --}}
                     <div class="order-1 min-w-0 text-[13px] md:order-none">
@@ -323,13 +329,13 @@
             <div x-show="cab.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
                  x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
                  x-init="$watch('cab.open', (v) => v && $nextTick(() => $refs.closeCabs.focus({ preventScroll: true })))"
-                 class="relative flex h-full w-full max-w-xl flex-col bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)] will-change-transform">
+                 class="relative flex h-full w-full max-w-xl flex-col break-words bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)] will-change-transform">
                 <template x-if="cab.row">
                     <div class="flex min-h-0 flex-1 flex-col">
                         {{-- what round, how far, which ones --}}
                         <div class="space-y-3 border-b border-slate-200 p-4 pr-14 sm:p-5 sm:pr-16">
                             <div>
-                                <p class="truncate text-base font-bold text-slate-900"><span x-text="cab.row.project"></span> <span class="font-semibold text-slate-600" x-text="cab.row.name"></span></p>
+                                <p class="truncate text-base font-bold text-slate-900" :title="cab.row.project + ' ' + cab.row.name"><span x-text="cab.row.project"></span> <span class="font-semibold text-slate-600" x-text="cab.row.name"></span></p>
                                 <p class="text-sm text-slate-600" x-text="'รอบ ' + cab.row.round + ' · ' + cab.row.when + ' · ' + cab.list.length + ' ตู้'"></p>
                             </div>
                             {{-- ห่อตู้ → แจ้งเปิดบิล --}}
@@ -467,7 +473,7 @@
             <div x-show="asg.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
                  x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
                  x-init="$watch('asg.open', (v) => v && $nextTick(() => $refs.closeAsg.focus({ preventScroll: true })))"
-                 class="relative flex h-full w-full max-w-xl flex-col bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)] will-change-transform">
+                 class="relative flex h-full w-full max-w-xl flex-col break-words bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)] will-change-transform">
                 <template x-if="r">
                     <form method="POST" :action="r.urls.assign" class="flex min-h-0 flex-1 flex-col" @submit.prevent="saveAssign($el)">
                         @csrf
@@ -475,13 +481,8 @@
                         <div class="space-y-2.5 border-b border-slate-200 p-4 pr-14 sm:p-5 sm:pr-16">
                             <div>
                                 <p class="text-xs font-semibold text-slate-500" x-text="r.vehicles.length ? 'แก้รถ / คน' : 'จัดรถ / คน'"></p>
-                                <p class="truncate text-base font-bold text-slate-900"><span x-text="r.project"></span> <span class="font-semibold text-slate-600" x-text="r.name"></span></p>
-                                <p class="text-sm text-slate-600" x-text="'รอบ ' + r.round + ' · ' + r.when + ' · ' + r.cabinets.length + ' ตู้' + (r.site ? ' · ' + r.site : '')"></p>
-                                {{-- the cabinets' names, as on the card (all of them here; a long list opens in place) --}}
-                                <div x-data="{ all: false, cut: false }" x-effect="r.id; all = false; $nextTick(() => cut = $refs.names.scrollHeight > $refs.names.clientHeight + 1)" class="mt-1 text-sm text-slate-800">
-                                    <p x-ref="names" :class="all ? 'max-h-40 overflow-y-auto' : 'line-clamp-3'" x-text="r.cabinets.map((c) => c.model || c.name).join(', ')"></p>
-                                    <button type="button" x-show="cut && !all" @click="all = true" class="text-sm font-semibold text-teal-700 hover:underline">ดูทั้งหมด</button>
-                                </div>
+                                <p class="truncate text-base font-bold text-slate-900" :title="r.project + ' ' + r.name"><span x-text="r.project"></span> <span class="font-semibold text-slate-600" x-text="r.name"></span></p>
+                                <p class="line-clamp-2 text-sm text-slate-600" :title="r.site" x-text="'รอบ ' + r.round + ' · ' + r.when + ' · ' + r.cabinets.length + ' ตู้' + (r.site ? ' · ' + r.site : '')"></p>
                             </div>
                             <p x-show="r.request" class="text-sm text-slate-600">PM ขอ <span class="font-semibold text-slate-900" x-text="r.request"></span></p>
                             <div x-show="r.method !== 'pickup'" class="flex flex-wrap gap-2 text-sm">
@@ -497,6 +498,47 @@
 
                         {{-- each vehicle: which one, its driver, who else goes --}}
                         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:p-5">
+                            {{-- what goes, to judge the vehicles and people: how many, the sizes together, against what the chosen
+                                 vehicles carry; then each cabinet (name, MO, type, size, how many) - a long list opens in place --}}
+                            <section x-data="{ more: false }" x-effect="r.id; more = false" aria-label="ตู้ในรอบนี้" class="rounded-xl border border-slate-200">
+                                <div class="space-y-2 border-b border-slate-100 px-3 py-2.5">
+                                    <p class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                                        <span class="font-bold text-slate-900" x-text="'ตู้ในรอบนี้ ' + cabUnits(r.cabinets) + ' ตู้'"></span>
+                                        <span x-show="cabUnits(r.cabinets) !== r.cabinets.length" class="text-xs text-slate-500" x-text="'(' + r.cabinets.length + ' รายการ)'"></span>
+                                        <span x-show="r.method === 'company' && asgRoom" class="ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums"
+                                              :class="asgRoom >= cabUnits(r.cabinets) ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'"
+                                              x-text="'รถที่เลือกจุ ~' + asgRoom + ' ตู้' + (asgRoom >= cabUnits(r.cabinets) ? '' : ' · ไม่พอ')"></span>
+                                    </p>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <template x-for="g in cabSizes(r.cabinets)" :key="g.size">
+                                            <span class="inline-flex max-w-full items-baseline gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                                                <span class="min-w-0" x-text="g.size" :class="g.size === 'ไม่ระบุขนาด' ? 'font-normal text-slate-500' : ''"></span><span class="shrink-0 tabular-nums text-slate-500" x-text="'× ' + g.n"></span>
+                                            </span>
+                                        </template>
+                                    </div>
+                                </div>
+                                <ul class="divide-y divide-slate-100 text-sm">
+                                    <li class="hidden grid-cols-[minmax(0,1fr)_minmax(0,6.5rem)_minmax(0,8rem)_2.5rem] gap-x-3 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500 sm:grid" aria-hidden="true">
+                                        <span>ชื่อตู้</span><span>ประเภท</span><span>ขนาด</span><span class="text-right">จำนวน</span>
+                                    </li>
+                                    <template x-for="(c, i) in r.cabinets" :key="c.id">
+                                        <li x-show="more || i < 5" class="px-3 py-2 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,6.5rem)_minmax(0,8rem)_2.5rem] sm:items-baseline sm:gap-x-3">
+                                            <span class="block min-w-0">
+                                                <span class="block break-words font-semibold text-slate-900" x-text="c.model || c.name"></span>
+                                                <span x-show="c.model" class="block text-xs tabular-nums text-slate-500" x-text="c.name"></span>
+                                            </span>
+                                            {{-- a phone: type · size · how many on one line --}}
+                                            <span class="block text-xs text-slate-600 sm:hidden" x-text="[c.type, c.size, (c.qty || 1) + ' ตู้'].filter(Boolean).join(' · ')"></span>
+                                            <span class="hidden break-words text-slate-700 sm:block" x-text="c.type || '-'"></span>
+                                            <span class="hidden break-words tabular-nums text-slate-700 sm:block" x-text="c.size || '-'"></span>
+                                            <span class="hidden text-right tabular-nums text-slate-700 sm:block" x-text="c.qty || 1"></span>
+                                        </li>
+                                    </template>
+                                </ul>
+                                <button type="button" x-show="!more && r.cabinets.length > 5" @click="more = true"
+                                        class="flex h-10 w-full items-center justify-center border-t border-slate-100 text-sm font-semibold text-teal-700 hover:bg-slate-50"
+                                        x-text="'ดูทั้งหมด ' + r.cabinets.length + ' รายการ'"></button>
+                            </section>
                             <label x-show="r.method === 'external'" class="block text-sm font-semibold text-slate-800">บริษัทขนส่ง
                                 <input type="text" name="carrier" x-model="asg.carrier" :disabled="r.method !== 'external'" maxlength="150" class="{{ $field }}">
                             </label>
@@ -578,7 +620,7 @@
             <div x-show="rej.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
                  x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
                  x-init="$watch('rej.open', (v) => v && $nextTick(() => $refs.closeRej.focus({ preventScroll: true })))"
-                 class="relative flex h-full w-full max-w-xl flex-col bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)] will-change-transform">
+                 class="relative flex h-full w-full max-w-xl flex-col break-words bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)] will-change-transform">
                 <template x-if="r">
                     <form method="POST" :action="r.urls.reject" class="flex min-h-0 flex-1 flex-col" @submit.prevent="submit($el, rej)">
                         @csrf
@@ -586,8 +628,8 @@
                         <div class="space-y-2.5 border-b border-slate-200 p-4 pr-14 sm:p-5 sm:pr-16">
                             <div>
                                 <p class="text-xs font-semibold text-red-700">ไม่รับงาน</p>
-                                <p class="truncate text-base font-bold text-slate-900"><span x-text="r.project"></span> <span class="font-semibold text-slate-600" x-text="r.name"></span></p>
-                                <p class="text-sm text-slate-600" x-text="'รอบ ' + r.round + ' · ' + r.when + ' · ' + r.cabinets.length + ' ตู้' + (r.site ? ' · ' + r.site : '')"></p>
+                                <p class="truncate text-base font-bold text-slate-900" :title="r.project + ' ' + r.name"><span x-text="r.project"></span> <span class="font-semibold text-slate-600" x-text="r.name"></span></p>
+                                <p class="line-clamp-2 text-sm text-slate-600" :title="r.site" x-text="'รอบ ' + r.round + ' · ' + r.when + ' · ' + r.cabinets.length + ' ตู้' + (r.site ? ' · ' + r.site : '')"></p>
                                 {{-- the cabinets' names, as on the card (all of them here; a long list opens in place) --}}
                                 <div x-data="{ all: false, cut: false }" x-effect="r.id; all = false; $nextTick(() => cut = $refs.names.scrollHeight > $refs.names.clientHeight + 1)" class="mt-1 text-sm text-slate-800">
                                     <p x-ref="names" :class="all ? 'max-h-40 overflow-y-auto' : 'line-clamp-3'" x-text="r.cabinets.map((c) => c.model || c.name).join(', ')"></p>
@@ -660,9 +702,11 @@
                     </div>
                     <fieldset>
                         <legend class="text-sm font-semibold text-slate-800">ตู้ที่ส่งถึง <span class="font-normal text-slate-500">(ตู้ที่ไม่ได้ส่ง เอาติ๊กออก PM จะนัดรอบใหม่ได้)</span></legend>
-                        <div class="mt-1.5 grid grid-cols-2 gap-x-4 text-sm text-slate-700">
+                        {{-- the name first and its MO under it (as จัดรถ / คน); one column on a phone --}}
+                        <div class="mt-1.5 grid grid-cols-1 gap-x-4 text-sm text-slate-700 sm:grid-cols-2">
                             <template x-for="c in r.cabinets" :key="c.id">
-                                <label class="flex min-h-[2.25rem] items-center gap-2"><input type="checkbox" name="cabinet_ids[]" :value="c.id" x-model.number="dlv.cabinet_ids" class="rounded"><span x-text="c.name + (c.model ? ' · ' + c.model : '')"></span></label>
+                                <label class="flex min-h-[2.75rem] items-start gap-2.5 py-1.5"><input type="checkbox" name="cabinet_ids[]" :value="c.id" x-model.number="dlv.cabinet_ids" class="mt-0.5 shrink-0 rounded">
+                                    <span class="min-w-0"><span class="block font-medium text-slate-800" x-text="c.model || c.name"></span><span x-show="c.model" class="block text-xs tabular-nums text-slate-500" x-text="c.name"></span></span></label>
                             </template>
                         </div>
                     </fieldset>

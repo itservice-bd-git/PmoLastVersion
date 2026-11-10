@@ -95,7 +95,8 @@ class ProjectDelivery extends Model
         $ext = strtolower(pathinfo((string) $f->path, PATHINFO_EXTENSION));
 
         return ['url' => $f->url, 'name' => (string) $f->original_name, 'size' => $f->size_for_humans,
-            'kind' => in_array($ext, ['jpg', 'jpeg', 'png'], true) ? 'image' : ($ext === 'pdf' ? 'pdf' : null)];
+            'kind' => in_array($ext, ['jpg', 'jpeg', 'png'], true) ? 'image' : ($ext === 'pdf' ? 'pdf' : null),
+            'ext' => strtoupper(substr($ext, 0, 4))];   // what a document's tile says (x-file-tile)
     }
 
     public static function filesOf(iterable $ids): \Illuminate\Support\Collection

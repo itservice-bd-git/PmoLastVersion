@@ -188,7 +188,12 @@
                    pickFiles(input) { const max = {{ \App\Models\ProjectDelivery::FILES_MAX }}, big = [...input.files].filter((f) => f.size > 20 * 1024 * 1024);
                        this.dlv.fileError = input.files.length > max ? 'แนบได้ครั้งละไม่เกิน ' + max + ' ไฟล์' : (big.length ? big.map((f) => f.name).join(', ') + ' ใหญ่เกิน 20 MB' : '');
                        if (this.dlv.fileError) input.value = '';
-                       this.dlv.files = [...input.files].map((f) => ({ name: f.name, size: f.size < 1048576 ? Math.max(1, Math.round(f.size / 1024)) + ' KB' : (f.size / 1048576).toFixed(1) + ' MB' })); } }">
+                       this.dlv.files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
+                       // a photo is shown from the phone itself before it goes up (the tile marked ใหม่)
+                       this.dlv.files = [...input.files].map((f) => { const ext = (f.name.includes('.') ? f.name.split('.').pop() : '').toLowerCase();
+                           return { name: f.name, size: f.size < 1048576 ? Math.max(1, Math.round(f.size / 1024)) + ' KB' : (f.size / 1048576).toFixed(1) + ' MB',
+                                    ext: ext.toUpperCase().slice(0, 4), preview: ['jpg', 'jpeg', 'png'].includes(ext) ? URL.createObjectURL(f) : '' }; }); },
+                   unpickFiles(input) { input.value = ''; this.pickFiles(input); } }">
 
         @if ($errors->any())
             <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{{ $errors->first() }}</p>
@@ -265,11 +270,20 @@
                             <p class="font-semibold text-slate-800">ส่งถึง {{ $row['delivered'] }}</p>
                             <p class="text-slate-500">ผู้รับ {{ $row['receiver'] }}{{ $row['doc_no'] ? ' · ใบส่งของ '.$row['doc_no'] : '' }}</p>
                             @if ($row['files'])
-                                {{-- what was sent with ส่งถึงแล้ว (ใบส่งของที่เซ็นรับ, รูป): opens in a new tab --}}
-                                <ul class="mt-1.5 flex flex-wrap gap-1.5" aria-label="ไฟล์ที่แนบ">
-                                    @foreach ($row['files'] as $f)
-                                        <li class="min-w-0 max-w-full"><x-file-chip :file="$f" /></li>
+                                {{-- what was sent with ส่งถึงแล้ว (ใบส่งของที่เซ็นรับ, รูป) as a strip of tiles, 44px to tap with gloves on;
+                                     past six, five and +n (the ส่งถึงแล้ว panel has them all) --}}
+                                @php
+                                    $nFiles = count($row['files']);
+                                    $tiles = $nFiles > 6 ? array_slice($row['files'], 0, 5) : $row['files'];
+                                @endphp
+                                <ul class="mb-1.5 mt-2 flex flex-wrap gap-1.5" aria-label="ไฟล์ตอนส่งถึง {{ $nFiles }} ไฟล์">
+                                    @foreach ($tiles as $f)
+                                        <li><x-file-tile :file="$f" class="h-11 w-11" /></li>
                                     @endforeach
+                                    @if ($nFiles > count($tiles))
+                                        <li><button type="button" @click="openDeliver(@js($row))" aria-label="ดูไฟล์ทั้งหมด {{ $nFiles }} ไฟล์"
+                                                    class="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-100 text-sm font-bold tabular-nums text-slate-700 ring-1 ring-slate-900/10 hover:ring-2 hover:ring-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">+{{ $nFiles - count($tiles) }}</button></li>
+                                    @endif
                                 </ul>
                             @endif
                         @elseif ($row['pending'])
@@ -736,28 +750,40 @@
                     {{-- ใบส่งของที่เซ็นรับ / รูปหน้างาน: saved as a project comment for this round (DeliveryFlow::deliver) --}}
                     <div>
                         <p class="text-sm font-semibold text-slate-800" id="dl-files-label">แนบไฟล์ <span class="font-normal text-slate-500">(ใบส่งของที่เซ็นรับ รูปหน้างาน · ไม่บังคับ)</span></p>
-                        <template x-if="r.files && r.files.length">
-                            {{-- as <x-file-chip>: a photo / PDF opens over the panel (<x-file-viewer> below) --}}
-                            <ul class="mt-1.5 flex flex-wrap gap-1.5" aria-label="ไฟล์ที่แนบไว้แล้ว">
-                                <template x-for="(f, i) in r.files" :key="i">
-                                    <li class="min-w-0 max-w-full"><a :href="f.url" target="_blank" rel="noopener" :title="f.name" @click="if (f.kind) { $event.preventDefault(); $dispatch('pmo-file', { url: f.url, name: f.name, kind: f.kind }) }"
-                                           class="inline-flex max-w-full items-center gap-1 overflow-hidden rounded-lg border border-slate-200 bg-white text-[12px] text-slate-600 hover:border-blue-400">
-                                        <img x-show="f.kind === 'image'" :src="f.kind === 'image' ? f.url : ''" alt="" loading="lazy" class="h-14 w-14 shrink-0 object-cover">
-                                        <span class="truncate px-2 py-1" x-text="'📎 ' + f.name + (f.size ? ' · ' + f.size : '')"></span></a></li>
-                                </template>
-                            </ul>
-                        </template>
-                        <label class="mt-1.5 flex min-h-[2.75rem] cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-teal-600 hover:bg-teal-50 focus-within:ring-2 focus-within:ring-teal-600">
+                        {{-- one gallery: what is already there (opens over the panel, <x-file-viewer> below) and what was just picked
+                             (shown from the phone, marked ใหม่), each with its name under it --}}
+                        <ul x-show="(r.files || []).length || dlv.files.length" class="mt-2 grid grid-cols-4 gap-x-2 gap-y-2.5 sm:grid-cols-5" aria-label="ไฟล์ของรอบนี้" aria-live="polite">
+                            <template x-for="(f, i) in (r.files || [])" :key="'o' + i">
+                                <li class="min-w-0">
+                                    <a :href="f.url" target="_blank" rel="noopener" :title="f.name + ' · ' + f.size" :aria-label="(f.kind === 'image' ? 'ดูรูป ' : 'เปิดไฟล์ ') + f.name"
+                                       @click="if (f.kind) { $event.preventDefault(); $dispatch('pmo-file', { url: f.url, name: f.name, kind: f.kind }) }"
+                                       class="block aspect-square w-full overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-900/10 transition-shadow duration-150 hover:ring-2 hover:ring-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
+                                        <template x-if="f.kind === 'image'"><img :src="f.url" alt="" loading="lazy" decoding="async" class="h-full w-full object-cover"></template>
+                                        <template x-if="f.kind !== 'image'"><span class="flex h-full w-full flex-col items-center justify-center gap-0.5 text-slate-500"><svg class="h-[42%] w-[42%]" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg><span class="text-[10px] font-bold leading-none tracking-wide text-slate-600" x-text="f.ext"></span></span></template>
+                                    </a>
+                                    <p class="mt-1 truncate text-[11px] leading-tight text-slate-600" :title="f.name" x-text="f.name"></p>
+                                </li>
+                            </template>
+                            <template x-for="(f, i) in dlv.files" :key="'n' + i">
+                                <li class="min-w-0">
+                                    <div class="relative aspect-square w-full overflow-hidden rounded-lg bg-teal-50 ring-2 ring-teal-600">
+                                        <template x-if="f.preview"><img :src="f.preview" alt="" class="h-full w-full object-cover"></template>
+                                        <template x-if="!f.preview"><span class="flex h-full w-full flex-col items-center justify-center gap-0.5 text-teal-700"><svg class="h-[42%] w-[42%]" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg><span class="text-[10px] font-bold leading-none tracking-wide" x-text="f.ext"></span></span></template>
+                                        <span class="absolute left-1 top-1 rounded bg-teal-700 px-1 text-[10px] font-bold leading-4 text-white">ใหม่</span>
+                                    </div>
+                                    <p class="mt-1 truncate text-[11px] leading-tight text-slate-600" :title="f.name + ' · ' + f.size" x-text="f.name"></p>
+                                </li>
+                            </template>
+                        </ul>
+                        <label class="mt-2 flex min-h-[2.75rem] cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-teal-600 hover:bg-teal-50 focus-within:ring-2 focus-within:ring-teal-600">
                             <svg class="h-4 w-4 shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
-                            <span x-text="r.files && r.files.length ? 'เพิ่มไฟล์' : 'เลือกไฟล์ หรือถ่ายรูป'"></span>
+                            <span x-text="dlv.files.length ? 'เลือกใหม่' : ((r.files || []).length ? 'เพิ่มไฟล์' : 'เลือกไฟล์ หรือถ่ายรูป')"></span>
                             <input type="file" name="files[]" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.dwg,.dxf,image/jpeg,image/png" aria-labelledby="dl-files-label"
                                    @change="pickFiles($event.target)" class="sr-only">
                         </label>
-                        <ul x-show="dlv.files.length" class="mt-1.5 space-y-0.5 text-[13px] text-slate-700" aria-live="polite">
-                            <template x-for="(f, i) in dlv.files" :key="i">
-                                <li class="flex min-w-0 gap-1.5"><span class="truncate" x-text="f.name"></span><span class="shrink-0 text-slate-500" x-text="f.size"></span></li>
-                            </template>
-                        </ul>
+                        <button type="button" x-show="dlv.files.length" @click="unpickFiles($el.closest('form').querySelector('input[name=&quot;files[]&quot;]'))"
+                                class="mt-1 inline-flex h-9 items-center text-[13px] font-semibold text-slate-600 underline underline-offset-2 hover:text-slate-900"
+                                x-text="'เอาไฟล์ที่เลือก ' + dlv.files.length + ' ไฟล์ออก'"></button>
                         <p x-show="dlv.fileError" x-text="dlv.fileError" class="mt-1 text-[13px] font-semibold text-red-700" role="alert"></p>
                         <p class="mt-1 text-xs text-slate-500">ครั้งละไม่เกิน {{ \App\Models\ProjectDelivery::FILES_MAX }} ไฟล์ · PDF, Word, Excel, รูป JPG / PNG, DWG / DXF · ไม่เกิน 20 MB ต่อไฟล์ · เห็นได้ที่คอมเมนต์ของโครงการด้วย</p>
                     </div>

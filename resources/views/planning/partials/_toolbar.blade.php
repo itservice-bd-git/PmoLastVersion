@@ -45,7 +45,7 @@
         {{-- several departments at once: only projects any of them works on --}}
         <details class="relative" x-show="!dept">
             <summary class="h-8 inline-flex cursor-pointer list-none items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50" x-text="multiDepts.length ? 'หลายแผนก (' + multiDepts.length + ')' : 'หลายแผนก ▾'"></summary>
-            <div class="absolute left-0 z-30 mt-1 max-h-72 w-56 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+            <div class="absolute left-0 z-30 mt-1 max-h-72 w-56 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 shadow-lg [details:not([open])_&]:hidden">{{-- closed: no box at all (Chrome still laid it out, which widened the page on a phone) --}}
                 <template x-for="d in departments" :key="'md' + d.id">
                     <label class="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-slate-50"><input type="checkbox" :value="d.id" x-model="multiDepts" class="rounded border-slate-300 text-blue-600"><span class="h-2 w-2 rounded-full" :style="'background-color:' + d.color"></span><span x-text="d.name"></span></label>
                 </template>

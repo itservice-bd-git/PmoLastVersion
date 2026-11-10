@@ -464,12 +464,12 @@
                     <template x-for="r in paged()" :key="r.id">
                         <tr class="cursor-pointer hover:bg-slate-50" @click="if (! $event.target.closest('a, button')) window.location = r.url">
                             <td class="py-3 pl-5 pr-0 text-right align-top text-sm font-semibold tabular-nums text-slate-400" x-text="r.no"></td>
-                            <td class="max-w-[18rem] px-4 py-3" :title="r.mo">
+                            <td class="max-w-[15rem] px-4 py-3" :title="r.mo + (r.model ? ' · ' + r.model : '')">
                                 <span class="flex items-center gap-2">
                                     <a :href="r.url" class="line-clamp-2 break-words font-semibold leading-snug text-ae-navy hover:underline" x-text="r.site"></a>
                                     <span x-show="r.status === 'on_hold'" class="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">พักไว้</span>
                                 </span>
-                                <div class="truncate text-[13px] text-slate-600" x-text="r.model"></div>
+                                <div class="line-clamp-2 break-words text-[13px] text-slate-600" x-text="r.model"></div>
                             </td>
                             <td class="px-2 py-3">
                                 <div class="flex min-w-[7rem] items-center gap-2">
@@ -488,12 +488,12 @@
                             </td>
                             {{-- the latest FAT round the cabinet is in, as the "ส่ง" column: the day, then days to it, or its result (in words) --}}
                             <td class="hidden whitespace-nowrap px-2 py-3 lg:table-cell" :title="r.fat && r.fat.round > 1 ? 'FAT รอบที่ ' + r.fat.round : null">
-                                <span class="tabular-nums text-slate-600" x-text="r.fat ? r.fat.date : '-'"></span>
+                                <span class="block tabular-nums text-slate-600" x-text="r.fat ? r.fat.date : '-'"></span>
                                 <span x-show="r.fat && r.fat.days !== null" class="text-xs font-semibold" :class="r.fat && dueClass(r.fat.days)" x-text="r.fat && dueLabel(r.fat.days)"></span>
                                 <span x-show="r.fat && r.fat.result" class="text-xs font-semibold" :class="r.fat && r.fat.result === 'failed' ? 'text-red-600' : 'text-emerald-700'" x-text="r.fat ? '· ' + r.fat.resultText : ''"></span>
                             </td>
                             <td class="hidden whitespace-nowrap px-2 py-3 sm:table-cell">
-                                <span class="tabular-nums text-slate-600" x-text="r.due || '-'"></span>
+                                <span class="block tabular-nums text-slate-600" x-text="r.due || '-'"></span>
                                 <span x-show="r.daysLeft !== null" class="text-xs font-semibold" :class="dueClass(r.daysLeft)" x-text="dueLabel(r.daysLeft)"></span>
                             </td>
                             <td class="hidden whitespace-nowrap px-2 py-3 text-right sm:table-cell">

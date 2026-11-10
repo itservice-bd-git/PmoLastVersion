@@ -31,7 +31,7 @@
                             <th class="whitespace-nowrap px-3 py-2.5">โครงการ</th>
                             <th class="whitespace-nowrap px-3 py-2.5">กำหนดเสร็จ</th>
                             <th class="whitespace-nowrap px-3 py-2.5">สถานะ</th>
-                            <th class="w-40 min-w-[8rem] whitespace-nowrap px-3 py-2.5 pr-5">ความคืบหน้า</th>
+                            <th class="w-36 min-w-[7rem] whitespace-nowrap px-3 py-2.5 pr-5">ความคืบหน้า</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
@@ -41,11 +41,12 @@
                                     <a href="{{ route('cabinets.show', $cabinet) }}" class="font-bold tabular-nums text-ae-navy hover:underline">{{ $cabinet->mo_no ?: '-' }}</a>
                                 </td>
                                 <td class="min-w-[12rem] max-w-[18rem] px-3 py-3">
-                                    <span class="block font-medium text-slate-800">{{ $cabinet->cabinet_name }}</span>
+                                    {{-- a long name: three lines at most (all of it on hover) --}}
+                                    <span class="line-clamp-3 break-words font-medium text-slate-800" title="{{ $cabinet->cabinet_name }}">{{ $cabinet->cabinet_name }}</span>
                                     @php $what = collect([$cabinet->cabinet_type, $cabinet->size ? 'ขนาด '.$cabinet->size : null, $cabinet->quantity > 1 ? $cabinet->quantity.' ตู้' : null])->filter()->implode(' · '); @endphp
                                     @if ($what)<span class="block text-xs text-slate-500">{{ $what }}</span>@endif
                                 </td>
-                                <td class="min-w-[9rem] max-w-[14rem] px-3 py-3">
+                                <td class="min-w-[8rem] max-w-[11rem] px-3 py-3">
                                     <span class="block whitespace-nowrap text-slate-700">{{ $cabinet->project->project_no }}</span>
                                     <span class="block truncate text-xs text-slate-500" title="{{ $cabinet->project->project_name }}">{{ $cabinet->project->project_name }}</span>
                                 </td>

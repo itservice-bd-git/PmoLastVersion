@@ -114,7 +114,7 @@ class ProjectOverview
             'onHold' => $counts['on_hold'],
             'delayed' => $cabinets->filter(fn (Cabinet $c) => $c->is_overdue)->count(),   // Cabinet::is_overdue: due date passed, not completed
             // Mon-Fri from today to the due date (WorkingDaysCalculator - no holiday calendar yet)
-            'workingDaysLeft' => $project->due_date && ! $project->isLocked()
+            'workingDaysLeft' => $project->due_date && ! $project->isLocked() && ! $project->isDuePending()
                 ? ($project->due_date->lt($today) ? 0 : app(WorkingDaysCalculator::class)->countWorkingDays($today, $project->due_date))
                 : null,
         ];

@@ -260,9 +260,9 @@
                             <p class="font-semibold text-slate-800">ส่งถึง {{ $row['delivered'] }}</p>
                             <p class="text-slate-500">ผู้รับ {{ $row['receiver'] }}{{ $row['doc_no'] ? ' · ใบส่งของ '.$row['doc_no'] : '' }}</p>
                         @elseif ($row['pending'])
-                            {{-- รอวันใหม่ (ProjectDates): the old day struck out until PM sets the new one --}}
+                            {{-- รอฝ่ายขายแจ้งกำหนดส่ง (ProjectDates): the old day struck out until the new one comes --}}
                             <p class="text-slate-500 line-through">{{ $row['when'] }}</p>
-                            <p class="font-semibold text-indigo-800">รอ PM ยืนยันวันส่ง</p>
+                            <p class="font-semibold text-indigo-800">{{ \App\Models\Project::PENDING_LABEL }}</p>
                             <p class="text-slate-500">ห่อตู้ได้ · จัดรถเมื่อมีวันแล้ว</p>
                         @else
                             <p class="font-semibold {{ $row['late'] ? 'text-orange-700' : 'text-slate-800' }}">{!! $keep($row['when']) !!}</p>

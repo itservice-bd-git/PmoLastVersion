@@ -23,11 +23,11 @@ use Illuminate\Validation\ValidationException;
  * typed wrong and does not count. Both are kept (project_date_changes) and logged; a round tells the project's people in
  * charge and its followers.
  *
- * A project may also wait for its new due date ("pending", รอวันใหม่: the date is to move, the new one not known yet - from
- * sales, the customer…): it is not late anywhere meanwhile, the person who owes the answer and the PM are reminded on the
- * follow-up day (NotificationService::sendReminders), and the postponement that brings the date ends the wait and counts once.
- * A project's postponement or wait can take its FAT and delivery rounds still to come along (events: keep / shift by the same
- * days / a date of their own / wait too); each move is kept in that round's own history (EventDates).
+ * A project's dates may also be put off with no new ones yet ("pending", รอฝ่ายขายแจ้งกำหนดส่งอีกครั้ง): nothing is counted
+ * or chased meanwhile and it is not late anywhere; its FAT and delivery rounds still to come wait with it. When sales has
+ * the dates, the postponement that brings them gives the project AND every waiting round its new day, and counts once.
+ * A plain postponement can take the rounds still to come along too (events: keep / shift by the same days / a day of
+ * their own / wait); each move is kept in that round's own history (EventDates).
  */
 class ProjectDates
 {
@@ -68,22 +68,25 @@ class ProjectDates
             throw ValidationException::withMessages(['reason_id' => 'เลือกสาเหตุการเลื่อน']);
         }
 
-        // the wait this postponement ends (a project's own due date only)
-        $waited = $postpone && $subject instanceof Project && $subject->due_pending_at ? $subject->duePendingDays() : null;
+        // the wait this postponement ends (a project's own dates only): every round waiting with it gets its day now
+        $waited = $postpone && $subject instanceof Project && $subject->due_pending_at;
+        if ($waited) {
+            $this->assertWaitingRoundsDated($subject, $data['events'] ?? []);
+        }
         $note = trim((string) ($data['note'] ?? '')) ?: null;
         $moves = [];
         $change = DB::transaction(function () use ($subject, $project, $actor, $data, $postpone, $reason, $oldStart, $oldDue, $newStart, $newDue, $waited, $note, &$moves) {
             // the model's own auto log would say the same again without the reason: this change logs it once, below
             $subject::withoutEvents(fn () => $subject->forceFill(['start_date' => $newStart?->format('Y-m-d'), 'due_date' => $newDue?->format('Y-m-d')]
                 + ($subject instanceof Project ? ['updated_by' => $actor->id] : [])
-                + ($waited !== null ? self::NOT_PENDING : []))->save());
+                + ($waited ? self::NOT_PENDING : []))->save());
 
             $change = ProjectDateChange::create([
                 'project_id' => $project->id, 'cabinet_id' => $subject instanceof Cabinet ? $subject->id : null,
                 'kind' => $postpone ? ProjectDateChange::POSTPONE : ProjectDateChange::CORRECT,
                 'old_start_date' => $oldStart, 'new_start_date' => $newStart, 'old_due_date' => $oldDue, 'new_due_date' => $newDue,
                 'reason_id' => $reason?->id, 'reason_name' => $reason?->name,
-                'note' => $waited !== null ? trim(($note ? $note.' · ' : '').'รอวันใหม่มา '.$waited.' วัน') : $note,
+                'note' => $waited ? trim(($note ? $note.' · ' : '').'ได้วันจากฝ่ายขายแล้ว') : $note,
                 'changed_by' => $actor->id,
             ]);
             if ($postpone && $subject instanceof Project) {
@@ -105,41 +108,35 @@ class ProjectDates
     }
 
     /** What clears a project's wait. */
-    public const NOT_PENDING = ['due_pending_at' => null, 'due_pending_from' => null, 'due_pending_user_id' => null, 'due_pending_follow_up' => null];
+    public const NOT_PENDING = ['due_pending_at' => null];
 
     /**
-     * "รอวันใหม่": the due date stays as it is, the project waits for the new one (from whom, who owes it, when to ask
-     * again, why). Not a round: the postponement that brings the date is. Its rounds still to come may wait too.
+     * "รอฝ่ายขายแจ้งกำหนดส่งอีกครั้ง": the project's dates are put off with no new ones yet - nothing to fill in but why.
+     * Not counted, not chased, not late; every FAT and delivery round still to come waits with it. Not a round: the
+     * postponement that brings the dates is.
      *
-     * @param  array{from: string, user_id?: ?int, follow_up: string, reason_id: ?int, note: ?string, events?: array, notify?: bool}  $data
+     * @param  array{reason_id: ?int, note: ?string, notify?: bool}  $data
      */
     private function pending(Project $project, User $actor, array $data): ProjectDateChange
     {
         if (! $project->due_date) {
             throw ValidationException::withMessages(['kind' => 'โครงการยังไม่มีวันครบกำหนด · ใส่วันก่อน']);
         }
-        if (! array_key_exists($data['from'] ?? '', Project::PENDING_FROM)) {
-            throw ValidationException::withMessages(['from' => 'เลือกว่ารอวันจากใคร']);
-        }
-        $followUp = Carbon::parse($data['follow_up']);
-        if ($followUp->lt(today())) {
-            throw ValidationException::withMessages(['follow_up' => 'วันที่จะตามอีกครั้งต้องไม่ก่อนวันนี้']);
+        if ($project->due_pending_at) {
+            throw ValidationException::withMessages(['kind' => 'โครงการนี้รอฝ่ายขายแจ้งกำหนดส่งอยู่แล้ว']);
         }
         $reason = ProjectDateReason::where('is_active', true)->find($data['reason_id'] ?? null);
         if (! $reason) {
             throw ValidationException::withMessages(['reason_id' => 'เลือกสาเหตุ']);
         }
-        $who = ! empty($data['user_id']) ? User::where('is_active', true)->find($data['user_id']) : null;
         $note = trim((string) ($data['note'] ?? '')) ?: null;
 
         $moves = [];
-        $change = DB::transaction(function () use ($project, $actor, $data, $followUp, $reason, $who, $note, &$moves) {
-            Project::withoutEvents(fn () => $project->forceFill([
-                'due_pending_at' => $project->due_pending_at ?? now(),   // asked again: still waiting since the first time
-                'due_pending_from' => $data['from'], 'due_pending_user_id' => $who?->id,
-                'due_pending_follow_up' => $followUp->format('Y-m-d'), 'updated_by' => $actor->id,
-            ])->save());
-            $moves = $this->moveEvents($project, $actor, $data['events'] ?? [], 0, $reason, $note, waitOnly: true);
+        $change = DB::transaction(function () use ($project, $actor, $reason, $note, &$moves) {
+            Project::withoutEvents(fn () => $project->forceFill(['due_pending_at' => now(), 'updated_by' => $actor->id])->save());
+            // every round still to come waits too
+            $all = self::linkedEvents($project)->map(fn ($e) => ['type' => $e['type'], 'id' => $e['id'], 'action' => 'pending'])->all();
+            $moves = $this->moveEvents($project, $actor, $all, 0, $reason, $note, waitOnly: true);
 
             return ProjectDateChange::create([
                 'project_id' => $project->id, 'kind' => ProjectDateChange::PENDING,
@@ -149,9 +146,7 @@ class ProjectDates
             ]);
         });
 
-        $who = $project->duePendingUser;
-        $text = $project->duePendingLabel().($who ? ' ('.$who->name.')' : '').' · ตามอีกครั้ง '.$followUp->thaiDate()
-            .' · สาเหตุ: '.$reason->name.($note ? ' — '.$note : '');
+        $text = Project::PENDING_LABEL.'อีกครั้ง · '.'วันครบกำหนดเดิม '.$project->due_date->thaiDate().' · สาเหตุ: '.$reason->name.($note ? ' — '.$note : '');
         ActivityLog::record($project->id, $actor->id, $project, 'rescheduled', $text.$this->movesText($moves));
         PlanningBoard::touch();
         if ($data['notify'] ?? true) {
@@ -162,29 +157,34 @@ class ProjectDates
         return $change;
     }
 
-    /** The wait is over without a new date (the old one stands after all): logged, not a round. */
+    /** Ends a wait: the project and every waiting round keep their old days. Logged, not a round. */
     public function cancelPending(Project $project, User $actor): void
     {
         ProjectLock::assertOpen($project->id);
         if (! $project->due_pending_at) {
             return;
         }
-        $days = $project->duePendingDays();
-        Project::withoutEvents(fn () => $project->forceFill(self::NOT_PENDING + ['updated_by' => $actor->id])->save());
-        ActivityLog::record($project->id, $actor->id, $project, 'rescheduled', 'ยกเลิกการรอวันใหม่ (รอมา '.$days.' วัน) · วันครบกำหนดคง '.$project->due_date?->thaiDate());
+        DB::transaction(function () use ($project, $actor) {
+            Project::withoutEvents(fn () => $project->forceFill(self::NOT_PENDING + ['updated_by' => $actor->id])->save());
+            ProjectFat::where('project_id', $project->id)->whereNotNull('date_pending_at')->update(['date_pending_at' => null]);
+            ProjectDelivery::where('project_id', $project->id)->whereNotNull('date_pending_at')->update(['date_pending_at' => null]);
+        });
+        ActivityLog::record($project->id, $actor->id, $project, 'rescheduled', 'ยกเลิกการ'.Project::PENDING_LABEL.' · ใช้วันเดิมทั้งหมด (วันครบกำหนด '.$project->due_date?->thaiDate().')');
         PlanningBoard::touch();
     }
 
-    /** Not answered yet: ask again in a few days (the follow-up notice's "ตามอีก 3 วัน"). */
-    public function followUpLater(Project $project, User $actor, int $days = 3): void
+    /** The dates come in: every round waiting with the project needs its day (a day of its own, or the project's days). */
+    private function assertWaitingRoundsDated(Project $project, array $choices): void
     {
-        ProjectLock::assertOpen($project->id);
-        if (! $project->due_pending_at) {
-            return;
+        $given = collect($choices)->keyBy(fn ($c) => ($c['type'] ?? '').':'.($c['id'] ?? ''));
+        $missing = self::linkedEvents($project)->filter(fn ($e) => $e['pending'])->reject(function ($e) use ($given) {
+            $c = $given->get($e['type'].':'.$e['id']);
+
+            return $c && (($c['action'] ?? '') === 'shift' || (($c['action'] ?? '') === 'date' && ! empty($c['date'])));
+        });
+        if ($missing->isNotEmpty()) {
+            throw ValidationException::withMessages(['events' => 'ใส่วันใหม่ของ '.$missing->pluck('label')->implode(', ').' ด้วย']);
         }
-        $next = today()->addDays($days);
-        Project::withoutEvents(fn () => $project->forceFill(['due_pending_follow_up' => $next->format('Y-m-d')])->save());
-        ActivityLog::record($project->id, $actor->id, $project, 'rescheduled', 'ตามแล้ว ยังไม่ได้วันใหม่ · ตามอีกครั้ง '.$next->thaiDate());
     }
 
     /**
@@ -199,12 +199,12 @@ class ProjectDates
         $fats = ProjectFat::where('project_id', $project->id)->where('status', ProjectFat::SCHEDULED)->orderBy('round')->get()
             ->filter(fn (ProjectFat $f) => $f->date_pending_at || $f->fat_date->gt($today))
             ->map(fn (ProjectFat $f) => ['type' => EventDates::FAT, 'id' => $f->id, 'label' => 'FAT รอบ '.$f->round, 'when' => $f->when(),
-                'state' => $f->date_pending_at ? 'รอวันใหม่' : $f->statusLabel(), 'date' => $f->fat_date->format('Y-m-d'), 'pending' => (bool) $f->date_pending_at]);
+                'state' => $f->date_pending_at ? Project::PENDING_LABEL : $f->statusLabel(), 'date' => $f->fat_date->format('Y-m-d'), 'pending' => (bool) $f->date_pending_at]);
         $deliveries = ProjectDelivery::where('project_id', $project->id)
             ->whereIn('status', [ProjectDelivery::DRAFT, ProjectDelivery::WAITING, ProjectDelivery::REJECTED, ProjectDelivery::SCHEDULED])->orderBy('round')->get()
             ->filter(fn (ProjectDelivery $d) => $d->date_pending_at || $d->firstDay()->gt($today))
             ->map(fn (ProjectDelivery $d) => ['type' => EventDates::DELIVERY, 'id' => $d->id, 'label' => 'ส่งมอบ รอบ '.$d->round, 'when' => $d->when(),
-                'state' => $d->date_pending_at ? 'รอ PM ยืนยันวัน' : ProjectDelivery::statusName($d->status), 'date' => $d->firstDay()->format('Y-m-d'), 'pending' => (bool) $d->date_pending_at]);
+                'state' => $d->date_pending_at ? Project::PENDING_LABEL : ProjectDelivery::statusName($d->status), 'date' => $d->firstDay()->format('Y-m-d'), 'pending' => (bool) $d->date_pending_at]);
 
         return $fats->concat($deliveries)->values();
     }
@@ -233,7 +233,7 @@ class ProjectDates
                 if (! $e->date_pending_at) {
                     $e::withoutEvents(fn () => $e->forceFill(['date_pending_at' => now()])->save());
                 }
-                $moves[] = ['event' => $e, 'text' => $offered[$key]['label'].' รอวันใหม่ด้วย', 'pending' => true, 'before' => $when];
+                $moves[] = ['event' => $e, 'text' => $offered[$key]['label'].' รอด้วย', 'pending' => true, 'before' => $when];
 
                 continue;
             }
@@ -274,7 +274,7 @@ class ProjectDates
             }
             $scheduled = $d->status === ProjectDelivery::SCHEDULED;
             $this->notifications->deliveryForDepartment($d, $actor, $m['pending']
-                ? 'รอ PM ยืนยันวันส่ง · ยังไม่ต้องจัดรถ'
+                ? Project::PENDING_LABEL.' · ยังไม่ต้องจัดรถ'
                 : ($scheduled ? 'PM เลื่อนวันส่ง · ตรวจรถ / คนอีกครั้ง' : 'PM เลื่อนวันส่ง'), todo: $scheduled && ! $m['pending']);
         }
     }

@@ -178,9 +178,9 @@
                                     <td class="max-w-[10rem] px-4 py-3 text-slate-600"><span class="line-clamp-2" x-text="(t.info && t.info.jobType) || '-'"></span></td>
                                     <td class="whitespace-nowrap px-4 py-3">
                                         <div class="tabular-nums text-slate-700" x-text="dueFor(t) ? fmtBE(dueFor(t)) : '-'"></div>
-                                        {{-- รอวันใหม่: not late, waiting (as the projects list) --}}
+                                        {{-- รอฝ่ายขายแจ้งกำหนดส่ง: not late, no new date yet (as the projects list) --}}
                                         <template x-if="t.pending && !dept">
-                                            <span class="mt-0.5 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-[12px] font-semibold text-indigo-800" :title="'ตามอีกครั้ง ' + fmtBE(t.pending.followUp)" x-text="t.pending.label + ' · ' + t.pending.days + ' วัน'"></span>
+                                            <span class="mt-0.5 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-[12px] font-semibold text-indigo-800" x-text="t.pending.label"></span>
                                         </template>
                                         <template x-if="dueFor(t) && !isDone(t) && !(t.pending && !dept)">
                                             <span class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold" :class="dueChip(dueFor(t))[1]" x-text="dueChip(dueFor(t))[0]"></span>

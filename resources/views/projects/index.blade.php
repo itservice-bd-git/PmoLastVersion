@@ -114,8 +114,8 @@
                                 <td class="whitespace-nowrap px-3 py-3">
                                     <div class="tabular-nums text-slate-700">{{ optional($project->due_date)->thaiDate() ?? '-' }}</div>
                                     @if ($project->due_date && ! $done && $project->isDuePending())
-                                        {{-- รอวันใหม่ (ProjectDates): not late, waiting - from whom, how long, when to ask again --}}
-                                        <span class="mt-0.5 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-[12px] font-semibold text-indigo-800" title="ตามอีกครั้ง {{ $project->due_pending_follow_up?->thaiDate() }}">{{ $project->duePendingLabel() }} · {{ $project->duePendingDays() }} วัน</span>
+                                        {{-- รอฝ่ายขายแจ้งกำหนดส่ง (ProjectDates): put off with no new date yet - not late, nothing counted --}}
+                                        <span class="mt-0.5 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-[12px] font-semibold text-indigo-800">{{ $project->duePendingLabel() }}</span>
                                     @elseif ($project->due_date && ! $done)
                                         @php $days = $project->days_remaining; @endphp
                                         <span data-countdown class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold {{ $days < 0 ? 'bg-red-100 text-red-700' : ($days <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500') }}">

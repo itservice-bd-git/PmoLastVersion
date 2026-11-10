@@ -4,10 +4,6 @@
 
 /* 2026_11_10_000001_add_date_pending */
 alter table `projects` add `due_pending_at` timestamp null after `due_date`;
-alter table `projects` add `due_pending_from` varchar(20) null after `due_pending_at`;
-alter table `projects` add `due_pending_user_id` bigint unsigned null after `due_pending_from`;
-alter table `projects` add constraint `projects_due_pending_user_id_foreign` foreign key (`due_pending_user_id`) references `users` (`id`) on delete set null;
-alter table `projects` add `due_pending_follow_up` date null after `due_pending_user_id`;
 alter table `project_fats` add `date_pending_at` timestamp null after `fat_time`;
 alter table `project_deliveries` add `date_pending_at` timestamp null after `delivery_time`;
 INSERT INTO `migrations` (`migration`, `batch`) SELECT '2026_11_10_000001_add_date_pending', COALESCE(MAX(`batch`), 0) + 1 FROM `migrations`;

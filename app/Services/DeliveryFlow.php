@@ -75,8 +75,8 @@ class DeliveryFlow
      * delivery department is told to check they are free that day; a new way of sending takes them off (รอจัดรถ again).
      * Cabinets taken out lose their packing; once แจ้งเปิดบิล the cabinets stay as they are.
      */
-    /** A round waiting for PM's new day (ProjectDates, รอวันใหม่): packing may go on, the rest waits for the day. */
-    public const PENDING_TEXT = 'รอบนี้รอ PM ยืนยันวันส่ง · ห่อตู้ได้ แต่จัดรถ / แจ้งเปิดบิล / ออกรถได้เมื่อมีวันแล้ว';
+    /** A round waiting with its project for sales to give the new dates (ProjectDates): packing may go on, the rest waits for the day. */
+    public const PENDING_TEXT = 'รอบนี้รอฝ่ายขายแจ้งกำหนดส่ง · ห่อตู้ได้ แต่จัดรถ / แจ้งเปิดบิล / ออกรถได้เมื่อมีวันแล้ว';
 
     public function revise(ProjectDelivery $delivery, array $data, User $actor, bool $send = false, array $move = []): ProjectDelivery
     {
@@ -100,7 +100,7 @@ class DeliveryFlow
                 throw ValidationException::withMessages(['cabinet_ids' => 'รอบนี้แจ้งเปิดบิลแล้ว เปลี่ยนตู้ไม่ได้ · ให้แผนกจัดส่งย้อนขั้นก่อน']);
             }
 
-            $d->fill($data + ['date_pending_at' => null]);   // PM saving the round sets its day: no longer รอวันใหม่
+            $d->fill($data + ['date_pending_at' => null]);   // PM saving the round sets its day: no longer waiting
             $resent = $d->status === ProjectDelivery::REJECTED;
             $newMethod = $d->status === ProjectDelivery::SCHEDULED && $d->method !== $before['method'];
             if ($resent) {

@@ -34,7 +34,7 @@ class PmoNotice extends Notification
     ) {}
 
     /** Kinds that ask the person to do something: they stay under "ต้องทำ" with a "รับทราบ" button until acknowledged. */
-    public const TODO_KINDS = ['assigned', 'rejected', 'alert', 'mention', 'overdue', 'delivery_todo', 'delivery_rejected', 'date_pending'];   // delivery_*: DeliveryFlow
+    public const TODO_KINDS = ['assigned', 'rejected', 'alert', 'mention', 'overdue', 'delivery_todo', 'delivery_rejected'];   // delivery_*: DeliveryFlow
 
     /** "ต้องทำ" or "ความเคลื่อนไหว": a project's notice by what it holds, any other by its kind. */
     public static function isTodo(string $kind, array $parts = []): bool
@@ -76,7 +76,7 @@ class PmoNotice extends Notification
     /** Parts that make the project's notice urgent (pops the alert window): new work for you, overdue work, you were made in charge. */
     public static function urgentParts(array $parts): bool
     {
-        return (bool) array_intersect(array_keys($parts), ['assigned', 'overdue', 'owner', 'date_pending'])   // date_pending: รอวันใหม่ to chase
+        return (bool) array_intersect(array_keys($parts), ['assigned', 'overdue', 'owner'])
             || collect(array_keys($parts))->contains(fn ($k) => str_starts_with($k, 'rejected|'));   // work sent back: to hand out again
     }
 
@@ -99,7 +99,7 @@ class PmoNotice extends Notification
         $out = [];
         foreach (['owner', 'follow', 'assigned', 'date_pending', 'rescheduled', 'due_changed'] as $k) {
             if (! empty($parts[$k])) {
-                $out[] = ['owner' => 'คุณเป็นผู้รับผิดชอบ', 'follow' => 'คุณติดตามโครงการนี้', 'assigned' => "งานใหม่ {$parts[$k]} งาน", 'date_pending' => 'รอวันใหม่', 'rescheduled' => "เลื่อนวัน {$parts[$k]} ครั้ง", 'due_changed' => "เลื่อนวันส่ง {$parts[$k]} ครั้ง"][$k];
+                $out[] = ['owner' => 'คุณเป็นผู้รับผิดชอบ', 'follow' => 'คุณติดตามโครงการนี้', 'assigned' => "งานใหม่ {$parts[$k]} งาน", 'date_pending' => 'รอฝ่ายขายแจ้งกำหนดส่ง', 'rescheduled' => "เลื่อนวัน {$parts[$k]} ครั้ง", 'due_changed' => "เลื่อนวันส่ง {$parts[$k]} ครั้ง"][$k];
             }
         }
         foreach ($parts as $k => $n) {   // "ไม่รับงาน" first: it needs someone to act

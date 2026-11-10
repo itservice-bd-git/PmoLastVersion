@@ -31,12 +31,12 @@ class ProjectDateController extends Controller
         return $this->save($request, $cabinet, $dates);
     }
 
-    /** รอวันใหม่'s own buttons: "ยกเลิกการรอ" (the old date stands) and "ตามอีก 3 วัน" (asked, not answered yet). */
+    /** "ยกเลิกการรอ": the old dates stand after all (the project's and its waiting rounds'). */
     public function pending(Request $request, Project $project, ProjectDates $dates)
     {
-        $action = $request->validate(['action' => ['required', Rule::in(['cancel', 'later'])]])['action'];
-        $action === 'cancel' ? $dates->cancelPending($project, $request->user()) : $dates->followUpLater($project, $request->user());
-        $message = $action === 'cancel' ? 'ยกเลิกการรอวันใหม่แล้ว' : 'ตามอีกครั้ง '.today()->addDays(3)->thaiDate();
+        $request->validate(['action' => ['required', Rule::in(['cancel'])]]);
+        $dates->cancelPending($project, $request->user());
+        $message = 'ยกเลิกการรอแล้ว · ใช้วันเดิม';
 
         return $request->wantsJson() ? response()->json(['message' => $message]) : back()->with('success', $message);
     }
@@ -47,7 +47,7 @@ class ProjectDateController extends Controller
         $postpone = $kind === ProjectDateChange::POSTPONE;
         $pending = $kind === ProjectDateChange::PENDING;
         $data = $request->validate([
-            // รอวันใหม่: a project's own due date only
+            // รอฝ่ายขายแจ้งกำหนดส่งอีกครั้ง: a project's own dates only
             'kind' => ['required', Rule::in($subject instanceof Project ? [ProjectDateChange::POSTPONE, ProjectDateChange::PENDING, ProjectDateChange::CORRECT] : [ProjectDateChange::POSTPONE, ProjectDateChange::CORRECT])],
             'due_date' => [$postpone ? 'required' : 'nullable', 'date'],
             'change_start' => ['nullable', 'boolean'],
@@ -55,9 +55,6 @@ class ProjectDateController extends Controller
             'reason_id' => [$postpone || $pending ? 'required' : 'nullable', 'integer'],
             'note' => [$postpone || $pending ? 'required' : 'nullable', 'string', 'max:1000'],
             'notify' => ['nullable', 'boolean'],
-            'from' => [$pending ? 'required' : 'nullable', Rule::in(array_keys(Project::PENDING_FROM))],
-            'user_id' => ['nullable', 'integer'],
-            'follow_up' => [$pending ? 'required' : 'nullable', 'date'],
             // the FAT / delivery rounds that go along (ProjectDates::linkedEvents)
             'events' => ['nullable', 'array', 'max:50'],
             'events.*.type' => ['required', Rule::in(['fat', 'delivery'])],
@@ -66,7 +63,6 @@ class ProjectDateController extends Controller
             'events.*.date' => ['nullable', 'date'],
         ], [
             'due_date.required' => 'ใส่วันครบกำหนดใหม่', 'reason_id.required' => 'เลือกสาเหตุ', 'note.required' => 'ใส่รายละเอียด',
-            'from.required' => 'เลือกว่ารอวันจากใคร', 'follow_up.required' => 'ใส่วันที่จะตามอีกครั้ง',
         ]);
         if (! $request->boolean('change_start') || $pending) {   // the start date stays unless "เปลี่ยนวันเริ่มด้วย" is ticked
             unset($data['start_date']);
@@ -77,7 +73,7 @@ class ProjectDateController extends Controller
 
         $message = match ($change->kind) {
             ProjectDateChange::POSTPONE => 'บันทึกการเลื่อนวันครั้งที่ '.$dates->summary($subject)['rounds'].' แล้ว',
-            ProjectDateChange::PENDING => 'บันทึกการรอวันใหม่แล้ว · ไม่ขึ้นเลยกำหนดระหว่างรอ',
+            ProjectDateChange::PENDING => 'บันทึกแล้ว · '.Project::PENDING_LABEL.'อีกครั้ง',
             default => 'แก้ไขวันที่แล้ว (ไม่นับเป็นการเลื่อน)',
         };
 

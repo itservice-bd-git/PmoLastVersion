@@ -78,8 +78,8 @@
                             <span class="st-pill rounded-full px-2.5 py-0.5 text-xs font-bold" style="--c: {{ $d->stateColor() }}">{{ $d->stateLabel() }}{{ $d->status === 'departed' && $d->departed_at ? ' '.$d->departed_at->format('H:i') : '' }}</span>
                             @if ($d->status === 'delivered')<span class="text-xs text-slate-500">นัด {{ $d->when() }}</span>@endif
                             @if ($d->date_pending_at)
-                                {{-- รอวันใหม่ (ProjectDates): the day shown is the old one; "แก้" with the new day ends the wait --}}
-                                <span class="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-bold text-indigo-800">รอวันใหม่ · ใส่วันที่ "แก้"</span>
+                                {{-- รอฝ่ายขายแจ้งกำหนดส่ง (ProjectDates): the day shown is the old one; the new one comes with the project's --}}
+                                <span class="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-bold text-indigo-800">{{ \App\Models\Project::PENDING_LABEL }}</span>
                             @elseif ($d->isOverdue())<span class="text-xs font-semibold text-orange-700">{{ $d->isOpen() ? 'เลยวันส่งแล้ว · ยังไม่ได้จัดรถ' : 'เลยวันนัดแล้ว' }}</span>@endif
                             @php $moves = $dlMoves->get($d->id, collect()); $count = $moves->whereNotNull('n')->count(); @endphp
                             @if ($count)<span class="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-800">เลื่อน {{ $count }} ครั้ง</span>@endif

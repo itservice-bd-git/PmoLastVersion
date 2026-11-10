@@ -489,46 +489,19 @@ class NotificationService
     }
 
     /**
-     * "รอวันใหม่" begun: the person who owes the new date and the project's people in charge (not the one who pressed it).
-     * $text is the line the activity log keeps ("รอวันใหม่จากเซล (…) · ตามอีกครั้ง … · สาเหตุ …").
+     * รอฝ่ายขายแจ้งกำหนดส่งอีกครั้ง begun: the project's people in charge and its followers (not the one who pressed it), as a
+     * postponement is told. Not a ต้องทำ: nothing to chase until sales has the dates. $text is the activity log's line.
      */
     public function projectDatePending(Project $project, User $actor, string $text): int
     {
         $people = $this->peopleInCharge($project, $actor)->pluck('id')
-            ->when($project->due_pending_user_id && $project->due_pending_user_id !== $actor->id, fn ($ids) => $ids->push($project->due_pending_user_id))->unique();
+            ->merge($project->followers()->pluck('users.id'))->unique()->reject(fn ($id) => $id === $actor->id);
 
-        return $this->send(User::whereIn('id', $people)->where('is_active', true)->get(), new PmoNotice(
-            'date_pending', "รอวันใหม่ · {$project->project_no}", $text, route('projects.show', $project),
+        return $this->send(User::whereIn('id', $people)->where('is_active', true)->get()->filter(fn (User $u) => \App\Services\WorkScope::canSeeProject($project, $u)), new PmoNotice(
+            'date_pending', Project::PENDING_LABEL." · {$project->project_no}", $text, route('projects.show', $project),
             projectId: $project->id, group: "project:{$project->id}", parts: ['date_pending' => 1],
             projectLabel: "{$project->project_no} · {$project->project_name}",
         ));
-    }
-
-    /**
-     * The daily follow-up of a project waiting for its new due date (ProjectDates): on and after the day set, the person
-     * who owes the answer and the PM get a "ต้องทำ" notice, once a day, until the date comes or the wait is called off.
-     */
-    private function pendingReminders(\Carbon\Carbon $today): int
-    {
-        $sent = 0;
-        $projects = Project::whereNotNull('due_pending_at')->whereNotIn('status', Project::LOCKED_STATUSES)
-            ->whereDate('due_pending_follow_up', '<=', $today)->with('duePendingUser')->get();
-        foreach ($projects as $project) {
-            $people = $this->peopleInCharge($project)->pluck('id')->when($project->due_pending_user_id, fn ($ids) => $ids->push($project->due_pending_user_id))->unique();
-            $sent += $this->send(User::whereIn('id', $people)->where('is_active', true)->get(), new PmoNotice(
-                'date_pending',
-                "ยังไม่ได้วันใหม่ · {$project->project_no}",
-                $project->duePendingLabel().($project->duePendingUser ? ' ('.$project->duePendingUser->name.')' : '').' มา '.$project->duePendingDays().' วัน · วันครบกำหนดเดิม '.$project->due_date?->thaiDate(),
-                route('projects.show', $project),
-                'date_pending:'.$project->id.':'.$today->toDateString(),
-                projectId: $project->id,
-                group: "project:{$project->id}",
-                parts: ['date_pending' => 1],
-                projectLabel: "{$project->project_no} · {$project->project_name}",
-            ), dedupe: true);
-        }
-
-        return $sent;
     }
 
     /**
@@ -704,7 +677,6 @@ class NotificationService
         }
 
         $sent += $this->waitingReminders($today);
-        $sent += $this->pendingReminders($today);   // รอวันใหม่ past its follow-up day
 
         // Settings > การส่งต่องาน: what the department passing work on said would arrive today / is late
         $sent += app(HandoffService::class)->reminders($this, $today);

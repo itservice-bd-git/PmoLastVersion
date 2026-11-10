@@ -16,21 +16,18 @@ export default function pmoProjectDates(f, due, first) {
             for (const d = new Date(a); d < b; d.setDate(d.getDate() + 1)) { if (d.getDay() % 6 !== 0) n++; }
             return n;
         },
-        // a round's choice in the mode open: its own field per mode, so switching modes keeps both
-        action(e) { return this.f.kind === 'pending' ? e.wait : e.post; },
-        // where a round lands on the postponement ('' = it waits / stays waiting)
+        // a round's choice: on รอฝ่ายขายแจ้งกำหนดส่ง every round waits; on a postponement a waiting round takes a day of its own
+        action(e) { return this.f.kind === 'pending' ? 'pending' : (e.pending ? 'date' : e.post); },
+        // where a round lands on the postponement
         lands(e) {
-            const a = e.post;
-            if (a === 'pending' || (a === 'keep' && e.pending)) return '';
-            if (a === 'shift') { const n = this.shift(); if (n === null || e.pending && !e.date) return e.date; const d = day(e.date); d.setDate(d.getDate() + n); return ymd(d); }
-            if (a === 'date') return e.on || '';
+            if (e.pending || e.post === 'date') return e.on || '';
+            if (e.post === 'shift') { const n = this.shift(); if (n === null) return e.date; const d = day(e.date); d.setDate(d.getDate() + n); return ymd(d); }
             return e.date;
         },
-        landsText(e) { const d = this.lands(e); return d ? thai(d) : 'รอวันใหม่'; },
-        moved(e) { return this.f.kind === 'postpone' && this.lands(e) && this.lands(e) !== e.date; },
+        landsText(e) { const d = this.lands(e); return d ? thai(d) : ''; },
+        moved(e) { return this.f.kind === 'postpone' && !!this.lands(e) && this.lands(e) !== e.date; },
         // said, never refused: a round left after the new due date
-        late(e) { return this.f.kind === 'postpone' && this.f.due && this.lands(e) && this.lands(e) > this.f.due; },
+        late(e) { return this.f.kind === 'postpone' && !!this.f.due && !!this.lands(e) && this.lands(e) > this.f.due; },
         warnings() { return this.f.kind === 'postpone' ? this.f.events.filter((e) => this.late(e)).map((e) => e.label + ' (' + thai(this.lands(e)) + ')') : []; },
-        followDays() { const n = this.f.follow ? between(ymd(new Date()), this.f.follow) : null; return n === null ? '' : (n <= 0 ? 'วันนี้' : 'อีก ' + n + ' วัน'); },
     };
 }

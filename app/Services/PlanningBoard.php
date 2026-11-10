@@ -149,7 +149,7 @@ class PlanningBoard
             ->whereHas('cabinetTask.cabinet', fn ($c) => $c
                 ->when($projectIds !== null, fn ($c) => $c->whereIn('project_id', $projectIds))
                 ->whereHas('project', $onBoard))
-            ->with('cabinetTask.cabinet.project.boardStatus', 'cabinetTask.cabinet.project.boardLabels', 'cabinetTask.cabinet.project.assignees:id', 'cabinetTask.cabinet.project.followers:id', 'cabinetTask.cabinet.project.latestFat', 'cabinetTask.cabinet.project.duePendingUser:id,name', 'cabinetTask.cabinet.boardStatus', 'checklists')
+            ->with('cabinetTask.cabinet.project.boardStatus', 'cabinetTask.cabinet.project.boardLabels', 'cabinetTask.cabinet.project.assignees:id', 'cabinetTask.cabinet.project.followers:id', 'cabinetTask.cabinet.project.latestFat', 'cabinetTask.cabinet.boardStatus', 'checklists')
             ->orderBy('id')
             ->get();
 
@@ -164,7 +164,7 @@ class PlanningBoard
             ->when(! $builder, fn ($q) => $q->whereHas('assignees', fn ($a) => $a->whereKey($user->id)))
             ->when($projectIds !== null, fn ($q) => $q->whereIn('id', $projectIds))
             ->tap($onBoard)
-            ->with('boardStatus', 'boardLabels', 'assignees:id', 'followers:id', 'latestFat', 'duePendingUser:id,name')->orderBy('id')->get();
+            ->with('boardStatus', 'boardLabels', 'assignees:id', 'followers:id', 'latestFat')->orderBy('id')->get();
 
         $ids = $byProject->keys()->merge($empty->pluck('id'));
         $comments = $this->comments($ids, $user);
@@ -458,9 +458,8 @@ class PlanningBoard
                 'jobTypeId' => $project->job_type_id, 'jobType' => (string) ($this->jobTypes->get($project->job_type_id) ?? ''), 'pmoStatus' => $project->status,
                 'production' => (int) round((float) ($this->production->get($project->id)?->pct ?? 0)), 'cabinetCount' => (int) ($this->production->get($project->id)?->n ?? 0),
             ],
-            // รอวันใหม่ (ProjectDates): never late meanwhile; the chip says from whom and for how long
-            'pending' => $project->isDuePending() ? ['label' => $project->duePendingLabel(), 'days' => $project->duePendingDays(),
-                'followUp' => $project->due_pending_follow_up?->format('Y-m-d'), 'who' => (string) $project->duePendingUser?->name] : null,
+            // รอฝ่ายขายแจ้งกำหนดส่ง (ProjectDates): put off with no new date yet - never late meanwhile
+            'pending' => $project->isDuePending() ? ['label' => $project->duePendingLabel()] : null,
             // what is still missing, for "ข้อมูลที่ยังขาด" (and the warning dot on the bar)
             'warnings' => array_filter([
                 'undated' => $rows->filter(fn ($s) => ! self::ymd($s, 'due_date') && ! $s->isDone())->count(),
@@ -519,7 +518,7 @@ class PlanningBoard
             'car' => $car, 'carFull' => $d->method === ProjectDelivery::COMPANY ? $d->transport() : $car, 'driver' => (string) $d->vehicles->first()?->driver_name,
             'crew' => $d->crew_size ?: count($d->people()), 'people' => $d->peopleText(),
             'dep' => $d->departed_at?->format('H:i'), 'at' => $d->delivered_at?->format('Y-m-d H:i'),
-            'pending' => (bool) $d->date_pending_at,   // รอวันใหม่: the day shown is the old one
+            'pending' => (bool) $d->date_pending_at,   // รอฝ่ายขายแจ้งกำหนดส่ง: the day shown is the old one
         ];
     }
 
@@ -531,7 +530,7 @@ class PlanningBoard
         return $f ? [
             'round' => $f->round, 'date' => $f->fat_date->format('Y-m-d'), 'end' => $f->lastDay()->format('Y-m-d'), 'time' => (string) $f->fat_time, 'status' => $f->status,
             'note' => (string) $f->note, 'cabinets' => $f->cabinet_ids ? array_map(fn ($id) => 'c'.$id, $f->cabinet_ids) : null,
-            'pending' => (bool) $f->date_pending_at,   // รอวันใหม่: the day shown is the old one
+            'pending' => (bool) $f->date_pending_at,   // รอฝ่ายขายแจ้งกำหนดส่ง: the day shown is the old one
         ] : null;
     }
 

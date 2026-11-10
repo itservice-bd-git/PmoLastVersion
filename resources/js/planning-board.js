@@ -344,7 +344,8 @@ export default function registerPlanningBoard() {
             fatState(t) { return t.fat.status !== 'scheduled' ? t.fat.status : this.fatLate(t) ? 'late' : 'scheduled'; },
             fatColor(t) { return this.evState('fat', this.fatState(t)).color; },
             fatTag() { return 'st-tag shrink-0 rounded px-1 text-[11px] font-extrabold tracking-wide'; },
-            fatStatus(t) { return this.evState('fat', t.fat.status).name; },
+            // a round waiting with its project for sales to give the dates (ProjectDates): said instead of its state
+            fatStatus(t) { return t.fat.pending ? 'รอฝ่ายขายแจ้งกำหนดส่ง' : this.evState('fat', t.fat.status).name; },
             fatPill() { return 'st-pill'; },
             fatChip(t) { return 'st-chip flex h-6 w-full min-w-0 items-center gap-1 rounded-md border pl-0.5 pr-1.5 text-left text-[12px] font-semibold' + (t.fat.status === 'failed' ? ' line-through' : ''); },
             // "29/10", "29–31/10", "30/10–02/11"
@@ -353,7 +354,7 @@ export default function registerPlanningBoard() {
                 return f.end && f.end !== f.date ? (m1 === m2 ? d1 + '–' + d2 + '/' + m2 : d1 + '/' + m1 + '–' + d2 + '/' + m2) : d1 + '/' + m1;
             },
             // the tab on every FAT line (month and timeline alike): the line sits on its days, so how many and the time
-            fatLabel(f) { return 'FAT' + (f.end && f.end !== f.date ? ' ' + (diffDays(f.end, f.date) + 1) + ' วัน' : '') + (f.time ? ' · ' + f.time : ''); },
+            fatLabel(f) { return f.pending ? 'FAT · รอกำหนดส่ง' : 'FAT' + (f.end && f.end !== f.date ? ' ' + (diffDays(f.end, f.date) + 1) + ' วัน' : '') + (f.time ? ' · ' + f.time : ''); },
             fatBandCls() { return 'fat-band'; },
             // the FAT days as a striped band over a bar of the month (a cabinet's bar only when that cabinet is in the round)
             fatBand(b) {
@@ -450,7 +451,7 @@ export default function registerPlanningBoard() {
             // wait = no vehicle on it yet (ร่าง / รอจัดรถ / ไม่รับงาน): drawn dashed on PM's day
             delKey(d) { return d.status !== 'scheduled' ? d.status : ({ company: 'booked', external: 'external', pickup: 'pickup' }[d.method] || 'booked'); },
             delColor(d) { return this.evState('delivery', this.delKey(d)).color; },
-            delState(d) { return this.evState('delivery', this.delKey(d)).name + (d.status === 'departed' && d.dep ? ' ' + d.dep : ''); },
+            delState(d) { return d.pending ? 'รอฝ่ายขายแจ้งกำหนดส่ง' : this.evState('delivery', this.delKey(d)).name + (d.status === 'departed' && d.dep ? ' ' + d.dep : ''); },
             delCls() { return 'st-pill'; },
             delWhen(d) { return d.status === 'delivered' && d.at ? this.fmtShort(d.at.slice(0, 10)) + ' · ถึง ' + d.at.slice(11) : this.delRange(d) + (d.time ? ' · ' + d.time : ''); },
             // the four steps after the vehicles (ห่อ n/m → แจ้งเปิดบิล → ออกจากโรงงาน → ส่งถึง): [{ label, fill %, now, done }]
@@ -471,9 +472,10 @@ export default function registerPlanningBoard() {
                 const d = this.dels(t, c)[0];
                 const packed = d && d.status !== 'delivered' && (d.packed || []).includes(c.id) ? ' · ห่อแล้ว' : '';
                 return d ? { cls: d.wait ? 'dl-chip st-chip dl-need' : d.status === 'delivered' ? 'dl-chip st-chip' : 'dl-chip', style: d.wait || d.status === 'delivered' ? '--c:' + this.delColor(d) : '',
-                    text: d.wait ? this.delState(d) + ' ' + this.fatRange(d) + packed : (d.status === 'delivered' ? 'ส่ง ' : 'นัดส่ง ') + (d.status === 'delivered' && d.at ? this.fmtShort(d.at.slice(0, 10)) : this.fatRange(d)) + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car + packed } : null;
+                    text: d.pending ? 'รอกำหนดส่ง' + packed : d.wait ? this.delState(d) + ' ' + this.fatRange(d) + packed : (d.status === 'delivered' ? 'ส่ง ' : 'นัดส่ง ') + (d.status === 'delivered' && d.at ? this.fmtShort(d.at.slice(0, 10)) : this.fatRange(d)) + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car + packed } : null;
             },
             delLabel(d) {
+                if (d.pending) return 'ส่ง · รอกำหนดส่ง';   // waiting for sales: the day drawn is the old one
                 if (d.status === 'delivered') return this.evState('delivery', 'delivered').name + ' ' + this.delCabs(d);
                 const days = d.end && d.end !== d.date ? ' ' + (diffDays(d.end, d.date) + 1) + ' วัน' : '';
                 if (d.wait) return 'ส่ง' + days + (d.time ? ' ' + d.time : '') + ' · ' + this.delState(d);
@@ -529,7 +531,7 @@ export default function registerPlanningBoard() {
             evLegend() { return Object.values(this.evs[this.mode === 'fat' ? 'fat' : 'delivery'] || {}); },
             evHead(e) {
                 if (e.kind === 'fat') return 'FAT' + (e.time ? ' ' + e.time : '') + (e.to !== e.from ? ' · ' + this.fatRange(e.f) + ' (' + (diffDays(e.to, e.from) + 1) + ' วัน)' : '');
-                if (e.d.wait) return this.delState(e.d) + (e.time ? ' · ' + e.time : '') + (e.to !== e.from ? ' · ' + this.delRange(e.d) : '');
+                if (e.d.wait || e.d.pending) return this.delState(e.d) + (e.time ? ' · ' + e.time : '') + (e.to !== e.from ? ' · ' + this.delRange(e.d) : '');
                 return e.d.status === 'delivered' ? this.evState('delivery', 'delivered').name + (e.d.at ? ' ' + e.d.at.slice(11) : '') : 'ส่ง' + (e.time ? ' ' + e.time : '') + (e.to !== e.from ? ' · ' + this.delRange(e.d) : '');
             },
             evMeta(e) {

@@ -76,6 +76,8 @@
                                 <span class="text-slate-400">→</span><span class="font-bold text-slate-600">จบ</span>
                                 <span class="relative"><input type="text" placeholder="dd/mm/yyyy" x-init="dateField($el, () => cur && cur.date, (v) => v && editProject(cur, { date: v }), canEdit, 'w-[8.75rem]')"><svg class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path stroke-linecap="round" d="M3 10h18M8 3v4m8-4v4"/></svg></span>
                             </div>
+                            {{-- รอฝ่ายขายแจ้งกำหนดส่ง (ProjectDates): the dates above are the old ones until sales gives the new --}}
+                            <p x-show="cur.pending" class="w-fit rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-800" x-text="cur.pending ? cur.pending.label + ' · วันด้านบนเป็นวันเดิม' : ''"></p>
                             {{-- เลื่อนมาแล้วกี่ครั้ง (ProjectDates): click for each round; "เลื่อน / แก้วัน" opens หน้าโครงการ's own window (openDates) --}}
                             <div x-show="cur.reschedule || canMoveDates(cur)" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                                 <template x-if="cur.reschedule">

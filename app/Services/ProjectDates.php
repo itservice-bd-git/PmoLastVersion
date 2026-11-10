@@ -164,6 +164,7 @@ class ProjectDates
         if (! $project->due_pending_at) {
             return;
         }
+        $rounds = ProjectDelivery::where('project_id', $project->id)->whereNotNull('date_pending_at')->get();
         DB::transaction(function () use ($project, $actor) {
             Project::withoutEvents(fn () => $project->forceFill(self::NOT_PENDING + ['updated_by' => $actor->id])->save());
             ProjectFat::where('project_id', $project->id)->whereNotNull('date_pending_at')->update(['date_pending_at' => null]);
@@ -171,6 +172,10 @@ class ProjectDates
         });
         ActivityLog::record($project->id, $actor->id, $project, 'rescheduled', 'ยกเลิกการ'.Project::PENDING_LABEL.' · ใช้วันเดิมทั้งหมด (วันครบกำหนด '.$project->due_date?->thaiDate().')');
         PlanningBoard::touch();
+        // the delivery department: its rounds are work again, on their old days
+        foreach ($rounds->reject(fn (ProjectDelivery $d) => $d->status === ProjectDelivery::DRAFT) as $d) {
+            $this->notifications->deliveryForDepartment($d->refresh(), $actor, 'ใช้วันส่งเดิม '.$d->when().' · จัดรถได้แล้ว', todo: $d->status === ProjectDelivery::WAITING);
+        }
     }
 
     /** The dates come in: every round waiting with the project needs its day (a day of its own, or the project's days). */

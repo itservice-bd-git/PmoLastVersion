@@ -193,6 +193,8 @@
         <nav id="dl-tabs" class="flex min-w-0 basis-full gap-1 sm:basis-auto sm:flex-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 text-sm" aria-label="ขั้นงาน">
             @foreach (\App\Http\Controllers\DeliveryController::TABS as $key => $label)
                 @php $n = $tabs[$key]->count(); @endphp
+                {{-- รอกำหนดส่ง: only while some round waits for sales to give its day (not work yet, so no amber count) --}}
+                @continue($key === 'pending' && ! $n && $tab !== 'pending')
                 <a href="{{ route('deliveries.index', ['tab' => $key]) }}" @if ($tab === $key) aria-current="page" @endif
                    class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium {{ $tab === $key ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100' }}">
                     {{ $label }}
@@ -318,7 +320,7 @@
             @empty
                 <p class="px-4 py-10 text-center text-sm text-slate-500">
                     {{ ['waiting' => 'ไม่มีรอบที่รอจัดรถ', 'today' => 'วันนี้ไม่มีรอบส่ง', 'scheduled' => 'ยังไม่มีรอบที่จัดรถแล้ว', 'departed' => 'ไม่มีรถที่ออกจากโรงงานอยู่',
-                        'delivered' => 'ยังไม่มีรอบที่ส่งถึงใน 30 วันนี้', 'rejected' => 'ไม่มีรอบที่ส่งกลับให้ PM'][$tab] }}
+                        'delivered' => 'ยังไม่มีรอบที่ส่งถึงใน 30 วันนี้', 'rejected' => 'ไม่มีรอบที่ส่งกลับให้ PM', 'pending' => 'ไม่มีรอบที่รอฝ่ายขายแจ้งกำหนดส่ง'][$tab] }}
                 </p>
             @endforelse
         </section>

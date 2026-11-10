@@ -17,7 +17,7 @@ use Illuminate\Support\Collection;
  */
 class DeliveryController extends Controller
 {
-    public const TABS = ['waiting' => 'รอจัดรถ', 'today' => 'วันนี้', 'scheduled' => 'จัดรถแล้ว', 'departed' => 'ออกจากโรงงาน', 'delivered' => 'ส่งถึงแล้ว', 'rejected' => 'ไม่รับงาน'];
+    public const TABS = ['waiting' => 'รอจัดรถ', 'today' => 'วันนี้', 'scheduled' => 'จัดรถแล้ว', 'departed' => 'ออกจากโรงงาน', 'delivered' => 'ส่งถึงแล้ว', 'rejected' => 'ไม่รับงาน', 'pending' => 'รอกำหนดส่ง'];
 
     /** how far back "ส่งถึงแล้ว" lists */
     private const DELIVERED_DAYS = 30;
@@ -32,19 +32,23 @@ class DeliveryController extends Controller
             ->where(fn ($q) => $q->where('status', '!=', ProjectDelivery::DELIVERED)->orWhere('delivered_at', '>=', $today->copy()->subDays(self::DELIVERED_DAYS)))
             ->get();
         $day = fn ($d) => $d->delivery_date->format('Ymd').($d->delivery_time ?: '99');
+        // a round waiting with its project for sales to give the dates (ProjectDates) is not work yet: its own tab only
+        $pending = $all->filter(fn ($d) => $d->date_pending_at);
+        $live = $all->reject(fn ($d) => $d->date_pending_at);
         $tabs = [
-            'waiting' => $all->where('status', ProjectDelivery::WAITING)->sortBy($day),
+            'waiting' => $live->where('status', ProjectDelivery::WAITING)->sortBy($day),
             // its days include today, or it is past them and not there yet
-            'today' => $all->filter(fn ($d) => in_array($d->status, [ProjectDelivery::WAITING, ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true) && $d->delivery_date->lte($today))->sortBy($day),
-            'scheduled' => $all->where('status', ProjectDelivery::SCHEDULED)->sortBy($day),
+            'today' => $live->filter(fn ($d) => in_array($d->status, [ProjectDelivery::WAITING, ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true) && $d->delivery_date->lte($today))->sortBy($day),
+            'scheduled' => $live->where('status', ProjectDelivery::SCHEDULED)->sortBy($day),
             'departed' => $all->where('status', ProjectDelivery::DEPARTED)->sortBy($day),
             'delivered' => $all->where('status', ProjectDelivery::DELIVERED)->sortByDesc('delivered_at'),
-            'rejected' => $all->where('status', ProjectDelivery::REJECTED)->sortByDesc('rejected_at'),
+            'rejected' => $live->where('status', ProjectDelivery::REJECTED)->sortByDesc('rejected_at'),
+            'pending' => $pending->sortBy($day),
         ];
         $round = $request->integer('round');
         $tab = $request->input('tab');
         if (! isset($tabs[$tab])) {   // a notice's round opens on its own tab; else the first tab with work in it
-            $tab = $round && ($d = $all->firstWhere('id', $round)) ? ($tabs['today']->contains('id', $d->id) ? 'today' : $d->status)
+            $tab = $round && ($d = $all->firstWhere('id', $round)) ? ($d->date_pending_at ? 'pending' : ($tabs['today']->contains('id', $d->id) ? 'today' : $d->status))
                 : collect(['today', 'waiting', 'scheduled'])->first(fn ($k) => $tabs[$k]->isNotEmpty(), 'waiting');
         }
         $vehicles = ProjectDeliveryController::vehicles($all->flatMap(fn ($d) => $d->vehicles->pluck('vehicle_id'))->filter()->unique()->values()->all());

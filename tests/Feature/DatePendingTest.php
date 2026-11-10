@@ -151,10 +151,26 @@ class DatePendingTest extends TestCase
         $this->assertSame('PM เลื่อนวันส่ง', $this->clerk->notifications()->latest()->first()->data['title']);
     }
 
+    public function test_the_delivery_department_sees_a_waiting_round_on_its_own_tab_not_as_work(): void
+    {
+        $tab = fn (string $t) => collect($this->actingAs($this->clerk)->get(route('deliveries.index', ['tab' => $t]))->assertOk()->viewData('rows'))->pluck('id')->all();
+        $this->assertSame([$this->round->id], $tab('waiting'));
+        $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertDontSee('รอกำหนดส่ง', false);   // the tab shows only when used
+
+        $this->wait();
+        $this->assertSame([], $tab('waiting'), 'not work yet');
+        $this->assertSame([$this->round->id], $tab('pending'));
+        $this->actingAs($this->clerk)->get(route('deliveries.index', ['round' => $this->round->id]))->assertOk()->assertViewHas('tab', 'pending');
+
+        // the project's people see the wait on Planning's FAT and delivery too
+        $this->actingAs($this->pm)->get(route('projects.index'))->assertSee('รอกำหนดส่ง');
+    }
+
     public function test_calling_the_wait_off_keeps_every_old_date(): void
     {
         $this->wait();
         $this->actingAs($this->pm)->post(route('projects.dates.pending', $this->project), ['action' => 'cancel'])->assertSessionHas('success', 'ยกเลิกการรอแล้ว · ใช้วันเดิม');
+        $this->assertContains('ใช้วันส่งเดิม 24–25/11/2569 · จัดรถได้แล้ว', $this->clerk->notifications()->get()->pluck('data.title')->all(), 'the delivery department: work again');
         $this->assertFalse($this->project->fresh()->isDuePending());
         $this->assertNull($this->fat->fresh()->date_pending_at);
         $this->assertNull($this->round->fresh()->date_pending_at);

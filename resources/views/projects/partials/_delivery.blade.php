@@ -205,9 +205,6 @@
 
       </div>
     </div>
-        </div>
-      </div>
-    </template>
   </div>
 
     @if ($canDeliver)

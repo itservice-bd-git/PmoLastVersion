@@ -700,10 +700,21 @@ export default function registerPlanningBoard() {
             dash() {
                 const list = this.visible(), today = this.today;
                 const doneOf = (t) => this.doneFor(t), dueOf = (t) => this.dueFor(t);
+                // as the projects list (ProjectController@index): a Completed / Cancelled project is never late, whatever
+                // its Planning status says, and one with no due date of its own is not late either (its date here is a
+                // stand-in: its latest Sub Task's, or the day it was made)
+                const locked = (t) => ['completed', 'cancelled'].includes(t.info && t.info.pmoStatus);
+                const undated = (t) => !this.dept && !!(t.warnings && t.warnings.noDue);
+                const late = (t) => !locked(t) && !undated(t) && !!this.overdueFor(t);
+                // late first, then the nearest due date, then the order made; no due date, then Completed / Cancelled, last
+                const rank = (t) => (locked(t) ? 3 : late(t) ? 0 : undated(t) ? 2 : 1);
+                const order = (a, b) => (rank(a) - rank(b))
+                    || (rank(a) === 2 ? 0 : String(dueOf(a)).localeCompare(String(dueOf(b))))
+                    || (Number(String(a.id).slice(1)) - Number(String(b.id).slice(1)));
                 const items = list.flatMap((t) => this.items(t, this.dept || null));
                 const doneItems = items.filter((i) => i.done).length;
                 const bucket = [{ label: 'เลยกำหนด', n: 0, late: true }, { label: 'ภายใน 7 วัน', n: 0 }, { label: '8–14 วัน', n: 0 }, { label: '15–21 วัน', n: 0 }, { label: '22+ วัน', n: 0 }];
-                list.filter((t) => !doneOf(t) && dueOf(t)).forEach((t) => {
+                list.filter((t) => !doneOf(t) && !locked(t) && !undated(t) && dueOf(t)).forEach((t) => {
                     const d = diffDays(dueOf(t), today);
                     bucket[d < 0 ? 0 : d <= 7 ? 1 : d <= 14 ? 2 : d <= 21 ? 3 : 4].n++;
                 });
@@ -717,10 +728,10 @@ export default function registerPlanningBoard() {
                     total: list.length,
                     completed: list.filter(doneOf).length,
                     doing: list.filter((t) => !doneOf(t) && this.statusOf(t).id === 's_doing').length,
-                    late: list.filter((t) => this.overdueFor(t)).length,
+                    late: list.filter(late).length,
                     checkPct: items.length ? Math.round(doneItems / items.length * 100) : 0, checkDone: doneItems, checkTotal: items.length,
                     bucket, bucketMax: Math.max(1, ...bucket.map((b) => b.n)), depts,
-                    rows: list.slice().sort((a, b) => (this.overdueFor(b) - this.overdueFor(a)) || String(dueOf(a)).localeCompare(String(dueOf(b)))),
+                    rows: list.slice().sort(order),
                 };
             },
 

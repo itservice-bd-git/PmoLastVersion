@@ -112,7 +112,8 @@ class DatePendingTest extends TestCase
 
         // the pages say so - no count of days
         $this->actingAs($this->pm)->get(route('projects.index'))->assertOk()->assertSee('รอฝ่ายขายแจ้งกำหนดส่ง')->assertDontSee('data-countdown', false);   // no late countdown
-        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('ได้วันแล้ว · ลงวันใหม่')->assertSee('ยกเลิกการรอ · ใช้วันเดิม');
+        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('ได้วันแล้ว · ลงวันใหม่')->assertSee('ยกเลิกการรอ · ใช้วันเดิม')
+            ->assertSee('รอฝ่ายขายแจ้งกำหนดส่ง · วันเดิม 17–18/11/2569')->assertSee('รอฝ่ายขายแจ้งกำหนดส่ง · วันเดิม 24–25/11/2569')->assertDontSee('อีก 7 วัน');   // the head's FAT / delivery tiles
         $task = collect(app(PlanningBoard::class)->tasks($this->pm))->firstWhere('id', 'p'.$this->project->id);
         $this->assertSame(['label' => 'รอฝ่ายขายแจ้งกำหนดส่ง'], $task['pending']);
         $this->assertTrue($task['deliveries'][0]['pending']);

@@ -193,8 +193,8 @@ class ProjectDates
     }
 
     /**
-     * The FAT and delivery rounds a project's date can take along: a FAT round not held yet, a delivery round not on the
-     * road yet, still to come (after today) or waiting for its own new date.
+     * The FAT and delivery rounds a project's date can take along: a FAT round not held yet (no result), a delivery round
+     * not on the road yet - whatever their day, so one whose day has passed waits with the project too (state says เลยกำหนด).
      *
      * @return \Illuminate\Support\Collection<int, array{type: string, id: int, label: string, when: string, state: string, date: string, pending: bool}>
      */
@@ -202,14 +202,12 @@ class ProjectDates
     {
         $today = today();
         $fats = ProjectFat::where('project_id', $project->id)->where('status', ProjectFat::SCHEDULED)->orderBy('round')->get()
-            ->filter(fn (ProjectFat $f) => $f->date_pending_at || $f->fat_date->gt($today))
             ->map(fn (ProjectFat $f) => ['type' => EventDates::FAT, 'id' => $f->id, 'label' => 'FAT รอบ '.$f->round, 'when' => $f->when(),
-                'state' => $f->date_pending_at ? Project::PENDING_LABEL : $f->statusLabel(), 'date' => $f->fat_date->format('Y-m-d'), 'pending' => (bool) $f->date_pending_at, 'billed' => false]);
+                'state' => $f->date_pending_at ? Project::PENDING_LABEL : $f->statusLabel().($f->fat_date->lte($today) ? ' · เลยกำหนด' : ''), 'date' => $f->fat_date->format('Y-m-d'), 'pending' => (bool) $f->date_pending_at, 'billed' => false]);
         $deliveries = ProjectDelivery::where('project_id', $project->id)
             ->whereIn('status', [ProjectDelivery::DRAFT, ProjectDelivery::WAITING, ProjectDelivery::REJECTED, ProjectDelivery::SCHEDULED])->orderBy('round')->get()
-            ->filter(fn (ProjectDelivery $d) => $d->date_pending_at || $d->firstDay()->gt($today))
             ->map(fn (ProjectDelivery $d) => ['type' => EventDates::DELIVERY, 'id' => $d->id, 'label' => 'ส่งมอบ รอบ '.$d->round, 'when' => $d->when(),
-                'state' => $d->date_pending_at ? Project::PENDING_LABEL : ProjectDelivery::statusName($d->status), 'date' => $d->firstDay()->format('Y-m-d'), 'pending' => (bool) $d->date_pending_at,
+                'state' => $d->date_pending_at ? Project::PENDING_LABEL : ProjectDelivery::statusName($d->status).($d->firstDay()->lte($today) ? ' · เลยกำหนด' : ''), 'date' => $d->firstDay()->format('Y-m-d'), 'pending' => (bool) $d->date_pending_at,
                 'billed' => (bool) $d->billed_at]);
 
         return $fats->concat($deliveries)->values();

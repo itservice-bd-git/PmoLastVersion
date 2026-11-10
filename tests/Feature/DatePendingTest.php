@@ -171,6 +171,38 @@ class DatePendingTest extends TestCase
         $this->assertSame([$round->id], collect($this->actingAs($this->clerk)->get(route('deliveries.index', ['tab' => 'waiting']))->viewData('rows'))->pluck('id')->all());
     }
 
+    public function test_a_fat_or_delivery_round_whose_day_has_passed_waits_too_and_gets_a_new_day(): void
+    {
+        // FAT day passed with no result, the delivery day passed and not on the road
+        $this->fat->forceFill(['fat_date' => '2026-11-03', 'fat_end_date' => null])->save();
+        $this->round->forceFill(['delivery_date' => '2026-11-07', 'delivery_end_date' => null])->save();
+        $this->assertSame(['FAT รอบ 1' => 'นัดแล้ว · เลยกำหนด', 'ส่งมอบ รอบ 1' => ProjectDelivery::statusName('scheduled').' · เลยกำหนด'],
+            ProjectDates::linkedEvents($this->project)->pluck('state', 'label')->all());
+
+        $this->wait()->assertSessionHasNoErrors();
+        $this->assertNotNull($this->fat->fresh()->date_pending_at);
+        $this->assertNotNull($this->round->fresh()->date_pending_at);
+
+        $url = route('projects.dates.store', $this->project);
+        $base = ['kind' => 'postpone', 'due_date' => '2026-12-19', 'reason_id' => $this->reason()->id, 'note' => 'ลูกค้ายืนยันแล้ว', 'notify' => 1];
+        $this->actingAs($this->pm)->post($url, $base + ['events' => [['type' => 'delivery', 'id' => $this->round->id, 'action' => 'date', 'date' => '2026-12-15']]])
+            ->assertSessionHasErrors(['events' => 'ใส่วันใหม่ของ FAT รอบ 1 ด้วย']);
+        $this->actingAs($this->pm)->post($url, $base + ['events' => [
+            ['type' => 'fat', 'id' => $this->fat->id, 'action' => 'date', 'date' => '2026-12-01'],
+            ['type' => 'delivery', 'id' => $this->round->id, 'action' => 'date', 'date' => '2026-12-15'],
+        ]])->assertSessionHasNoErrors();
+        $this->assertSame(['2026-12-01', null], [$this->fat->fresh()->fat_date->format('Y-m-d'), $this->fat->fresh()->date_pending_at]);
+        $this->assertSame(['2026-12-15', null], [$this->round->fresh()->delivery_date->format('Y-m-d'), $this->round->fresh()->date_pending_at]);
+    }
+
+    public function test_a_fat_round_with_its_result_stays_out_of_the_wait(): void
+    {
+        $this->fat->forceFill(['fat_date' => '2026-11-03', 'fat_end_date' => null, 'status' => 'passed'])->save();
+        $this->wait()->assertSessionHasNoErrors();
+        $this->assertNull($this->fat->fresh()->date_pending_at);
+        $this->assertSame('2026-11-03', $this->fat->fresh()->fat_date->format('Y-m-d'));
+    }
+
     public function test_calling_the_wait_off_keeps_every_old_date(): void
     {
         $this->wait();

@@ -480,7 +480,7 @@ class ProjectDeliveryTest extends TestCase
         $json = fn (User $u) => collect(app(PlanningBoard::class)->tasks($u))->firstWhere('id', 'p'.$this->project->id)['deliveries'] ?? [];
         $this->assertSame([['id' => $d->id, 'round' => 1, 'date' => '2026-11-20', 'end' => '2026-11-20', 'time' => '09:00', 'status' => 'waiting', 'wait' => true, 'why' => '',
             'cabs' => ['c'.$this->cab1->id, 'c'.$this->cab2->id], 'method' => 'company', 'packed' => [], 'step' => 0, 'stepText' => 'ห่อ 0/2', 'billed' => false,
-            'car' => '6 ล้อเครน + กระบะ', 'carFull' => '6 ล้อเครน + กระบะ', 'driver' => '', 'crew' => 3, 'people' => '', 'dep' => null, 'at' => null]], $json($this->pm), 'no vehicle yet: the kinds PM asked for');
+            'car' => '6 ล้อเครน + กระบะ', 'carFull' => '6 ล้อเครน + กระบะ', 'driver' => '', 'crew' => 3, 'people' => '', 'dep' => null, 'at' => null, 'pending' => false]], $json($this->pm), 'no vehicle yet: the kinds PM asked for');
         $this->actingAs($this->clerk)->postJson(route('deliveries.assign', $d), ['vehicles' => [['vehicle_id' => $this->truck->id], ['vehicle_id' => $this->pickup->id]]])
             ->assertOk()->assertExactJson(['message' => 'จัดรถแล้ว']);
         $this->pack($d, [$this->cab2]);

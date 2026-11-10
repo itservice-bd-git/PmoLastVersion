@@ -259,6 +259,11 @@
                         @if ($row['status'] === 'delivered')
                             <p class="font-semibold text-slate-800">ส่งถึง {{ $row['delivered'] }}</p>
                             <p class="text-slate-500">ผู้รับ {{ $row['receiver'] }}{{ $row['doc_no'] ? ' · ใบส่งของ '.$row['doc_no'] : '' }}</p>
+                        @elseif ($row['pending'])
+                            {{-- รอวันใหม่ (ProjectDates): the old day struck out until PM sets the new one --}}
+                            <p class="text-slate-500 line-through">{{ $row['when'] }}</p>
+                            <p class="font-semibold text-indigo-800">รอ PM ยืนยันวันส่ง</p>
+                            <p class="text-slate-500">ห่อตู้ได้ · จัดรถเมื่อมีวันแล้ว</p>
                         @else
                             <p class="font-semibold {{ $row['late'] ? 'text-orange-700' : 'text-slate-800' }}">{!! $keep($row['when']) !!}</p>
                             <p class="{{ $row['late'] ? 'font-semibold text-orange-700' : 'text-slate-500' }}">
@@ -271,7 +276,9 @@
                     </div>
                     {{-- one main button, always first: what is next for this round; then the others --}}
                     <div class="order-3 flex flex-wrap content-start gap-2 md:order-none md:max-w-[13rem] md:justify-end">
-                        @if ($row['status'] === 'waiting')
+                        @if ($row['pending'])
+                            {!! $cabButton(false) !!}
+                        @elseif ($row['status'] === 'waiting')
                             @if ($row['method'] === 'pickup')
                                 <button type="button" class="{{ $main }}" @click="quick(@js($row['urls']['assign']))">รับงาน</button>
                             @else

@@ -22,12 +22,13 @@ class ProjectController extends Controller
         $query = $this->filteredProjects($request);
 
         // The same list and order as Planning's dashboard table (planning-board.js dash().rows): the open projects,
-        // late first - its due date passed and not marked done on Planning - then the nearest due date, then the order
-        // made (id); no due date last. Closed ones (ปิดแล้ว, or found by a search) come after, in the same order.
+        // late first - its due date passed and not marked done on Planning - then those waiting for a new due date
+        // (รอวันใหม่), then the nearest due date, then the order made (id); no due date last. Closed ones (ปิดแล้ว, or found by a search) come after, in the same order.
         $locked = [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED];
         $projects = $query
             ->orderByRaw('CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END', $locked)
-            ->orderByRaw('CASE WHEN due_date < ? AND NOT EXISTS (SELECT 1 FROM board_statuses bs WHERE bs.id = projects.board_status_id AND bs.is_done = ?) THEN 0 ELSE 1 END', [today()->toDateString(), true])
+            // late, then รอวันใหม่ (still to chase, never late), then the rest by their due date
+            ->orderByRaw('CASE WHEN due_pending_at IS NOT NULL THEN 1 WHEN due_date < ? AND NOT EXISTS (SELECT 1 FROM board_statuses bs WHERE bs.id = projects.board_status_id AND bs.is_done = ?) THEN 0 ELSE 2 END', [today()->toDateString(), true])
             ->orderByRaw('CASE WHEN due_date IS NULL THEN 1 ELSE 0 END')
             ->orderBy('due_date')
             ->orderBy('id')
@@ -79,7 +80,7 @@ class ProjectController extends Controller
             $p->due_date?->thaiDate(),
             $p->cabinets_count,
             $p->production_progress.'%',
-            ['overdue' => 'Delayed', 'at_risk' => 'At Risk'][$p->risk_level] ?? 'On Track',
+            ['overdue' => 'Delayed', 'at_risk' => 'At Risk', 'pending' => 'Waiting for a new due date'][$p->risk_level] ?? 'On Track',
         ]);
 
         return Csv::download(

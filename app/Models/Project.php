@@ -86,6 +86,8 @@ class Project extends Model
         return [
             'start_date' => 'date',
             'due_date' => 'date',
+            'due_pending_at' => 'datetime',
+            'due_pending_follow_up' => 'date',
             'contract_value' => 'decimal:2',
             'margin' => 'decimal:2',
         ];
@@ -203,9 +205,10 @@ class Project extends Model
     {
         $query->where('status', self::STATUS_IN_PROGRESS);
 
+        // รอวันใหม่ (due_pending_at) is never late: it counts as on track until the new date comes
         return $late
-            ? $query->whereNotNull('due_date')->whereDate('due_date', '<', today())
-            : $query->where(fn ($q) => $q->whereNull('due_date')->orWhereDate('due_date', '>=', today()));
+            ? $query->whereNotNull('due_date')->whereDate('due_date', '<', today())->whereNull('due_pending_at')
+            : $query->where(fn ($q) => $q->whereNull('due_date')->orWhereDate('due_date', '>=', today())->orWhereNotNull('due_pending_at'));
     }
 
     public function scopeVisibleTo($query, User $user)
@@ -257,6 +260,9 @@ class Project extends Model
 
         if (! $this->due_date) {
             return 'none';
+        }
+        if ($this->isDuePending()) {   // รอวันใหม่: its due date is not the one to judge it by
+            return 'pending';
         }
 
         $today = now()->startOfDay();
@@ -318,6 +324,32 @@ class Project extends Model
     public function isLocked(): bool
     {
         return in_array($this->status, self::LOCKED_STATUSES, true);
+    }
+
+    /** "รอวันใหม่": who the new due date is waited from (ProjectDates). */
+    public const PENDING_FROM = ['sales' => 'เซล', 'customer' => 'ลูกค้า', 'site' => 'ผู้รับเหมา / หน้างาน', 'other' => 'อื่น ๆ'];
+
+    /** The due date is to move and the new one is not known yet: never late meanwhile (an open project only). */
+    public function isDuePending(): bool
+    {
+        return $this->due_pending_at !== null && ! $this->isLocked();
+    }
+
+    /** Days waited so far (0 on the first day). */
+    public function duePendingDays(): int
+    {
+        return $this->due_pending_at ? (int) $this->due_pending_at->copy()->startOfDay()->diffInDays(today()) : 0;
+    }
+
+    /** "รอวันใหม่จากเซล". */
+    public function duePendingLabel(): string
+    {
+        return 'รอวันใหม่'.(($from = self::PENDING_FROM[$this->due_pending_from] ?? null) ? 'จาก'.$from : '');
+    }
+
+    public function duePendingUser()
+    {
+        return $this->belongsTo(User::class, 'due_pending_user_id');
     }
 
     protected function activityProjectId(): ?int

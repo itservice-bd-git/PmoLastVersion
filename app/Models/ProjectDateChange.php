@@ -11,6 +11,9 @@ class ProjectDateChange extends Model
 
     public const CORRECT = 'correct';
 
+    /** "รอวันใหม่": the due date is to move, the new one not known yet (no new date here; not a round). */
+    public const PENDING = 'pending';
+
     protected $fillable = ['project_id', 'cabinet_id', 'kind', 'old_start_date', 'new_start_date', 'old_due_date', 'new_due_date', 'reason_id', 'reason_name', 'note', 'changed_by'];
 
     protected function casts(): array

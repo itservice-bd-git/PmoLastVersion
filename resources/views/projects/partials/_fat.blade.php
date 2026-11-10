@@ -52,6 +52,7 @@
         @if ($fat)
             <span class="text-base font-bold tabular-nums text-slate-900">{{ $fat->when() }}</span>
             <span class="st-pill rounded-full px-2.5 py-0.5 text-xs font-bold" style="--c: {{ $colour($fat) }}">{{ $fat->round > 1 ? 'รอบที่ '.$fat->round.' · ' : '' }}{{ $fat->statusLabel() }}</span>
+            @if ($fat->date_pending_at)<span class="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-bold text-indigo-800">รอวันใหม่ · ใส่วันที่ "แก้วัน FAT"</span>@endif
             @if ($latestMoves)<span class="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-800">เลื่อน {{ $latestMoves }} ครั้ง</span>@endif
             @if ($fat->status === 'scheduled')
                 <span class="text-sm {{ $daysLeft < 0 ? 'font-semibold text-red-700' : 'text-slate-600' }}">{{ $days > 0 ? 'อีก '.$days.' วัน' : ($daysLeft >= 0 ? ($fat->days() > 1 ? 'กำลัง FAT วันที่ '.(1 - $days).' จาก '.$fat->days() : 'วันนี้') : 'ผ่านมา '.abs($daysLeft).' วัน · ยังไม่ได้บันทึกผล') }}</span>

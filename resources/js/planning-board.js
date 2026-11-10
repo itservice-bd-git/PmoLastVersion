@@ -230,7 +230,8 @@ export default function registerPlanningBoard() {
             // a task's date as seen in the current department view: that department's own due date, else the project's
             dueFor(t) { if (this.dept) { const s = this.stageOf(t, this.dept); if (s) return s.end; } return t.date; },
             doneFor(t) { if (this.dept) { const s = this.stageOf(t, this.dept); if (s) return this.stageDone(s) || this.isDone(t); } return this.isDone(t); },
-            overdueFor(t) { return !this.doneFor(t) && this.dueFor(t) && this.dueFor(t) < this.today; },
+            // a project waiting for its new due date (รอวันใหม่) is never late by it; a picked department's own dates still count
+            overdueFor(t) { return !(t.pending && !this.dept) && !this.doneFor(t) && this.dueFor(t) && this.dueFor(t) < this.today; },
             items(t, deptId) { // checklist items of a task, optionally only one department's
                 return t.subtasks.flatMap((c) => c.checklist.filter((i) => !deptId || i.deptId === deptId));
             },
@@ -708,10 +709,11 @@ export default function registerPlanningBoard() {
                 const undated = (t) => !this.dept && noOwnDate(t);   // the cards count a picked department by its own dates
                 const late = (t) => !undated(t) && !!this.overdueFor(t);
                 // the table: the projects list's order, by the project's own dates even while a department is picked -
-                // late first, then the nearest due date, then the order made; no due date last
-                const rank = (t) => (noOwnDate(t) ? 2 : !this.isDone(t) && t.date < today ? 0 : 1);
+                // late first, then รอวันใหม่ (never late, still to chase), then the nearest due date, then the order made;
+                // no due date last
+                const rank = (t) => (t.pending ? 1 : noOwnDate(t) ? 3 : !this.isDone(t) && t.date < today ? 0 : 2);
                 const order = (a, b) => (rank(a) - rank(b))
-                    || (rank(a) === 2 ? 0 : String(a.date).localeCompare(String(b.date)))
+                    || (rank(a) === 3 ? 0 : String(a.date).localeCompare(String(b.date)))
                     || (Number(String(a.id).slice(1)) - Number(String(b.id).slice(1)));
                 const items = list.flatMap((t) => this.items(t, this.dept || null));
                 const doneItems = items.filter((i) => i.done).length;

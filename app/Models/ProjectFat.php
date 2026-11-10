@@ -20,11 +20,11 @@ class ProjectFat extends Model
 
     public const STATUS_LABELS = [self::SCHEDULED => 'นัดแล้ว', self::PASSED => 'ผ่าน', self::FAILED => 'ไม่ผ่าน'];
 
-    protected $fillable = ['project_id', 'round', 'fat_date', 'fat_end_date', 'fat_time', 'status', 'cabinet_ids', 'note', 'created_by'];
+    protected $fillable = ['project_id', 'round', 'fat_date', 'fat_end_date', 'fat_time', 'date_pending_at', 'status', 'cabinet_ids', 'note', 'created_by'];
 
     protected function casts(): array
     {
-        return ['fat_date' => 'date', 'fat_end_date' => 'date', 'cabinet_ids' => 'array'];
+        return ['fat_date' => 'date', 'fat_end_date' => 'date', 'cabinet_ids' => 'array', 'date_pending_at' => 'datetime'];
     }
 
     public function project()

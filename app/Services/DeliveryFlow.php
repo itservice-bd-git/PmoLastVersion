@@ -75,6 +75,9 @@ class DeliveryFlow
      * delivery department is told to check they are free that day; a new way of sending takes them off (รอจัดรถ again).
      * Cabinets taken out lose their packing; once แจ้งเปิดบิล the cabinets stay as they are.
      */
+    /** A round waiting for PM's new day (ProjectDates, รอวันใหม่): packing may go on, the rest waits for the day. */
+    public const PENDING_TEXT = 'รอบนี้รอ PM ยืนยันวันส่ง · ห่อตู้ได้ แต่จัดรถ / แจ้งเปิดบิล / ออกรถได้เมื่อมีวันแล้ว';
+
     public function revise(ProjectDelivery $delivery, array $data, User $actor, bool $send = false, array $move = []): ProjectDelivery
     {
         $this->assert(self::canBook($actor), 'แก้รอบส่งได้เฉพาะ Admin / PM');
@@ -97,7 +100,7 @@ class DeliveryFlow
                 throw ValidationException::withMessages(['cabinet_ids' => 'รอบนี้แจ้งเปิดบิลแล้ว เปลี่ยนตู้ไม่ได้ · ให้แผนกจัดส่งย้อนขั้นก่อน']);
             }
 
-            $d->fill($data);
+            $d->fill($data + ['date_pending_at' => null]);   // PM saving the round sets its day: no longer รอวันใหม่
             $resent = $d->status === ProjectDelivery::REJECTED;
             $newMethod = $d->status === ProjectDelivery::SCHEDULED && $d->method !== $before['method'];
             if ($resent) {
@@ -155,6 +158,7 @@ class DeliveryFlow
 
         return DB::transaction(function () use ($delivery, $data, $actor) {
             $d = $this->lock($delivery);
+            $this->assert(! $d->date_pending_at, self::PENDING_TEXT);
             $this->assert(in_array($d->status, [ProjectDelivery::WAITING, ProjectDelivery::SCHEDULED], true), match ($d->status) {
                 ProjectDelivery::REJECTED => 'รอบนี้ส่งกลับให้ PM แล้ว · รอ PM ส่งมาอีกครั้ง',
                 ProjectDelivery::DRAFT => 'รอบนี้ยังเป็นร่างของ PM',
@@ -262,6 +266,7 @@ class DeliveryFlow
 
         return DB::transaction(function () use ($delivery, $actor) {
             $d = $this->lock($delivery);
+            $this->assert(! $d->date_pending_at, self::PENDING_TEXT);
             $this->assert($d->beforeDeparture(), 'รอบนี้ออกจากโรงงานแล้ว');
             $this->assert(! $d->billed_at, 'รอบนี้แจ้งเปิดบิลแล้ว');
             $this->assert($d->allPacked(), 'ห่อตู้ให้ครบก่อน (ห่อแล้ว '.$d->packedCount().'/'.count($d->cabinet_ids ?? []).')');
@@ -283,6 +288,7 @@ class DeliveryFlow
 
         return DB::transaction(function () use ($delivery, $actor) {
             $d = $this->lock($delivery);
+            $this->assert(! $d->date_pending_at, self::PENDING_TEXT);
             $this->assert($d->status === ProjectDelivery::SCHEDULED, $d->isOpen() ? 'รอบนี้ยังไม่ได้จัดรถ' : 'รอบนี้ออกจากโรงงานแล้ว');
             $this->assert((bool) $d->billed_at, 'แจ้งเปิดบิลก่อนออกจากโรงงาน');
             $d->fill(['status' => ProjectDelivery::DEPARTED, 'departed_at' => now()])->save();

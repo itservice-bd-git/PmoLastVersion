@@ -44,7 +44,7 @@ class ProjectFatController extends Controller
         $this->authorizeEdit($request);
         $before = ['when' => $fat->when(), 'status' => $fat->statusLabel(), 'days' => EventDates::snapshot($fat)];
         $move = $request->validate(EventDates::rules());
-        $fat->update($this->validated($request, $fat->project));
+        $fat->update($this->validated($request, $fat->project) + ['date_pending_at' => null]);   // saved with its day: no longer รอวันใหม่
         $moved = $this->dates->record($fat, $before['days'], $request->user(), $move);   // ประวัติการเลื่อน
 
         $changes = array_filter([

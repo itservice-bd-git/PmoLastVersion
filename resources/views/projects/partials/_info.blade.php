@@ -12,6 +12,21 @@
     $canContact = auth()->user()->allows('data.contact');   // Settings > สิทธิ์การใช้งาน
     $canFinance = auth()->user()->allows('data.finance');
     $daysLeft = $project->isLocked() ? null : $project->days_remaining;
+    // รอวันใหม่ (ProjectDates): in place of the countdown - from whom, for how long, when to ask again - and its buttons
+    $pendingTools = '';
+    if ($project->isDuePending()) {
+        $daysLeft = null;
+        $canWait = auth()->user()->canDispatchWork();
+        $waitForm = fn (string $action, string $label, string $class) => '<form method="POST" action="'.e(route('projects.dates.pending', $project)).'" class="inline">'
+            .csrf_field().'<input type="hidden" name="action" value="'.$action.'"><button type="submit" class="'.$class.'">'.$label.'</button></form>';
+        $pendingTools = ' <span class="ml-1 whitespace-nowrap rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">'.e($project->duePendingLabel()).' · '.$project->duePendingDays().' วัน</span>'
+            .'<span class="mt-1 block text-xs text-slate-600">'.($project->duePendingUser ? e($project->duePendingUser->name).' · ' : '').'ตามอีกครั้ง '.$project->due_pending_follow_up?->thaiDate().'</span>'
+            .($canWait ? '<span class="mt-1 flex flex-wrap gap-1.5">'
+                .'<button type="button" x-on:click="$dispatch(\'open-modal\', \'project-dates\')" class="rounded-lg bg-indigo-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-800">ได้วันแล้ว · เลื่อนวัน</button>'
+                .$waitForm('later', 'ตามอีก 3 วัน', 'rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50')
+                .$waitForm('cancel', 'ยกเลิกการรอ', 'rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100')
+                .'</span>' : '');
+    }
     // เลื่อน / แก้วัน (App\Services\ProjectDates): how many rounds, beside the due date, and the button for Admin / PM (windows: _dates)
     $dates = app(\App\Services\ProjectDates::class)->summary($project);
     $canDates = auth()->user()->canDispatchWork() && ! $project->isLocked();
@@ -37,7 +52,7 @@
             ['วันเริ่ม', $project->start_date?->thaiDate(), 'tabular-nums'],
             ['วันครบกำหนด', $project->due_date ? $project->due_date->thaiDate().($daysLeft !== null
                 ? ' <span class="ml-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold '.($daysLeft < 0 ? 'bg-red-100 text-red-700' : ($daysLeft <= 7 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600')).'">'
-                    .($daysLeft < 0 ? 'เลยกำหนด '.abs($daysLeft).' วัน' : ($daysLeft === 0 ? 'ครบกำหนดวันนี้' : 'เหลือ '.$daysLeft.' วัน')).'</span>' : '').$dateTools : null, 'tabular-nums'],
+                    .($daysLeft < 0 ? 'เลยกำหนด '.abs($daysLeft).' วัน' : ($daysLeft === 0 ? 'ครบกำหนดวันนี้' : 'เหลือ '.$daysLeft.' วัน')).'</span>' : '').$pendingTools.$dateTools : null, 'tabular-nums'],
             $dates['rounds'] && $dates['firstDue'] ? ['วันครบกำหนดตอนแรก', '<span class="text-slate-500 line-through">'.$dates['firstDue']->thaiDate().'</span>', 'tabular-nums'] : null,
             ['วันทำงานคงเหลือ', $s['workingDaysLeft'] !== null ? $s['workingDaysLeft'].' วัน (จ.–ศ.)' : '-', ''],   // worked out from the due date, never typed in
         ])),

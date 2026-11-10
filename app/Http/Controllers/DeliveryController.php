@@ -156,8 +156,9 @@ class DeliveryController extends Controller
             // what PM asked for, and what differs from it
             'types' => $d->vehicle_types ?? [], 'crew_size' => (int) $d->crew_size, 'request' => $d->request(), 'other' => $d->otherTypes(),
             'people' => $d->peopleText(), 'short' => $d->shortOfPeople(), 'fewer' => $d->vehiclesShortText(), 'sender' => (string) $d->sender?->name,
+            'pending' => (bool) $d->date_pending_at,   // รอ PM ยืนยันวัน (ProjectDates): packing only until the day comes
             'date' => $d->delivery_date->format('Y-m-d'), 'days' => $d->days(), 'when' => $d->when(),
-            'left' => $left, 'late' => $d->status !== ProjectDelivery::DELIVERED && $end < 0, 'during' => $left <= 0 && $end >= 0,
+            'left' => $left, 'late' => $d->status !== ProjectDelivery::DELIVERED && $end < 0 && ! $d->date_pending_at, 'during' => $left <= 0 && $end >= 0,
             // the four steps
             'step' => $d->step(), 'packedCount' => $d->packedCount(), 'allPacked' => $d->allPacked(),
             'billed' => $d->billed_at ? $d->billed_at->format('d/m H:i').($d->biller ? ' · '.$d->biller->name : '') : '',

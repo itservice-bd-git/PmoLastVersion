@@ -155,7 +155,7 @@ class ProjectFatTest extends TestCase
         $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertSee('FAT ช้ากว่าวันครบกำหนดของโครงการ');
 
         $task = collect(app(PlanningBoard::class)->tasks($this->pm))->firstWhere('id', 'p'.$this->project->id);
-        $this->assertSame(['round' => 1, 'date' => '2026-11-20', 'end' => '2026-11-20', 'time' => '10:00', 'status' => 'scheduled', 'note' => 'ลูกค้า 3 คน', 'cabinets' => null], $task['fat']);
+        $this->assertSame(['round' => 1, 'date' => '2026-11-20', 'end' => '2026-11-20', 'time' => '10:00', 'status' => 'scheduled', 'note' => 'ลูกค้า 3 คน', 'cabinets' => null, 'pending' => false], $task['fat']);
     }
 
     public function test_a_fat_over_several_days_keeps_its_last_day(): void

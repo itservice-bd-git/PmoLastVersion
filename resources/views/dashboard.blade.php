@@ -177,6 +177,8 @@
                                         <span class="text-xs font-semibold text-red-600">ล่าช้า</span>
                                     @elseif ($risk === 'at_risk')
                                         <span class="text-xs font-semibold text-orange-500">มีความเสี่ยง</span>
+                                    @elseif ($risk === 'pending')
+                                        <span class="text-xs font-semibold text-indigo-700">{{ $project->duePendingLabel() }}</span>
                                     @elseif ($risk === 'on_track')
                                         <span class="text-xs font-semibold text-emerald-600">ตามแผน</span>
                                     @else

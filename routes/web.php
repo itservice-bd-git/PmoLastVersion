@@ -104,6 +104,7 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     // เลื่อน / แก้วันโครงการ (with a reason; counted rounds): App\Services\ProjectDates
     Route::get('projects/{project}/dates', [\App\Http\Controllers\ProjectDateController::class, 'form'])->middleware('pmo')->name('projects.dates.form');   // Planning's project window
     Route::post('projects/{project}/dates', [\App\Http\Controllers\ProjectDateController::class, 'store'])->middleware('pmo')->name('projects.dates.store');
+    Route::post('projects/{project}/dates/pending', [\App\Http\Controllers\ProjectDateController::class, 'pending'])->middleware('pmo')->name('projects.dates.pending');   // รอวันใหม่: ยกเลิกการรอ / ตามอีก 3 วัน
     Route::post('cabinets/{cabinet}/dates', [\App\Http\Controllers\ProjectDateController::class, 'storeCabinet'])->middleware('pmo')->name('cabinets.dates.store');
     Route::get('projects/{project}/fat', [\App\Http\Controllers\ProjectFatController::class, 'form'])->name('projects.fats.form');   // Planning's project window
     Route::post('projects/{project}/fats', [\App\Http\Controllers\ProjectFatController::class, 'store'])->name('projects.fats.store');

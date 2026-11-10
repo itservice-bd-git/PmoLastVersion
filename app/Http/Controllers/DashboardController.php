@@ -38,7 +38,7 @@ class DashboardController extends Controller
                 && now()->diffInDays($project->due_date) <= 7;
         });
 
-        $delayed = $activeProjects->filter(fn (Project $project) => $project->due_date && $project->due_date->lt(today()));   // Project::scopeRunningLate
+        $delayed = $activeProjects->filter(fn (Project $project) => $project->due_date && $project->due_date->lt(today()) && ! $project->isDuePending());   // Project::scopeRunningLate
         $atRisk = $activeProjects->filter(fn (Project $project) => $project->risk_level === 'at_risk');
 
         $totalCabinets = $cabinets()->count();

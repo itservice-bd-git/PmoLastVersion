@@ -1,5 +1,5 @@
 {{-- A photo / PDF over the page, as Planning's (planning/partials/_overlays.blade.php): opened by a pmo-file event
-     ({ url, name, kind: 'image' | 'pdf' }) that <x-file-chip> sends. Esc closes it and only it: caught on the way down
+     ({ url, name, kind: 'image' | 'pdf' }) that <x-file-tile> sends. Esc closes it and only it: caught on the way down
      (capture) so a panel or window under it stays open. Put it once in a page, outside any transformed panel. --}}
 <div x-data="{ viewer: null }" @pmo-file.window="viewer = $event.detail; $nextTick(() => $refs.viewerClose?.focus({ preventScroll: true }))"
      @keydown.escape.window.capture="if (viewer) { $event.stopPropagation(); viewer = null }">

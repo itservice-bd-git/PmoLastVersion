@@ -446,7 +446,7 @@ class ProjectDeliveryTest extends TestCase
             $this->assertTrue(ProjectDelivery::filesOf([$d->id + 1])->isEmpty());
             $this->assertContains('ส่งถึงแล้ว · แนบไฟล์เพิ่ม 1 ไฟล์ → '.route('projects.show', $this->project).'#delivery', $said(), 'files added later are told too');
 
-            // the project page, as Planning's comments: the photos as pictures; photos and the PDF open over the page
+            // the project page, as งานจัดส่ง: the photos as pictures, the PDF as its kind; photos and the PDF open over the page
             $html = $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('aria-label="ไฟล์ตอนส่งถึง 3 ไฟล์"', false)->getContent();
             $this->assertSame([3, 2, 1], [substr_count($html, "\$dispatch('pmo-file'"), preg_match_all('/<img src="[^"]+\.(jpg|png)" alt="" loading="lazy"/', $html), substr_count($html, '\u0022kind\u0022:\u0022pdf\u0022')]);
             $this->assertStringContainsString('เปิดแท็บใหม่ / ดาวน์โหลด', $html, 'the viewer is on the page');

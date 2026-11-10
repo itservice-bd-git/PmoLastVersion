@@ -153,11 +153,17 @@
                                 <dd>{{ collect([$d->receiver, $d->doc_no ? 'ใบส่งของ '.$d->doc_no : null])->filter()->implode(' · ') }}</dd>
                                 @if ($roundFiles->has($d->id))
                                     <dt class="text-slate-500">ไฟล์</dt>
-                                    {{-- as Planning's comments: a photo's picture, a photo / PDF opens over the page (<x-file-viewer> below) --}}
-                                    <dd><ul class="flex flex-wrap gap-1.5 pt-0.5" aria-label="ไฟล์ตอนส่งถึง {{ $roundFiles[$d->id]->count() }} ไฟล์">
-                                        @foreach ($roundFiles[$d->id] as $f)
-                                            <li class="min-w-0 max-w-full"><x-file-chip :file="\App\Models\ProjectDelivery::fileView($f)" /></li>
+                                    {{-- as งานจัดส่ง shows them: square tiles, a photo itself and a document its kind; a photo / PDF opens over
+                                         the page (<x-file-viewer> below). Past eight, seven and +n, which shows the rest here --}}
+                                    @php $fs = $roundFiles[$d->id]->map(fn ($f) => \App\Models\ProjectDelivery::fileView($f))->values(); @endphp
+                                    <dd x-data="{ all: false }"><ul class="flex flex-wrap gap-1.5 pb-1 pt-0.5" aria-label="ไฟล์ตอนส่งถึง {{ $fs->count() }} ไฟล์">
+                                        @foreach ($fs as $i => $f)
+                                            <li @if ($fs->count() > 8 && $i >= 7) x-show="all" x-cloak @endif><x-file-tile :file="$f" class="h-14 w-14" /></li>
                                         @endforeach
+                                        @if ($fs->count() > 8)
+                                            <li x-show="! all"><button type="button" @click="all = true" aria-label="ดูไฟล์ทั้งหมด {{ $fs->count() }} ไฟล์"
+                                                        class="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-100 text-sm font-bold tabular-nums text-slate-700 ring-1 ring-slate-900/10 hover:ring-2 hover:ring-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">+{{ $fs->count() - 7 }}</button></li>
+                                        @endif
                                     </ul></dd>
                                 @endif
                             @endif

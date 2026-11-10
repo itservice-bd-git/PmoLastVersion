@@ -13,7 +13,7 @@
         @endphp
         <li class="min-w-0">
             <span class="block h-1.5 overflow-hidden rounded-full bg-slate-200"><span class="block h-full {{ $now && $fill < 100 ? 'bg-sky-600' : 'bg-emerald-600' }}" style="width: {{ $fill }}%"></span></span>
-            <span class="mt-0.5 block truncate text-[11px] {{ $now ? 'font-bold text-slate-900' : ($st['n'] > $i ? 'font-semibold text-emerald-700' : 'text-slate-500') }}">{{ $label }}</span>
+            <span class="mt-0.5 block text-[11px] leading-tight {{ $now ? 'font-bold text-slate-900' : ($st['n'] > $i ? 'font-semibold text-emerald-700' : 'text-slate-500') }}">{{ $label }}</span>
         </li>
     @endforeach
 </ol>

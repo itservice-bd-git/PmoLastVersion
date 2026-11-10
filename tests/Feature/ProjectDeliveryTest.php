@@ -144,7 +144,7 @@ class ProjectDeliveryTest extends TestCase
         $this->assertSame(['งานจัดส่งใหม่ · จัดรถ / คน'], $this->notices($this->clerk, 'delivery_todo'));
         $this->assertSame(0, $this->member->notifications()->count(), 'another department does not hear it');
 
-        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('20/11/2569 · 09:00 น.')->assertSee('รอแผนกจัดส่งจัดรถ / คน')->assertSee('ขอ 6 ล้อเครน + กระบะ · 3 คน');
+        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()->assertSee('20/11/2569 · 09:00 น.')->assertSee('2 ตู้')->assertDontSee('รอแผนกจัดส่งจัดรถ / คน')->assertSee('ขอ 6 ล้อเครน + กระบะ · 3 คน');   // the state is its pill; the cabinets a count
         $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk()->assertViewHas('tab', 'waiting')
             ->assertSee('SO-1')->assertSee('PM ขอ')->assertSee('6 ล้อเครน + กระบะ · 3 คน')->assertSee('จัดรถ / คน')->assertSee('ไม่รับงาน')->assertDontSee('เลือกวันส่ง');
 
@@ -523,7 +523,7 @@ class ProjectDeliveryTest extends TestCase
         $this->assertSame('ร่างการจัดส่ง รอบที่ 1: 20/11/2569 · 09:00 น. · ทุกตู้ · - · 3 คน', $this->lastLog());
         $this->assertSame(0, $this->clerk->notifications()->count(), 'a draft is PM\'s own');
         $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertSee('ไม่มีรอบที่รอจัดรถ')->assertDontSee('SO-1');
-        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertSee('ร่าง · ยังไม่ได้ส่งให้แผนกจัดส่ง')->assertSee('ตรวจแล้วส่งให้แผนกจัดส่ง');
+        $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertSee('ยังไม่ได้ส่งให้แผนกจัดส่ง')->assertSee('ตรวจแล้วส่งให้แผนกจัดส่ง');
         $planning = fn (User $u) => collect(app(PlanningBoard::class)->tasks($u))->firstWhere('id', 'p'.$this->project->id)['deliveries'] ?? [];
         $this->assertTrue($planning($this->pm)[0]['wait']);
         $this->assertSame([], $planning($this->clerk), 'Planning hides PM\'s drafts from the others');

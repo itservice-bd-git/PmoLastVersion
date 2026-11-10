@@ -101,13 +101,14 @@
                             </div>
                         </div>
                         <div class="hidden border-slate-200 sm:block sm:border-l sm:border-t"></div>
-                        {{-- การจัดส่ง: each round and what it went on (ProjectDeliveryController); "นัด / แก้การส่ง" opens หน้าโครงการ's window (openDelivery) --}}
+                        {{-- การจัดส่ง: each round and what it went on (ProjectDeliveryController); "นัด / แก้การส่ง" opens หน้าโครงการ's window (openDelivery).
+                             A round's cabinets as how many (their names on hover); the packing shows on its steps (ห่อ n/m) --}}
                         <div x-show="dels(cur).length || canFat(cur)" class="dl-box">
                             <span class="dl-h">การจัดส่ง</span>
                             <div class="dl-row"><span class="dl-tag">ส่ง</span><b x-text="dels(cur).length ? delHead(cur) : 'ยังไม่ได้นัดส่ง'"></b><button type="button" x-show="canFat(cur)" @click="openDelivery(cur)" class="res-btn ml-auto" aria-haspopup="dialog">นัด / แก้การส่ง</button></div>
                             <template x-for="d in dels(cur).slice().reverse()" :key="d.id">
                                 <div class="dl-row"><span class="dl-no" x-text="'รอบ ' + d.round"></span><span class="font-semibold tabular-nums" x-text="delWhen(d)"></span>
-                                    <span x-show="!d.cabs.length" class="dl-chip">ทุกตู้</span><template x-for="id in d.cabs" :key="id"><span :class="d.status === 'delivered' ? 'dl-chip st-chip' : ((d.packed || []).includes(id) ? 'dl-chip dl-packed' : 'dl-chip')" :style="d.status === 'delivered' ? '--c:' + delColor(d) : ''" :title="(d.packed || []).includes(id) && d.status !== 'delivered' ? 'ห่อแล้ว' : ''" x-text="delCabName(cur, id) + (d.status === 'delivered' ? ' ✓' : '')"></span></template>
+                                    <span x-show="!d.cabs.length" class="dl-chip">ทุกตู้</span><span x-show="d.cabs.length" :class="d.status === 'delivered' ? 'dl-chip st-chip' : 'dl-chip'" :style="d.status === 'delivered' ? '--c:' + delColor(d) : ''" :title="d.cabs.map((id) => delCabName(cur, id)).join(', ')" x-text="d.cabs.length + ' ตู้' + (d.status === 'delivered' ? ' ✓' : '')"></span>
                                     <span class="dl-chip" x-text="delCar(d)"></span><span class="dl-pill" :class="delCls(d)" :style="'--c:' + delColor(d)" x-text="delState(d)"></span>
                                     {{-- the four steps the delivery department records on "งานจัดส่ง" (a sent round with its cabinets) --}}
                                     <ol x-show="!['draft', 'rejected'].includes(d.status) && d.cabs.length" class="dl-steps basis-full" :aria-label="'ขั้นการจัดส่ง: ' + d.stepText">

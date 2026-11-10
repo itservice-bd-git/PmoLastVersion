@@ -21,10 +21,9 @@ class ProjectController extends Controller
     {
         $query = $this->filteredProjects($request);
 
-        // The same order as Planning's dashboard table (planning-board.js dash().rows): late first - not done and its
-        // due date passed (done = Completed / Cancelled, or a Planning status marked done) - then the nearest due date,
-        // then the order Planning loads them in (id). Not on that table, so here at the bottom: projects with no due
-        // date, then Completed / Cancelled ones.
+        // The same list and order as Planning's dashboard table (planning-board.js dash().rows): the open projects,
+        // late first - its due date passed and not marked done on Planning - then the nearest due date, then the order
+        // made (id); no due date last. Closed ones (ปิดแล้ว, or found by a search) come after, in the same order.
         $locked = [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED];
         $projects = $query
             ->orderByRaw('CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END', $locked)
@@ -54,6 +53,9 @@ class ProjectController extends Controller
             'departmentNames' => \App\Models\Department::pluck('name', 'id'),
             'statuses' => Project::$statuses,
             'filters' => $request->only(['q', 'status', 'priority', 'due']),
+            // the open ones only (no status, no search): how many closed ones that leaves out, for the link under the list
+            'closedCount' => $request->filled('status') || $request->filled('q') ? 0
+                : $this->filteredProjects($request->duplicate(array_merge($request->query(), ['status' => 'closed'])))->count(),
         ]);
     }
 
@@ -103,9 +105,16 @@ class ProjectController extends Controller
         }
 
         if ($status = $request->get('status')) {
-            $status === 'not_started'   // the dashboard card "รอเริ่ม": Draft and Planning together
-                ? $query->whereIn('status', [Project::STATUS_DRAFT, Project::STATUS_PLANNING])
-                : $query->where('status', $status);
+            if ($status === 'not_started') {   // the dashboard card "รอเริ่ม": Draft and Planning together
+                $query->whereIn('status', [Project::STATUS_DRAFT, Project::STATUS_PLANNING]);
+            } elseif ($status === 'closed') {   // "ปิดแล้ว": Completed and Cancelled together (the link under the list)
+                $query->whereIn('status', Project::LOCKED_STATUSES);
+            } else {
+                $query->where('status', $status);
+            }
+        } elseif (! $request->filled('q')) {
+            // the open ones by default, as Planning's dashboard; a search still finds a closed one
+            $query->whereNotIn('status', Project::LOCKED_STATUSES);
         }
 
         if (in_array($priority = $request->get('priority'), [Project::PRIORITY_URGENT, Project::PRIORITY_HIGH], true)) {   // the ⚑ ด่วน / ⚑ สูง buttons

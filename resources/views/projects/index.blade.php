@@ -13,6 +13,7 @@
             ($filters['due'] ?? '') === 'late' => ['ล่าช้า (เลยวันส่ง)', ['due' => null]],
             ($filters['due'] ?? '') === 'ontrack' => ['ตามแผน (ยังไม่เลยวันส่ง)', ['due' => null]],
             $status === 'not_started' => ['รอเริ่ม (Draft / Planning)', ['status' => null]],
+            $status === 'closed' => ['ปิดแล้ว (Completed / Cancelled)', ['status' => null]],
             default => null,
         };
     @endphp
@@ -32,7 +33,7 @@
             </form>
 
             <nav aria-label="กรองตามสถานะ" class="flex overflow-x-auto rounded-lg border border-slate-200 p-0.5">
-                @foreach (['' => 'ทั้งหมด'] + $statuses as $key => $label)
+                @foreach (['' => ($filters['q'] ?? '') !== '' ? 'ทั้งหมด' : 'ที่เปิดอยู่'] + $statuses as $key => $label)
                     <a href="{{ $link(['status' => $key ?: null]) }}" @if ($status === $key) aria-current="true" @endif
                        class="flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-semibold {{ $status === $key ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100' }}">
                         @if ($key)<span class="h-1.5 w-1.5 rounded-full" style="background: {{ $status === $key ? '#fff' : \App\Services\PlanningBoard::statusColor($key) }}"></span>@endif
@@ -168,6 +169,12 @@
             </div>
         </div>
 
+        {{-- the closed ones are left out of the default list (as on Planning's dashboard): say so, and open them --}}
+        @if ($closedCount)
+            <p class="text-sm text-slate-600">ไม่แสดงโครงการที่ปิดแล้ว {{ number_format($closedCount) }} โครงการ ·
+                <a href="{{ $link(['status' => 'closed']) }}" class="font-semibold text-blue-700 hover:underline">ดูโครงการที่ปิดแล้ว</a>
+                <span class="text-slate-500">(ค้นหาเลขหรือชื่อโครงการจะเจอโครงการที่ปิดแล้วด้วย)</span></p>
+        @endif
         {{ $projects->links() }}
     </div>
 </x-app-layout>

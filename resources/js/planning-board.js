@@ -698,23 +698,25 @@ export default function registerPlanningBoard() {
                 };
             },
             dash() {
-                const list = this.visible(), today = this.today;
-                const doneOf = (t) => this.doneFor(t), dueOf = (t) => this.dueFor(t);
-                // as the projects list (ProjectController@index): a Completed / Cancelled project is never late, whatever
-                // its Planning status says, and one with no due date of its own is not late either (its date here is a
-                // stand-in: its latest Sub Task's, or the day it was made)
+                // the open projects only, as the projects list (ProjectController@index): a Completed / Cancelled one is
+                // history there (ปิดแล้ว), whatever its Planning status still says
                 const locked = (t) => ['completed', 'cancelled'].includes(t.info && t.info.pmoStatus);
-                const undated = (t) => !this.dept && !!(t.warnings && t.warnings.noDue);
-                const late = (t) => !locked(t) && !undated(t) && !!this.overdueFor(t);
-                // late first, then the nearest due date, then the order made; no due date, then Completed / Cancelled, last
-                const rank = (t) => (locked(t) ? 3 : late(t) ? 0 : undated(t) ? 2 : 1);
+                const list = this.visible().filter((t) => !locked(t)), today = this.today;
+                const doneOf = (t) => this.doneFor(t), dueOf = (t) => this.dueFor(t);
+                // no due date of its own: never late (its date here is a stand-in - its latest Sub Task's, or the day made)
+                const noOwnDate = (t) => !!(t.warnings && t.warnings.noDue);
+                const undated = (t) => !this.dept && noOwnDate(t);   // the cards count a picked department by its own dates
+                const late = (t) => !undated(t) && !!this.overdueFor(t);
+                // the table: the projects list's order, by the project's own dates even while a department is picked -
+                // late first, then the nearest due date, then the order made; no due date last
+                const rank = (t) => (noOwnDate(t) ? 2 : !this.isDone(t) && t.date < today ? 0 : 1);
                 const order = (a, b) => (rank(a) - rank(b))
-                    || (rank(a) === 2 ? 0 : String(dueOf(a)).localeCompare(String(dueOf(b))))
+                    || (rank(a) === 2 ? 0 : String(a.date).localeCompare(String(b.date)))
                     || (Number(String(a.id).slice(1)) - Number(String(b.id).slice(1)));
                 const items = list.flatMap((t) => this.items(t, this.dept || null));
                 const doneItems = items.filter((i) => i.done).length;
                 const bucket = [{ label: 'เลยกำหนด', n: 0, late: true }, { label: 'ภายใน 7 วัน', n: 0 }, { label: '8–14 วัน', n: 0 }, { label: '15–21 วัน', n: 0 }, { label: '22+ วัน', n: 0 }];
-                list.filter((t) => !doneOf(t) && !locked(t) && !undated(t) && dueOf(t)).forEach((t) => {
+                list.filter((t) => !doneOf(t) && !undated(t) && dueOf(t)).forEach((t) => {
                     const d = diffDays(dueOf(t), today);
                     bucket[d < 0 ? 0 : d <= 7 ? 1 : d <= 14 ? 2 : d <= 21 ? 3 : 4].n++;
                 });

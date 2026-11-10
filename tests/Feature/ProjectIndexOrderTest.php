@@ -31,7 +31,11 @@ class ProjectIndexOrderTest extends TestCase
 
         $response = $this->actingAs($user)->get(route('projects.index'))->assertOk();
 
-        $response->assertSeeInOrder(['P-LATE', 'P-TODAY', 'P-SOON', 'P-FAR', 'P-NODATE', 'P-DONE']);
+        // the open ones (as Planning's dashboard): the closed one is left out, and the list says so
+        $response->assertSeeInOrder(['P-LATE', 'P-TODAY', 'P-SOON', 'P-FAR', 'P-NODATE'])
+            ->assertDontSee('P-DONE')
+            ->assertSee('ไม่แสดงโครงการที่ปิดแล้ว 1 โครงการ')
+            ->assertSee(route('projects.index', ['status' => 'closed']), false);
         $response->assertSee('เลยกำหนด 4 วัน');
         $response->assertSee('ครบกำหนดวันนี้');
         $response->assertSee('เหลือ 3 วัน');
@@ -56,6 +60,32 @@ class ProjectIndexOrderTest extends TestCase
         $user = User::forceCreate(['name' => 'U', 'email' => 'u@example.com', 'password' => 'secret-pass', 'role' => 'admin', 'is_active' => true]);
 
         $this->actingAs($user)->get(route('projects.index'))->assertOk()
-            ->assertSeeInOrder(['P-LATE-OLD', 'P-LATE-NEW', 'P-MARKED-DONE', 'P-SOON-A', 'P-SOON-B', 'P-CANCELLED']);
+            ->assertSeeInOrder(['P-LATE-OLD', 'P-LATE-NEW', 'P-MARKED-DONE', 'P-SOON-A', 'P-SOON-B'])
+            ->assertDontSee('P-CANCELLED');
+    }
+
+    public function test_the_closed_projects_are_one_click_or_one_search_away(): void
+    {
+        $this->travelTo('2026-09-24 09:00:00');
+        $this->project('P-OPEN', '2026-10-01');
+        $this->project('P-COMPLETED-B', '2026-09-10', 'completed');
+        $this->project('P-COMPLETED-A', '2026-08-01', 'completed');
+        $this->project('P-CANCELLED', '2026-09-01', 'cancelled');
+        $user = User::forceCreate(['name' => 'U', 'email' => 'u@example.com', 'password' => 'secret-pass', 'role' => 'admin', 'is_active' => true]);
+        $this->actingAs($user);
+
+        // ปิดแล้ว: Completed and Cancelled together, in the same order (the oldest due date first), and nothing open
+        $this->get(route('projects.index', ['status' => 'closed']))->assertOk()
+            ->assertSeeInOrder(['P-COMPLETED-A', 'P-CANCELLED', 'P-COMPLETED-B'])
+            ->assertDontSee('P-OPEN')
+            ->assertSee('ปิดแล้ว (Completed / Cancelled)')
+            ->assertDontSee('ไม่แสดงโครงการที่ปิดแล้ว');
+
+        // one status alone still works
+        $this->get(route('projects.index', ['status' => 'cancelled']))->assertOk()->assertSee('P-CANCELLED')->assertDontSee('P-COMPLETED-A');
+
+        // a search finds a closed one too, without picking a status
+        $this->get(route('projects.index', ['q' => 'P-COMPLETED-B']))->assertOk()->assertSee('P-COMPLETED-B');
+        $this->get(route('projects.index', ['q' => 'P-']))->assertOk()->assertSeeInOrder(['P-OPEN', 'P-COMPLETED-A', 'P-CANCELLED', 'P-COMPLETED-B']);
     }
 }

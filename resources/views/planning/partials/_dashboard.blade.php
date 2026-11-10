@@ -93,8 +93,8 @@
     <template x-for="d in (mode === 'dashboard' && !dashProject ? [dash()] : [])" :key="'dash'">
         <div class="space-y-5">
             <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                <div class="rounded-xl border border-slate-200 p-4"><p class="text-2xl font-bold text-slate-900" x-text="d.total"></p><p class="text-xs text-slate-500 mt-1">โปรเจคทั้งหมด</p></div>
-                <div class="rounded-xl border border-slate-200 p-4"><p class="text-2xl font-bold text-emerald-600" x-text="d.completed"></p><p class="text-xs text-slate-500 mt-1">เสร็จแล้ว</p></div>
+                <div class="rounded-xl border border-slate-200 p-4"><p class="text-2xl font-bold text-slate-900" x-text="d.total"></p><p class="text-xs text-slate-500 mt-1">โปรเจคที่เปิดอยู่</p></div>
+                <div class="rounded-xl border border-slate-200 p-4"><p class="text-2xl font-bold text-emerald-600" x-text="d.completed"></p><p class="text-xs text-slate-500 mt-1">เสร็จแล้ว รอปิดโครงการ</p></div>
                 <div class="rounded-xl border border-slate-200 p-4"><p class="text-2xl font-bold text-blue-600" x-text="d.doing"></p><p class="text-xs text-slate-500 mt-1">กำลังทำ</p></div>
                 <div class="rounded-xl border border-slate-200 p-4"><p class="text-2xl font-bold text-red-600" x-text="d.late"></p><p class="text-xs text-slate-500 mt-1">เลยกำหนด</p></div>
                 <div class="rounded-xl border border-slate-200 p-4"><p class="text-2xl font-bold text-slate-900" x-text="d.checkPct + '%'"></p><p class="text-xs text-slate-500 mt-1" x-text="'เช็คลิสต์รวม (' + d.checkDone + '/' + d.checkTotal + ')'"></p></div>
@@ -131,7 +131,11 @@
             </div>
 
             <div>
-                <h4 class="text-sm font-bold text-slate-900" x-text="'โปรเจคทั้งหมด (' + d.rows.length + ')'"></h4>
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                    <h4 class="text-sm font-bold text-slate-900" x-text="'โปรเจคที่เปิดอยู่ (' + d.rows.length + ')'"></h4>
+                    {{-- the closed ones live on the projects list (ปิดแล้ว), in the same order --}}
+                    <a href="{{ route('projects.index', ['status' => 'closed']) }}" class="text-xs font-semibold text-blue-700 hover:underline">ดูโครงการที่ปิดแล้ว</a>
+                </div>
                 <div class="mt-2 overflow-x-auto rounded-xl border border-slate-200">
                     {{-- the same table as หน้าโครงการ › รายการโครงการ (projects/index): its columns, chips and colours --}}
                     <table class="min-w-full text-sm">

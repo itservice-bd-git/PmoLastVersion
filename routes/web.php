@@ -65,7 +65,8 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::middleware(['gzip', 'perm:page.planning'])->group(function () {
         Route::get('planning', fn (\Illuminate\Http\Request $r) => redirect()->route('planning.board', $r->only('project')))->name('planning.index');
         // the original single-file page, kept only as a hidden fallback (not linked anywhere)
-        Route::get('planning/classic', [PlanningController::class, 'index'])->name('planning.spa');
+        // the old single-file Planning SPA was removed (2026-11): its address goes to the page that replaced it
+        Route::get('planning/classic', fn (\Illuminate\Http\Request $r) => redirect()->route('planning.board', $r->only('project')))->name('planning.spa');
         Route::get('planning/board', [PlanningController::class, 'board'])->name('planning.board');
         Route::get('planning/data', [PlanningController::class, 'data'])->name('planning.data');
         Route::get('planning/cabinets/{cabinet}', [PlanningController::class, 'cabinet'])->name('planning.cabinet');

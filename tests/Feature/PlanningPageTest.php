@@ -160,66 +160,22 @@ class PlanningPageTest extends TestCase
         $this->assertSame([], app(PlanningBoard::class)->build($this->user(null))['boards']['pmo']['tasks']);
     }
 
-    public function test_page_serves_a_small_shell_with_embedded_data_and_requires_login(): void
-    {
-        $this->get(route('planning.spa'))->assertRedirect(route('login'));
-
-        $this->seedCabinet();
-        $res = $this->actingAs($this->user($this->busbar, 'admin'))->get(route('planning.spa'))->assertOk();
-        $html = $res->getContent();
-
-        $this->assertStringContainsString('text/html', $res->headers->get('Content-Type'));
-        $this->assertStringContainsString('window.__PMO__ = {', $html);
-        $this->assertStringNotContainsString('__PMO_CONFIG__', $html, 'the placeholder must have been replaced');
-        $this->assertStringNotContainsString('__PLANNING_ASSETS__', $html, 'the asset base must have been replaced');
-        $this->assertStringContainsString('P-1', $html);
-        $this->assertStringContainsString('"perm":"full"', $html, 'an admin gets the full tier (the server still enforces the real rules)');
-        $this->assertStringContainsString('planning/sync', $html, 'the page knows where to send its edits');
-
-        // the 600 KB of CSS/JS are NOT in the page any more: it links the static, content-hashed files instead
-        $this->assertMatchesRegularExpression('#<link rel="stylesheet" href="[^"]*/planning-assets/app\.css\?v=[0-9a-f]{10}">#', $html);
-        $this->assertMatchesRegularExpression('#<script src="[^"]*/planning-assets/app\.js\?v=[0-9a-f]{10}"></script>#', $html);
-        $this->assertStringNotContainsString('function pmoSync', $html);
-        $this->assertStringNotContainsString('supabase.js', $html);
-        $this->assertLessThan(60 * 1024, strlen($html), 'shell + one small board stays small');
-
-        $js = file_get_contents(public_path('planning-assets/app.js'));
-        $this->assertStringContainsString('function pmoSync', $js);
-        $this->assertStringContainsString('PMO_MODE', $js);
-        $this->assertStringNotContainsString('supabase.min.js', $js);
-    }
-
-    public function test_the_generated_assets_match_the_source_page(): void
-    {
-        $expected = \App\Services\PlanningAssets::split(file_get_contents(resource_path(\App\Services\PlanningAssets::SOURCE)));
-
-        foreach (\App\Services\PlanningAssets::paths() as $key => $path) {
-            $this->assertFileExists($path);
-            $this->assertSame(md5($expected[$key]), md5(file_get_contents($path)), "$path is stale - run: php artisan planning:build");
-        }
-    }
-
-    public function test_the_page_hash_in_the_shell_changes_when_the_script_changes(): void
-    {
-        $a = \App\Services\PlanningAssets::split("<html><head><style>a{}</style></head><body><script>window.__PMO__ = /*__PMO_CONFIG__*/null;</script>\n<script>\n/* ==== */ var x = 1;\n</script></body></html>");
-        $b = \App\Services\PlanningAssets::split("<html><head><style>a{}</style></head><body><script>window.__PMO__ = /*__PMO_CONFIG__*/null;</script>\n<script>\n/* ==== */ var x = 2;\n</script></body></html>");
-
-        $this->assertNotSame($a['shell'], $b['shell'], 'a new script must get a new ?v= so browsers fetch it');
-        $this->assertStringContainsString('window.__PMO__ = /*__PMO_CONFIG__*/null;', $a['shell'], 'the config placeholder stays in the shell');
-        $this->assertStringNotContainsString('var x', $a['shell']);
-        $this->assertSame("/* ==== */ var x = 1;\n", $a['js']);
-    }
-
-    public function test_user_written_text_cannot_break_out_of_the_embedded_script(): void
+    public function test_user_written_text_cannot_break_out_of_the_board_page(): void
     {
         $this->project->update(['project_name' => '</script><script>alert(1)</script>']);
         $this->seedCabinet();
         ActivityLog::record($this->project->id, null, $this->project, 'note', '"></script><img src=x onerror=alert(2)>');
 
-        $html = $this->actingAs($this->user($this->busbar, 'admin'))->get(route('planning.spa'))->assertOk()->getContent();
+        $html = $this->actingAs($this->user($this->busbar, 'admin'))->get(route('planning.board'))->assertOk()->getContent();
 
         $this->assertStringNotContainsString('</script><script>alert(1)', $html);
         $this->assertStringNotContainsString('<img src=x onerror=alert(2)>', $html);
         $this->assertStringContainsString('\u003C/script\u003E', $html, 'the closing tag is embedded only in its escaped form');
+    }
+
+    public function test_the_old_classic_address_goes_to_the_board(): void
+    {
+        $this->actingAs($this->user($this->busbar, 'admin'))->get('/planning/classic?project=5')
+            ->assertRedirect(route('planning.board', ['project' => 5]));
     }
 }

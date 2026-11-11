@@ -18,8 +18,8 @@ use App\Models\User;
 use Illuminate\Support\Collection;
 
 /**
- * Turns PmoLastVersion's own data into the "board" JSON that the Avatar Planning single-page app (resources/planning/
- * index.html, served at /planning) expects, so that page can run on OUR data instead of Supabase.
+ * Turns PmoLastVersion's own data into the "board" JSON the Planning page reads (/planning/board, resources/js/planning/).
+ * The shape is the one the original Avatar Planning app used (that single-file app was removed in 2026-11).
  *
  *   Project               -> task      (SO = project_no, dates, priority, comments = Activity notes)
  *   Cabinet               -> subtask   (MO = mo_no; checklist = the checklist items of its dispatched Sub Tasks)

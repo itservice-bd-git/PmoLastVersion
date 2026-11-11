@@ -2,62 +2,26 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\PlanningAssets;
 use App\Services\PlanningBoard;
 use App\Services\PlanningSync;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /**
- * /planning: the original Avatar Planning single-page app running on PMO's own data.
+ * /planning/board: the Planning page (Blade partials + the Alpine component in resources/js/planning/).
  *
- *  - index: a small per-user shell (resources/planning/shell.html, ~17 KB) with the user's board embedded as
- *           `window.__PMO__`; the page's CSS/JS are static, content-hashed files in public/planning-assets (browser-cached)
+ *  - board: the page, the user's board (PlanningBoard) passed to the component
  *  - data:  the board again as JSON - the page polls it (with an ETag, so "nothing changed" costs a 304)
  *  - sync:  the page's edits, as a list of operations; each one is applied through PMO's own services and rules
  *           (PlanningSync). The answer carries only the projects that were edited, not the whole board.
  *
- * /planning/board is the same Planning page written natively (Blade partials + Alpine, like My Department): it reads
- * the same board (PlanningBoard) and writes through the same operations (PlanningSync, via `sync`).
+ * The old single-file SPA (/planning/classic) was removed in 2026-11; its address redirects here.
  *
  * All three answer with a Server-Timing header (php total, board build, query count) so a slow host can be diagnosed
  * from the browser's Network tab instead of guessed at.
  */
 class PlanningController extends Controller
 {
-    public function index(Request $request, PlanningBoard $board)
-    {
-        $user = $request->user();
-        [$root, $timing] = $this->measure(fn () => $board->build($user));
-
-        $config = [
-            'profile' => $board->profile($user),
-            'root' => $root,
-            'homeUrl' => route('planning.board'),
-            'csrf' => csrf_token(),
-            'urls' => [
-                'sync' => route('planning.sync'),
-                'data' => route('planning.data'),
-                'assign' => route('assignments.index'),
-                'newProject' => route('projects.create'),
-            ],
-            'generatedAt' => now()->toIso8601String(),
-        ];
-
-        // The data holds user-written text (project names, comments), and it is placed inside a <script>: escape
-        // < > & ' " as \uXXXX so nothing in it can ever close the tag or break out of the JSON.
-        $json = json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
-
-        // the generated shell if it exists (run `php artisan planning:build`), else the one-file source page
-        $shell = resource_path(PlanningAssets::SHELL);
-        $template = file_get_contents(is_file($shell) ? $shell : resource_path(PlanningAssets::SOURCE));
-        // asset base first, the user's data LAST: nothing inside the data can then be mistaken for a placeholder
-        $html = str_replace('__PLANNING_ASSETS__', rtrim(asset('planning-assets'), '/'), $template);
-        $html = str_replace('/*__PMO_CONFIG__*/null', $json, $html);
-
-        return $this->timed(response($html)->header('Content-Type', 'text/html; charset=UTF-8'), $timing);
-    }
-
     /**
      * One cabinet's record and every one of its sub tasks the user may see (the expanded cabinet row on the page): dates,
      * department, workflow state, the person doing it, remark. PMO roles also get the sub tasks nobody was given yet.

@@ -494,10 +494,10 @@ class PlanningSyncTest extends TestCase
         $this->subtask($this->busbar);
         $member = $this->user($this->busbar);
 
-        $plain = $this->actingAs($member)->get(route('planning.spa'));
+        $plain = $this->actingAs($member)->get(route('planning.board'));
         $this->assertNull($plain->headers->get('Content-Encoding'));
 
-        $zipped = $this->actingAs($member)->withHeaders(['Accept-Encoding' => 'gzip, deflate'])->get(route('planning.spa'));
+        $zipped = $this->actingAs($member)->withHeaders(['Accept-Encoding' => 'gzip, deflate'])->get(route('planning.board'));
         $this->assertSame('gzip', $zipped->headers->get('Content-Encoding'));
         $this->assertStringContainsString('Accept-Encoding', (string) $zipped->headers->get('Vary'));
         $this->assertSame($plain->getContent(), gzdecode($zipped->getContent()), 'identical content, only compressed');

@@ -277,7 +277,7 @@ class PlanningFeaturesTest extends TestCase
     public function test_dragging_bars_is_for_pmo_roles_only(): void
     {
         $month = file_get_contents(resource_path('views/planning/partials/_month.blade.php'));
-        $script = file_get_contents(resource_path('js/planning-board.js'));
+        $script = implode("\n", array_map('file_get_contents', glob(resource_path('js/planning/*.js'))));
 
         $this->assertStringContainsString(':draggable="isPmo && !dept && !b.c"', $month);
         $this->assertStringContainsString('dragStart(e, t) { if (!this.isPmo)', $script);

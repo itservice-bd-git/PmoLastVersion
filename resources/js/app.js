@@ -2,7 +2,7 @@ import Alpine from 'alpinejs';
 import flatpickr from 'flatpickr';
 import Sortable from 'sortablejs';
 import checklistEditor from './checklist-editor';
-import registerPlanningBoard from './planning-board';
+import registerPlanningBoard from './planning';
 import { registerWorkDays } from './work-days';
 import pmoProjectDates from './project-dates';
 import watchSession from './session-expiry';

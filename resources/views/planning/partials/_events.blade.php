@@ -1,5 +1,5 @@
 {{-- FAT / จัดส่ง (two tabs, one template): the month's FAT appointments or delivery rounds alone, without the project bars
-     (planning-board.js ev*). Laid out as เดือน is: one bar per appointment over its days (a FAT of several days is one long
+     (resources/js/planning/delivery.js ev*). Laid out as เดือน is: one bar per appointment over its days (a FAT of several days is one long
      bar). The toolbar's filters still apply; a bar opens the FAT / delivery window (Admin / PM) or the project's window. --}}
 <div x-show="mode === 'fat' || mode === 'del'" x-cloak>
     <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-600">

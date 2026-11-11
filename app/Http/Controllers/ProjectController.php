@@ -21,7 +21,7 @@ class ProjectController extends Controller
     {
         $query = $this->filteredProjects($request);
 
-        // The same list and order as Planning's dashboard table (planning-board.js dash().rows): the open projects,
+        // The same list and order as Planning's dashboard table (resources/js/planning/dashboard.js dash().rows): the open projects,
         // late first - its due date passed and not marked done on Planning - then those waiting for sales to give the new
         // dates (รอฝ่ายขายแจ้งกำหนดส่ง), then the nearest due date, then the order made (id); no due date last. Closed ones (ปิดแล้ว, or found by a search) come after, in the same order.
         $locked = [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED];

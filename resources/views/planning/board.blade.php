@@ -5,7 +5,7 @@
 
     {{--
         Planning, written the way the rest of the app is: this Blade page + partials + one Alpine component
-        (resources/js/planning-board.js). Left "งานที่ต้องเสร็จ" panel, one toolbar, เดือน / ไทม์ไลน์ / แดชบอร์ด, and a wide project modal.
+        (resources/js/planning/, one module per area). Left "งานที่ต้องเสร็จ" panel, one toolbar, เดือน / ไทม์ไลน์ / แดชบอร์ด, and a wide project modal.
         Data = PlanningBoard (controller@board), every edit = one operation through planning.sync (PlanningSync), so the
         permissions and workflow rules are PMO's own. Bleeds to the page edges (negative margins cancel layouts/app's padding).
     --}}
@@ -35,6 +35,6 @@
         @include('planning.partials._overlays')
     </div>
 
-    {{-- the page's Alpine component: resources/js/planning-board.js (in the app bundle) --}}
+    {{-- the page's Alpine component: resources/js/planning/index.js (in the app bundle) --}}
     @endif
 </x-app-layout>

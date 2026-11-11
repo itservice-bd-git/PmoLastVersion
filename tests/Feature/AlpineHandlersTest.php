@@ -43,10 +43,11 @@ class AlpineHandlersTest extends TestCase
         return array_values(array_unique(array_diff($calls, self::GLOBALS, ['if', 'function', 'return', 'typeof'])));
     }
 
-    /** @return list<string> methods defined on the Alpine component */
-    private function definedIn(string $scriptFile): array
+    /** @return list<string> methods defined on the Alpine component (a file, or a folder of its parts: resources/js/planning) */
+    private function definedIn(string $script): array
     {
-        preg_match_all('/^\s{8,}(?:async\s+)?(?:get\s+)?([A-Za-z_]\w*)\s*\([^)]*\)\s*\{/m', file_get_contents($scriptFile), $m);
+        $source = is_dir($script) ? implode("\n", array_map('file_get_contents', glob($script.'/*.js'))) : file_get_contents($script);
+        preg_match_all('/^\s{4,}(?:async\s+)?(?:get\s+)?([A-Za-z_]\w*)\s*\([^)]*\)\s*\{/m', $source, $m);
 
         return array_unique($m[1]);
     }
@@ -81,7 +82,7 @@ class AlpineHandlersTest extends TestCase
     public static function pages(): array
     {
         return [
-            'planning board' => ['planning', 'js/planning-board.js'],
+            'planning board' => ['planning', 'js/planning'],
             'my department' => ['my-department', 'views/my-department/partials/_script.blade.php'],
         ];
     }

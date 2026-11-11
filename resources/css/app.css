@@ -343,7 +343,7 @@ html { color-scheme: light; }
     @apply h-6 rounded-lg border border-slate-300 bg-white px-2 font-semibold text-slate-700 hover:bg-slate-50;
 }
 
-/* การจัดส่ง in Planning's project window (planning-board.js dels / delCab): a row per round, a chip per cabinet / vehicle.
+/* การจัดส่ง in Planning's project window (resources/js/planning/delivery.js dels / delCab): a row per round, a chip per cabinet / vehicle.
    Teal = delivery (no project status uses it); dashed amber = no vehicle yet; green tint = arrived. */
 .dl-box { @apply flex flex-col gap-1.5 border-t border-slate-200 px-3 pb-2.5 pt-2; grid-column: 1 / -1; }
 .dl-h { @apply text-[12px] font-bold tracking-wide text-slate-400; }
@@ -370,7 +370,7 @@ html { color-scheme: light; }
 .st-pill, .st-chip { background-color: color-mix(in srgb, var(--c) 13%, #fff); color: color-mix(in srgb, var(--c) 72%, #000); }
 .st-chip { border-color: color-mix(in srgb, var(--c) 45%, #fff); }
 
-/* วัน FAT on Planning (planning-board.js fatBand / tlFat): a line along the top of the project's bar over the FAT days, and
+/* วัน FAT on Planning (resources/js/planning/fat.js fatBand / tlFat): a line along the top of the project's bar over the FAT days, and
    the same "FAT" tab everywhere, hanging under the line's left end (where the FAT starts). FAT is the customer's day at the factory, so a colour no
    project status uses (fuchsia by default); the state colours are set in Settings > สถานะงาน (--fat on the element). */
 .fat-band {
@@ -384,7 +384,7 @@ html { color-scheme: light; }
 /* the timeline: the same, as a button over the row (its day columns are narrow: the tab may run past the line's end) */
 button.fat-band { position: relative; height: 2rem; background: none; pointer-events: auto; text-align: left; }
 button.fat-band::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; border-radius: 2px 2px 0 0; background: var(--fat); }
-/* a delivery round (planning-board.js delBands / tlDels): a line along the BOTTOM of the bar on its day, its tab above the
+/* a delivery round (resources/js/planning/delivery.js delBands / tlDels): a line along the BOTTOM of the bar on its day, its tab above the
    line's right end (FAT is the top edge, tab at the left: the two never meet). Its colour: --del, from Settings > สถานะงาน. */
 .del-band {
     --del: #0f766e;
@@ -401,7 +401,7 @@ button.del-band > span { bottom: auto; top: 100%; border-radius: 0 0 6px 6px; } 
 .del-band.del-wait, button.del-band.del-wait::before { background: repeating-linear-gradient(90deg, var(--del) 0 6px, transparent 6px 10px); }
 button.del-band.del-wait { background: none; }
 .del-band.del-wait > span { border: 1.5px dashed var(--del); background: #fff; color: color-mix(in srgb, var(--del) 80%, #000); line-height: 13px; }
-/* the FAT / จัดส่ง tabs (_events, planning-board.js ev*): one bar per appointment over its days, in its state's colour (--c) */
+/* the FAT / จัดส่ง tabs (_events, resources/js/planning/delivery.js ev*): one bar per appointment over its days, in its state's colour (--c) */
 .ev-card {
     @apply mx-0.5 min-w-0 overflow-hidden rounded-md border border-l-4 px-2 py-1 text-left text-[11.5px] leading-snug hover:brightness-95 hover:shadow-sm;
     border-color: color-mix(in srgb, var(--c) 40%, #fff); border-left-color: var(--c);

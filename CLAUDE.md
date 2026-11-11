@@ -71,6 +71,7 @@ Production has **no shell, no `npm`, and no `artisan`**: schema changes go throu
   | `assign` | handing work out |
   | `feed` | remarks, comments, work waiting to be accepted |
   | `checklist` | checklists |
+| `day-notes` | หมายเหตุรายวัน |
 
   Constants and date helpers are in `shared.js`.
 - **Module rules:**
@@ -84,6 +85,11 @@ Production has **no shell, no `npm`, and no `artisan`**: schema changes go throu
   - **The delivery department** (`shipUrl` set, `calendar.js` `roundCards()`): in เดือน each round is its own card on its day(s) (`monthEntries`). On a phone the card shows only the time/state and the SO. A งานขนส่ง project has no bar of its own. In ไทม์ไลน์ each round is a segment with its words to the right (`delivery.js` `tlDels`, `del-seg`).
   - The delivery department also gets tabs over เดือน: ทั้งหมด / รอบส่ง / งาน Sub Task (`calKind`, remembered in this browser). The top "จัดส่ง" tab stays as it is.
   - **Everyone else:** the rounds are tabs on the project's bar (`delBands`).
+- **หมายเหตุรายวัน** (`day-notes.js`, `DayNoteController`, table `department_day_notes`): a department's notes for a day.
+  - Many notes per day. Only the department's own people see them (`User::departmentIds()`); a user with no department has none.
+  - Only the writer edits or deletes a note.
+  - Shown as a badge at the right of the day in เดือน and a button in the left panel. Both open one window.
+  - Loaded per month as JSON (`planning.day-notes.*`), not part of the board, so the board's ETag polling is unaffected.
 - **Guards:** `AlpineHandlersTest` fails when a template calls a method no module defines. `PlanningBoardPageTest` keeps a page-size budget.
 
 The old single-file SPA (`resources/planning/index.html`, `public/planning-assets/`, `planning:build`) was removed in 2026-11; `/planning/classic` redirects to the board.

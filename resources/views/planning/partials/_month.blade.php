@@ -23,12 +23,21 @@
         <div class="border-b border-slate-200">
             <div class="grid grid-cols-7">
                 <template x-for="d in week" :key="d.date">
-                    <button type="button" @click="selectDay(d.date)" @dragover.prevent @drop.prevent="dropOn(d.date)" :aria-pressed="focusDate === d.date"
-                            :class="[d.date === today ? 'bg-blue-50/70' : (isWeekend(d.date) ? 'bg-slate-50/70' : 'bg-white'), focusDate === d.date ? 'ring-2 ring-inset ring-blue-300' : '']"
-                            class="border-r border-slate-100 last:border-r-0 px-3 pt-2 pb-1 text-left hover:bg-blue-50/50 focus:outline-none">
-                        <span :class="d.date === today ? 'bg-blue-600 text-white' : (d.inMonth ? 'text-slate-800' : 'text-slate-300')"
-                              class="inline-flex items-center justify-center min-w-[1.6rem] h-[1.6rem] rounded-full text-xs font-semibold" x-text="d.day"></span>
-                    </button>
+                    <div class="relative border-r border-slate-100 last:border-r-0">
+                        <button type="button" @click="selectDay(d.date)" @dragover.prevent @drop.prevent="dropOn(d.date)" :aria-pressed="focusDate === d.date"
+                                :class="[d.date === today ? 'bg-blue-50/70' : (isWeekend(d.date) ? 'bg-slate-50/70' : 'bg-white'), focusDate === d.date ? 'ring-2 ring-inset ring-blue-300' : '']"
+                                class="h-full w-full px-3 pt-2 pb-1 text-left hover:bg-blue-50/50 focus:outline-none">
+                            <span :class="d.date === today ? 'bg-blue-600 text-white' : (d.inMonth ? 'text-slate-800' : 'text-slate-300')"
+                                  class="inline-flex items-center justify-center min-w-[1.6rem] h-[1.6rem] rounded-full text-xs font-semibold" x-text="d.day"></span>
+                        </button>
+                        {{-- หมายเหตุรายวัน (day-notes.js): the department's notes for the day, at the right of its header --}}
+                        <button type="button" x-show="notesOn(d.date).length" x-cloak @click.stop="openDayNotes(d.date, $event)"
+                                :title="notesOn(d.date).length + ' หมายเหตุ'" :aria-label="'หมายเหตุวันที่ ' + fmtBE(d.date) + ' ' + notesOn(d.date).length + ' รายการ'"
+                                class="absolute right-1 top-2 inline-flex h-6 items-center gap-[3px] rounded-md bg-amber-100 px-1.5 text-[12px] font-extrabold tabular-nums text-amber-900 ring-1 ring-inset ring-amber-500 hover:bg-amber-200 sm:right-2 sm:text-[13px]">
+                            <svg class="hidden h-[15px] w-[15px] text-amber-700 sm:block" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>
+                            <span x-text="notesOn(d.date).length"></span>
+                        </button>
+                    </div>
                 </template>
             </div>
 

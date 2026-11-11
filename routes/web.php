@@ -72,6 +72,11 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
         Route::get('planning/cabinets/{cabinet}', [PlanningController::class, 'cabinet'])->name('planning.cabinet');
         Route::get('planning/work-order', [PlanningController::class, 'workOrder'])->name('planning.work-order');
         Route::post('planning/comment', [PlanningController::class, 'comment'])->middleware(['throttle:60,1', 'perm:data.comments'])->name('planning.comment');
+        // หมายเหตุรายวัน: a department's notes for a day (DayNoteController)
+        Route::get('planning/day-notes', [\App\Http\Controllers\DayNoteController::class, 'index'])->name('planning.day-notes.index');
+        Route::post('planning/day-notes', [\App\Http\Controllers\DayNoteController::class, 'store'])->middleware('throttle:60,1')->name('planning.day-notes.store');
+        Route::patch('planning/day-notes/{note}', [\App\Http\Controllers\DayNoteController::class, 'update'])->middleware('throttle:60,1')->name('planning.day-notes.update');
+        Route::delete('planning/day-notes/{note}', [\App\Http\Controllers\DayNoteController::class, 'destroy'])->middleware('throttle:60,1')->name('planning.day-notes.destroy');
         Route::post('planning/sync', [PlanningController::class, 'sync'])->middleware('throttle:240,1')->name('planning.sync');
     });
     Route::get('my-department/tasks', [MyDepartmentController::class, 'tasks'])->name('my-department.tasks');

@@ -133,7 +133,11 @@ export default ({ config, board, starKey, loadStars, t0 }) => ({
         const poll = () => { if (!this.saving && !document.hidden && !this.stageDept && !this.cl && !this.newProject) this.refresh(); };
         setInterval(poll, 15000);
         document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
-        window.addEventListener('resize', () => { if (this.cl && this.cl.anchor) this.clPlace(); });   // e.g. an iPad turned round
+        window.addEventListener('resize', () => { if (this.cl && this.cl.anchor) this.clPlace(); });
+        // หมายเหตุรายวัน (day-notes.js): the month on screen, and again whenever the month changes
+        this.loadDayNotes();
+        this.$watch('month', () => this.loadDayNotes());
+        this.$watch('year', () => this.loadDayNotes());   // e.g. an iPad turned round
         // the รอบส่ง window's frame (embed-layout): a step saved (the calendar behind shows it at once), one of its panels
         // open / closed (this header dims with it), Esc with nothing of its own open (the window closes)
         window.addEventListener('message', (e) => {

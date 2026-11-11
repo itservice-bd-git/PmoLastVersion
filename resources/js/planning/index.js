@@ -23,8 +23,9 @@ import project from './project';
 import assign from './assign';
 import feed from './feed';
 import checklist from './checklist';
+import dayNotes from './day-notes';
 
-const PARTS = [state, filters, calendar, fat, delivery, leftPanel, dashboard, sync, project, assign, feed, checklist];
+const PARTS = [state, filters, calendar, fat, delivery, leftPanel, dashboard, sync, project, assign, feed, checklist, dayNotes];
 
 export default function registerPlanningBoard() {
     Alpine.data('planningBoard', (config) => {

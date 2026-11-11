@@ -152,7 +152,10 @@ class PlanningController extends Controller
                 'export' => route('my-department.export'),
                 'workOrder' => route('planning.work-order'),
                 'settings' => route('settings.index'),
+                'dayNotes' => route('planning.day-notes.index'),
             ],
+            // หมายเหตุรายวัน: the departments whose notes this user keeps (none: no notes at all)
+            'noteDepts' => \App\Models\Department::whereIn('id', $user->departmentIds())->orderBy('name')->get(['id', 'name'])->map(fn ($d) => ['id' => $d->id, 'name' => $d->name])->all(),
         ]]);
 
         return $this->timed($response, $timing);

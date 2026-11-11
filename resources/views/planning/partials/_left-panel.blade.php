@@ -37,6 +37,11 @@
                     <span class="text-[12px] leading-[26px] text-slate-500" x-text="fmtBE(focusDate)"></span>
                 </button>
                 <button type="button" @click="shiftFocus(1)" class="inline-flex w-[26px] shrink-0 items-center justify-center rounded-[7px] border border-slate-300 bg-white text-[17px] leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-900" title="วันถัดไป" aria-label="วันถัดไป">&rsaquo;</button>
+                {{-- หมายเหตุรายวัน of the day picked (day-notes.js), with how many there are --}}
+                <button type="button" x-show="hasNotes()" @click="openDayNotes(focusDate, $event)" class="relative inline-flex w-[26px] shrink-0 items-center justify-center rounded-[7px] border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-900" :title="'หมายเหตุของแผนก ' + fmtBE(focusDate)" :aria-label="'หมายเหตุของแผนก ' + fmtBE(focusDate) + (notesOn(focusDate).length ? ' ' + notesOn(focusDate).length + ' รายการ' : '')">
+                    <svg class="h-[15px] w-[15px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>
+                    <span x-show="notesOn(focusDate).length" class="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-500 px-1 text-[10.5px] font-extrabold text-white" x-text="notesOn(focusDate).length"></span>
+                </button>
                 <button type="button" @click="$dispatch('open-status-report')" class="inline-flex w-[26px] shrink-0 items-center justify-center rounded-[7px] border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-900" title="รายงานสถานะงาน" aria-label="รายงานสถานะงาน">
                     <svg class="h-[15px] w-[15px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
                 </button>

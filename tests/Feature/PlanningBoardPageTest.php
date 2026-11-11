@@ -71,8 +71,9 @@ class PlanningBoardPageTest extends TestCase
         // gzip (GzipResponse) sends a small fraction of it. (240 -> 256 KB with the project window's "หมายเหตุ" tab, 2026-10;
         // 256 -> 260 KB with "เลื่อน n" and "เลื่อน / แก้วัน", 2026-11; 260 -> 270 KB with การจัดส่ง, 2026-11; 270 -> 275 KB with the
         // dashboard table laid out as the projects list, 2026-11; 275 -> 280 KB with the งานขนส่ง tag on the month / timeline bars, 2026-11; 280 -> 285 KB with the
-        // delivery department's รอบส่ง window, 2026-11.)
-        $this->assertLessThan(285 * 1024, strlen($html));
+        // delivery department's รอบส่ง window, 2026-11; 285 -> 300 KB with the round cards, the ทั้งหมด / รอบส่ง / งาน Sub Task tabs
+        // and หมายเหตุรายวัน (its badge on every day of the month grid + its window), 2026-11.)
+        $this->assertLessThan(300 * 1024, strlen($html));
     }
 
     public function test_pmo_roles_can_edit_and_department_users_start_on_their_own_department(): void

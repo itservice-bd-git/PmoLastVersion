@@ -555,6 +555,30 @@ class ProjectDeliveryTest extends TestCase
         $this->assertContains('PM ยกเลิกรอบส่ง', $this->notices($this->clerk, 'delivery'));
     }
 
+    public function test_planning_shows_the_delivery_department_its_rounds_of_projects_with_no_sub_task_of_its_own_as_งานขนส่ง(): void
+    {
+        $other = Project::forceCreate(['project_no' => 'SO-2', 'project_name' => 'X', 'customer_name' => 'C', 'status' => 'in_progress', 'priority' => 'normal', 'due_date' => '2026-12-20']);
+        $round = ProjectDelivery::forceCreate(['project_id' => $other->id, 'round' => 1, 'delivery_date' => '2026-11-25', 'status' => 'draft', 'cabinet_ids' => [], 'method' => 'company', 'created_by' => $this->pm->id]);
+        $tasks = fn (User $u) => collect(app(PlanningBoard::class)->tasks($u))->keyBy('id');
+
+        $this->assertFalse($tasks($this->clerk)->has('p'.$other->id), "PM's draft is not theirs yet");
+        $round->forceFill(['status' => 'waiting'])->save();
+        $row = $tasks($this->clerk)->get('p'.$other->id);
+        $this->assertTrue($row['ship']);
+        $this->assertSame([[$round->id, '2026-11-25', 'waiting']], array_map(fn ($d) => [$d['id'], $d['date'], $d['status']], $row['deliveries']));
+        $this->assertSame([], $row['subtasks']);
+        $this->assertArrayNotHasKey('ship', $tasks($this->clerk)->get('p'.$this->project->id), 'a project with its Sub Tasks stays Sub Task work');
+        $this->assertTrue($tasks($this->clerk)->has('p'.$this->project->id));
+
+        $this->assertFalse($tasks($this->member)->has('p'.$other->id), 'another department: not its work');
+        $this->assertArrayNotHasKey('ship', $tasks($this->pm)->get('p'.$other->id), 'PMO sees every project as before');
+        $this->assertSame([], app(PlanningBoard::class)->tasks($this->clerk, [$this->project->id + 999]));
+        $this->assertTrue(collect(app(PlanningBoard::class)->tasks($this->clerk, [$other->id]))->first()['ship'], 'a sync answer for that project keeps it');
+
+        $other->forceFill(['status' => 'completed'])->saveQuietly();
+        $this->assertFalse($tasks($this->clerk)->has('p'.$other->id), 'closed projects are left out');
+    }
+
     public function test_the_delivery_department_keeps_the_vehicles_and_the_reasons(): void
     {
         $this->actingAs($this->member)->get(route('settings.vehicles.index'))->assertForbidden();

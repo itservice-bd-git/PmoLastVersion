@@ -166,7 +166,17 @@ class PlanningBoard
             ->tap($onBoard)
             ->with('boardStatus', 'boardLabels', 'assignees:id', 'followers:id', 'latestFat')->orderBy('id')->get();
 
-        $ids = $byProject->keys()->merge($empty->pluck('id'));
+        // แผนกจัดส่ง: open projects it has no Sub Task in but a delivery round sent to it (not PM's drafts) - its work on
+        // งานจัดส่ง - so the calendars show those rounds too, marked as งานขนส่ง ('ship') to tell them from Sub Task work
+        $ship = $builder || $projectIds === [] || ! DeliveryFlow::canDeliver($user) ? collect() : Project::query()
+            ->whereNotIn('status', Project::LOCKED_STATUSES)
+            ->whereNotIn('id', $byProject->keys()->merge($empty->pluck('id')))
+            ->whereHas('deliveries', fn ($d) => $d->where('status', '!=', ProjectDelivery::DRAFT))
+            ->when($projectIds !== null, fn ($q) => $q->whereIn('id', $projectIds))
+            ->tap($onBoard)
+            ->with('boardStatus', 'boardLabels', 'assignees:id', 'followers:id', 'latestFat')->orderBy('id')->get();
+
+        $ids = $byProject->keys()->merge($empty->pluck('id'))->merge($ship->pluck('id'));
         $comments = $this->comments($ids, $user);
         $this->fieldValues = $this->loadFieldValues($ids);
         $this->tags = app(ChecklistStatuses::class)->idsFor($subtasks->flatMap->checklists->pluck('id'));
@@ -202,7 +212,8 @@ class PlanningBoard
         $cabinets = $builder ? Cabinet::with('boardStatus')->whereIn('project_id', $ids)->orderBy('sequence')->orderBy('id')->get()->groupBy('project_id') : null;
 
         $tasks = $byProject->map(fn (Collection $rows) => $this->task($rows->first()->cabinetTask->cabinet->project, $rows, $comments, $today, $user, $cabinets))
-            ->concat($empty->map(fn (Project $p) => $this->task($p, collect(), $comments, $today, $user, $cabinets)));
+            ->concat($empty->map(fn (Project $p) => $this->task($p, collect(), $comments, $today, $user, $cabinets)))
+            ->concat($ship->map(fn (Project $p) => ['ship' => true] + $this->task($p, collect(), $comments, $today, $user, $cabinets)));
 
         return $tasks->sortBy(fn (array $t) => (int) substr($t['id'], 1))->values()->all();
     }

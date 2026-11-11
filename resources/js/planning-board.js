@@ -21,6 +21,7 @@ export default function registerPlanningBoard() {
     const TH_MON_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
     const AVATAR_COLORS = ['#2563eb', '#0e9384', '#d97706', '#db2777', '#0891b2', '#65a30d', '#dc2626', '#7c3aed'];
     const MAX_LANES = 4; // bars per week before "+N"
+    const SHIP_COLOR = '#0f766e';   // งานขนส่ง bars (teal-700): not a project status, so never mistaken for one
     const TL_DAY = 36;   // timeline column width (px)
     const pad = (n) => String(n).padStart(2, '0');
     const ymd = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -229,8 +230,12 @@ export default function registerPlanningBoard() {
             fmtShort(s) { return s ? s.slice(8) + '/' + s.slice(5, 7) : ''; },
             isWeekend(date) { const n = parse(date).getDay(); return n === 0 || n === 6; },
             // a task's date as seen in the current department view: that department's own due date, else the project's
-            dueFor(t) { if (this.dept) { const s = this.stageOf(t, this.dept); if (s) return s.end; } return t.date; },
-            doneFor(t) { if (this.dept) { const s = this.stageOf(t, this.dept); if (s) return this.stageDone(s) || this.isDone(t); } return this.isDone(t); },
+            // งานขนส่ง (t.ship, PlanningBoard): a project the delivery department has no Sub Task in, only rounds sent to it -
+            // drawn over its rounds' days (first to last), done when every round is delivered, in a colour of its own
+            shipSpan(t) { const ds = this.dels(t).filter((d) => !d.pending); return ds.length ? { start: ds.map((d) => d.date).sort()[0], end: ds.map((d) => d.end || d.date).sort().pop(), done: ds.every((d) => d.status === 'delivered') } : null; },
+            barColor(t) { return t.ship ? SHIP_COLOR : this.statusColor(t); },
+            dueFor(t) { if (t.ship) { const r = this.shipSpan(t); return r ? r.end : null; } if (this.dept) { const s = this.stageOf(t, this.dept); if (s) return s.end; } return t.date; },
+            doneFor(t) { if (t.ship) { const r = this.shipSpan(t); return !r || r.done; } if (this.dept) { const s = this.stageOf(t, this.dept); if (s) return this.stageDone(s) || this.isDone(t); } return this.isDone(t); },
             // a project waiting for sales to give its new date (รอฝ่ายขายแจ้งกำหนดส่ง) is never late by it; a picked department's own dates still count
             overdueFor(t) { return !(t.pending && !this.dept) && !this.doneFor(t) && this.dueFor(t) && this.dueFor(t) < this.today; },
             items(t, deptId) { // checklist items of a task, optionally only one department's
@@ -251,8 +256,8 @@ export default function registerPlanningBoard() {
                     if (this.priority !== 'all' && t.priority !== this.priority) return false;
                     if (this.starOnly && !this.isStarred(t)) return false;
                     if (this.mineOnly && !this.mine.includes(Number(t.id.slice(1)))) return false;
-                    if (this.dept && !this.stageOf(t, this.dept)) return false;
-                    if (this.multiDepts.length && !this.multiDepts.some((d) => this.stageOf(t, d))) return false;
+                    if (this.dept && !t.ship && !this.stageOf(t, this.dept)) return false;
+                    if (this.multiDepts.length && !t.ship && !this.multiDepts.some((d) => this.stageOf(t, d))) return false;
                     if (q && ![t.so, t.title, ...t.subtasks.map((c) => c.mo + ' ' + c.text)].join(' ').toLowerCase().includes(q)) return false;
                     return true;
                 });
@@ -287,6 +292,7 @@ export default function registerPlanningBoard() {
                     const late = !done && end < today;
                     return { from: start && start <= end ? start : end, to: late ? today : end, end, done, late };
                 };
+                if (t.ship) { const r = this.shipSpan(t); return r ? make(r.start, r.end, r.done) : null; }
                 if (this.dept) {
                     const r = c ? (c.deptRanges || {})[this.dept] : this.stageOf(t, this.dept);
                     return r ? make(r.start, r.end, c ? !!r.done : (this.stageDone(r) || this.isDone(t))) : null;
@@ -316,7 +322,7 @@ export default function registerPlanningBoard() {
             withFat(t, c, r) {
                 if (!r) return r;
                 // its delivery days too (a round after the due date); a round waiting for sales has no day to draw
-                const f = t.fat && !t.fat.pending ? t.fat : null, days = this.dels(t, c).filter((d) => !d.pending).flatMap((d) => [d.date, d.end || d.date]);
+                const f = t.fat && !t.fat.pending && !t.ship ? t.fat : null, days = this.dels(t, c).filter((d) => !d.pending).flatMap((d) => [d.date, d.end || d.date]);
                 if (f && !(c && f.cabinets && !f.cabinets.includes(c.id))) days.push(f.date, f.end || f.date);
                 if (!days.length) return r;
                 days.sort();
@@ -366,7 +372,7 @@ export default function registerPlanningBoard() {
             // the FAT days as a striped band over a bar of the month (a cabinet's bar only when that cabinet is in the round)
             fatBand(b) {
                 const f = b.t.fat;
-                if (!f || f.pending || (b.c && f.cabinets && !f.cabinets.includes(b.c.id))) return null;
+                if (!f || f.pending || b.t.ship || (b.c && f.cabinets && !f.cabinets.includes(b.c.id))) return null;
                 const from = f.date > b.cs ? f.date : b.cs, to = (f.end || f.date) < b.ce ? (f.end || f.date) : b.ce;
                 if (from > to) return null;
                 const days = diffDays(b.ce, b.cs) + 1, a = diffDays(from, b.cs), e = diffDays(to, b.cs) + 1;
@@ -558,7 +564,7 @@ export default function registerPlanningBoard() {
             // the timeline: the day column of a row's FAT (a cabinet row only when that cabinet is in the round), else 0
             tlFat(r) {
                 const f = r.t.fat, days = this.tlDays();
-                if (!f || f.pending || (r.c && f.cabinets && !f.cabinets.includes(r.c.id))) return null;
+                if (!f || r.t.ship || f.pending || (r.c && f.cabinets && !f.cabinets.includes(r.c.id))) return null;
                 const a = days.findIndex((d) => d.date >= f.date), z = days.findLastIndex((d) => d.date <= (f.end || f.date));
                 return a < 0 || z < a ? null : { col: a + 1, span: z - a + 1, label: this.fatLabel(f) };
             },
@@ -566,10 +572,11 @@ export default function registerPlanningBoard() {
             // "+n โครงการ" opens the whole week (every bar, its FAT band too); "▲ ย่อกลับ" closes it
             toggleWeek(week, open) { this.openWeeks = { ...this.openWeeks, [week[0].date]: open }; },
             barStyle(b) {
-                const color = this.statusColor(b.t);   // the bar is always the PROJECT's status colour; late shows as "เลย n วัน"
+                const color = this.barColor(b.t);   // the bar is always the PROJECT's status colour (งานขนส่ง its own); late shows as "เลย n วัน"
                 return 'grid-column:' + b.col + ' / span ' + b.span + ';grid-row:' + (b.lane + 1) + ';' + this.chipStyle(color, b.done);
             },
             barTitle(b) {
+                if (b.t.ship) return b.t.so + ' ' + b.t.title + ' — งานขนส่ง (ไม่ใช่งาน Sub Task): รอบส่ง ' + this.dels(b.t).filter((d) => !d.pending).length + ' รอบ · ' + this.fmtBE(b.from) + ' – ' + this.fmtBE(b.end) + (b.late ? ' (ยังไม่ส่งถึง เลย ' + diffDays(this.today, b.end) + ' วัน)' : '');
                 return b.t.so + ' ' + b.t.title + (b.c ? ' · ' + b.c.mo + ' ' + b.c.text : '') + ' — สถานะโครงการ: ' + this.statusOf(b.t).name + (this.dept && this.stageOf(b.t, this.dept) ? ' · ' + this.deptOf(this.dept).name + ': ' + this.stageStatus(this.stageOf(b.t, this.dept)).name : '')
                     + ' · ' + this.fmtBE(b.from) + ' – ' + this.fmtBE(b.end) + (b.late ? ' (เลยกำหนด ' + diffDays(this.today, b.end) + ' วัน)' : '');
             },
@@ -631,6 +638,7 @@ export default function registerPlanningBoard() {
                 const today = this.today, late = [], due = [];
                 let total = 0, done = 0;
                 for (const t of this.visible()) {
+                    if (t.ship) continue;   // งานขนส่ง: its rounds are listed under "งานในวันที่" (and on งานจัดส่ง), not as due work
                     const units = (t.subtasks.length ? t.subtasks : [null]).map((c) => ({ c, ed: this.cabEff(t, c), done: this.cabIsDone(t, c) })).filter((u) => u.ed);
                     const dueU = units.filter((u) => u.ed === this.focusDate);
                     const lateU = this.focusDate === today ? units.filter((u) => u.ed < today && !u.done) : [];
@@ -648,7 +656,10 @@ export default function registerPlanningBoard() {
                 out.push({ key: 'due', label: 'ครบกำหนด' + this.focusWhen(), danger: false, count: count(b.due), groups: b.due });
                 // not in the original: what is merely RUNNING on that day (a click on a calendar day lands here), minus what is already listed above
                 const listed = new Set([...b.late, ...b.due].map((g) => g.t.id));
-                const run = this.dayTasks(this.focusDate).filter((t) => !listed.has(t.id)).map((t) => ({ t, cabs: (t.subtasks.length ? t.subtasks : [null]).map((c) => ({ c, ed: this.cabEff(t, c), done: this.cabIsDone(t, c) })) }));
+                const run = this.dayTasks(this.focusDate).filter((t) => !listed.has(t.id)).map((t) => ({ t, cabs: t.ship
+                    ? this.dels(t).filter((d) => !d.pending && d.date <= this.focusDate && this.focusDate <= (d.end || d.date))
+                        .map((d) => ({ c: null, label: 'งานขนส่ง · รอบ ' + d.round + ' · ' + this.delState(d), ed: d.end || d.date, done: d.status === 'delivered', key: 'd' + d.id }))
+                    : (t.subtasks.length ? t.subtasks : [null]).map((c) => ({ c, ed: this.cabEff(t, c), done: this.cabIsDone(t, c) })) })).filter((g) => g.cabs.length);
                 out.push({ key: 'run', label: 'งานในวันที่ ' + this.fmtBE(this.focusDate), danger: false, count: run.length, groups: run });
                 // handed out with no due date yet (they cannot be on the calendar): one row per department
                 const undated = this.visible().map((t) => ({ t, cabs: (t.deptStages || []).filter((st) => st.undated > 0 && (!this.dept || st.deptId === this.dept))

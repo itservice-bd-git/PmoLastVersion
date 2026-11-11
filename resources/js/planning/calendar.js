@@ -79,6 +79,16 @@ export default ({ config, board, starKey, loadStars, t0 }) => ({
     monthEntries() {
         const all = this.calEntries();
         if (!this.roundCards()) return all;
+        return this.roundEntries(all).filter((e) => this.calKind === 'all' || (this.calKind === 'rounds') === !!e.rd);
+    },
+    // the tabs over the delivery department's เดือน: how many of each this month
+    calKindCounts() {
+        const m1 = this.year + '-' + pad(this.month + 1) + '-01', m2 = this.year + '-' + pad(this.month + 1) + '-31';
+        const inMonth = this.roundEntries(this.calEntries()).filter((e) => e.from <= m2 && e.to >= m1);
+        return { rounds: inMonth.filter((e) => e.rd).length, work: inMonth.filter((e) => !e.rd).length };
+    },
+    setCalKind(k) { this.calKind = k; try { localStorage.setItem('planning.calKind', k); } catch (e) { /* not remembered */ } },
+    roundEntries(all) {
         const out = all.filter((e) => !e.t.ship), seen = new Set();
         for (const e of all) {
             if (seen.has(e.t.id)) continue;

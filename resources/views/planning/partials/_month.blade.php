@@ -1,5 +1,20 @@
 {{-- เดือน: a project is one bar over its dates (tinted by its status, flag = priority, badge = cabinets); in a department view a single chip on that department's due date. --}}
 <div x-show="mode === 'month'">
+    {{-- the delivery department: ทั้งหมด / only its rounds / only its Sub Task work (calendar.js calKind) --}}
+    <div x-show="roundCards()" x-cloak class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-200 bg-white px-3 py-2">
+        <div class="inline-flex rounded-[10px] bg-slate-100 p-[3px]" role="group" aria-label="แสดงในปฏิทิน">
+            <template x-for="k in [['all', 'ทั้งหมด'], ['rounds', 'รอบส่ง'], ['work', 'งาน Sub Task']]" :key="k[0]">
+                <button type="button" @click="setCalKind(k[0])" :aria-pressed="calKind === k[0]"
+                        :class="calKind === k[0] ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200' : 'text-slate-600 hover:text-slate-900'"
+                        class="inline-flex min-h-[2.25rem] items-center gap-1.5 rounded-lg px-3 text-[13px] font-bold">
+                    <span x-text="k[1]"></span>
+                    <span x-show="k[0] !== 'all'" class="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[12px] tabular-nums"
+                          :class="calKind === k[0] ? 'bg-teal-700 text-white' : 'bg-slate-200 text-slate-700'" x-text="k[0] === 'all' ? '' : calKindCounts()[k[0]]"></span>
+                </button>
+            </template>
+        </div>
+        <span class="text-[12px] text-slate-500">ตัวเลข = ในเดือนนี้</span>
+    </div>
     <div class="grid grid-cols-7 border-b border-slate-200 bg-white text-[12px] font-bold text-slate-500">
         <template x-for="w in weekdays()"><div class="px-3 py-2" x-text="w"></div></template>
     </div>

@@ -46,6 +46,8 @@ export default ({ config, board, starKey, loadStars, t0 }) => ({
     priorities: PRIORITIES,
 
     // ---- view state ----
+    // the delivery department's เดือน: ทั้งหมด / only the rounds / only the Sub Task work (calendar.js calKindTabs), remembered
+    calKind: (() => { try { return ['all', 'rounds', 'work'].includes(localStorage.getItem('planning.calKind')) ? localStorage.getItem('planning.calKind') : 'all'; } catch (e) { return 'all'; } })(),
     mode: 'month',                    // 'month' | 'timeline' | 'dashboard' | 'fat' | 'del' (the FAT / จัดส่ง tabs)
     evs: config.eventStatuses || {},  // Settings > สถานะงาน: FAT / delivery state => { name, color } (App\Support\EventStatuses)
     evNeed: false,                    // จัดส่ง: only the rounds with no vehicle yet

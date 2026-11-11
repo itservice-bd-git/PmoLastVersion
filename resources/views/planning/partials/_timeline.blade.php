@@ -27,7 +27,7 @@
                     </div>
                     <div class="grid items-center py-3" :style="'grid-template-columns:' + tlTemplate()">
                         <div @click="barGo(r.t)" :title="barTitle(r)"
-                             :style="'grid-column:' + r.col + ' / span ' + r.span + ';grid-row:1;' + chipStyle(barColor(r.t), r.done)"
+                             :style="'grid-column:' + r.col + ' / span ' + r.span + ';grid-row:1;' + chipStyle(barColor(r.t), r.done)" :class="r.t.ship && roundCards() ? 'invisible' : ''"
                              class="relative flex items-center gap-1.5 h-8 rounded-md border-l-[3px] px-2 text-xs cursor-pointer hover:brightness-95 hover:shadow-sm transition">
                             <span x-show="!r.t.ship" class="absolute -top-1.5 right-2 w-2.5 h-2.5 rounded-full ring-2 ring-white" :style="'background-color:' + statusColor(r.t)"></span>
                             <span x-show="r.before" class="shrink-0">◄</span>
@@ -42,7 +42,7 @@
                                     class="relative z-[6] h-8" :class="fatBandCls(r.t)"><span x-text="tlFat(r).label"></span></button>
                         </template>
                         <template x-for="g in tlDels(r)" :key="g.id">
-                            <button type="button" @click="barGo(r.t, g.id)" :style="'grid-column:' + g.col + ' / span ' + g.span + ';grid-row:1;--del:' + g.color" :title="g.title" class="relative z-[6]" :class="g.cls"><span x-text="g.label"></span></button>
+                            <button type="button" @click="barGo(r.t, g.id)" :style="'grid-column:' + g.col + ' / span ' + g.span + ';grid-row:1;--del:' + g.color" :title="g.title" class="relative z-[6]" :class="g.cls"><span x-show="g.label" x-text="g.label" :style="g.room ? 'max-width:' + g.room + 'px' : ''"></span></button>
                         </template>
                     </div>
                 </div>

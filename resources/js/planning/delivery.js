@@ -45,6 +45,13 @@ export default ({ config, board, starKey, loadStars, t0 }) => ({
         if (d.wait) return 'ส่ง' + days + (d.time ? ' ' + d.time : '') + ' · ' + this.delState(d);
         return 'ส่ง' + days + (d.time ? ' ' + d.time : '') + ' · ' + (d.status === 'scheduled' ? d.stepText : this.delState(d)) + ' · ' + (d.method === 'company' ? '🚚 ' : '') + d.car;
     },
+    // the short words of a round card / a timeline segment (the delivery department's view, calendar.js roundCards)
+    delShort(d) {
+        if (d.pending) return 'รอกำหนดส่ง';
+        if (d.status === 'delivered') return '✓ ' + this.evState('delivery', 'delivered').name + (d.at ? ' ' + d.at.slice(11) : '');
+        if (d.wait) return this.delState(d) + (d.time ? ' · ' + d.time : '');
+        return (d.time ? d.time + ' · ' : '') + (d.status === 'scheduled' ? d.stepText : d.status === 'departed' ? 'ออกรถแล้ว' : this.delState(d));
+    },
     delBandCls(d) { return 'del-band' + (d.wait ? ' del-wait' : ''); },
     delTitle(t, d) {
         return 'ส่งรอบที่ ' + d.round + ' · ' + t.so + ' · ' + this.fmtBE(d.date) + (d.end && d.end !== d.date ? ' – ' + this.fmtBE(d.end) : '') + (d.time ? ' ' + d.time + ' น.' : '')
@@ -52,6 +59,7 @@ export default ({ config, board, starKey, loadStars, t0 }) => ({
     },
     // the month: each round on this bar's days (a cabinet's bar: the rounds it is in)
     delBands(b) {
+        if (this.roundCards()) return [];   // the delivery department: each round is its own card (calendar.js monthEntries)
         const days = diffDays(b.ce, b.cs) + 1;
         return this.dels(b.t, b.c).filter((d) => !d.pending && d.date <= b.ce && (d.end || d.date) >= b.cs)   // a round over several days: its days on this bar
             .map((d) => { const a = d.date < b.cs ? b.cs : d.date, z = (d.end || d.date) > b.ce ? b.ce : (d.end || d.date); return { a, z, d }; })
@@ -110,6 +118,13 @@ export default ({ config, board, starKey, loadStars, t0 }) => ({
     tlDels(r) {
         const days = this.tlDays();
         return this.dels(r.t, r.c).filter((d) => !d.pending).map((d) => ({ d, i: days.findIndex((x) => x.date >= d.date), z: days.findLastIndex((x) => x.date <= (d.end || d.date)) })).filter((x) => x.i >= 0 && x.z >= x.i)
-            .map(({ d, i, z }) => ({ id: d.id, col: i + 1, span: z - i + 1, cls: this.delBandCls(d), color: this.delColor(d), label: this.delLabel(d), title: this.delTitle(r.t, d) }));
+            .map(({ d, i, z }) => ({ id: d.id, col: i + 1, span: z - i + 1, cls: this.delBandCls(d), color: this.delColor(d), label: this.delLabel(d), title: this.delTitle(r.t, d) }))
+            .map((g, n, all) => {
+                if (!this.roundCards()) return g;
+                // the delivery department: a segment on the round's days, its short words to its right as far as the next round
+                const next = all.filter((x) => x.col > g.col).map((x) => x.col).sort((a, b) => a - b)[0] || days.length + 1;
+                const room = (next - g.col - g.span) * TL_DAY - 10;
+                return { ...g, cls: g.cls + ' del-seg', label: room >= 44 ? this.delShort(this.dels(r.t).find((d) => d.id === g.id)) : '', room };
+            });
     },
 });

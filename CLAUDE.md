@@ -80,6 +80,9 @@ Production has **no shell, no `npm`, and no `artisan`**: schema changes go throu
 - **Data:** `PlanningBoard` builds the JSON (`planning.data`).
   - Every edit is one operation through `planning.sync` (`PlanningSync`). It is applied by the same services and rules as the rest of the app, and refused operations come back with a Thai reason.
   - The page never writes data itself.
+- **Delivery rounds** are drawn differently for the delivery department than for everyone else:
+  - **The delivery department** (`shipUrl` set, `calendar.js` `roundCards()`): in เดือน each round is its own card on its day(s) (`monthEntries`). On a phone the card shows only the time/state and the SO. A งานขนส่ง project has no bar of its own. In ไทม์ไลน์ each round is a segment with its words to the right (`delivery.js` `tlDels`, `del-seg`).
+  - **Everyone else:** the rounds are tabs on the project's bar (`delBands`).
 - **Guards:** `AlpineHandlersTest` fails when a template calls a method no module defines. `PlanningBoardPageTest` keeps a page-size budget.
 
 The old single-file SPA (`resources/planning/index.html`, `public/planning-assets/`, `planning:build`) was removed in 2026-11; `/planning/classic` redirects to the board.

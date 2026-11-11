@@ -73,10 +73,39 @@ export default ({ config, board, starKey, loadStars, t0 }) => ({
     setShowDone(on) { this.hideDone = !on; try { localStorage.setItem('planning.showDone', on ? '1' : ''); } catch (e) { /* not remembered */ } },
     setByCabinet(on) { this.byCabinet = on; try { localStorage.setItem('planning.byCabinet', on ? '1' : ''); } catch (e) { /* not remembered */ } },
     // how much is going on that day (unfinished entries running through it) and whether any of it is late - the badge on the day
+    // the delivery department (shipUrl) sees each round as its own card on its day(s) in เดือน: a งานขนส่ง project has no bar
+    // of its own (it would only run empty between rounds), and a project with its Sub Tasks keeps its bar without tabs on it
+    roundCards() { return !!this.shipUrl; },
+    monthEntries() {
+        const all = this.calEntries();
+        if (!this.roundCards()) return all;
+        const out = all.filter((e) => !e.t.ship), seen = new Set();
+        for (const e of all) {
+            if (seen.has(e.t.id)) continue;
+            seen.add(e.t.id);
+            this.dels(e.t).filter((d) => !d.pending).forEach((d) => {
+                const end = d.end || d.date, done = d.status === 'delivered';
+                out.push({ t: e.t, c: null, key: e.t.id + '-r' + d.id, rd: d, from: d.date, to: end, end, done, late: !done && end < this.today });
+            });
+        }
+        return out;
+    },
+    // a round card: "✓ ส่งถึงแล้ว 09:11" / "09:00 · แจ้งเปิดบิลแล้ว" / "รอจัดรถ" (+ "· เลย n วัน"), the project, รอบ · รถ · ตู้
+    cardHead(b) { return (b.before ? '◄ ' : '') + this.delShort(b.rd) + (b.late ? ' · เลย ' + diffDays(this.today, b.end) + ' วัน' : ''); },
+    // a phone's day is ~54px wide: "✓ 09:11" / "09:00" / "รอรถ" / "เลย 2ว" and the SO only
+    cardTiny(b) {
+        const d = b.rd;
+        if (b.late) return 'เลย ' + diffDays(this.today, b.end) + 'ว';
+        if (d.status === 'delivered') return '✓' + (d.at ? d.at.slice(11) : '');
+        if (d.wait) return d.status === 'rejected' ? 'ไม่รับ' : 'รอรถ';
+        return d.time || (d.status === 'departed' ? 'ออกรถ' : 'ส่ง');
+    },
+    cardMeta(b) { const d = b.rd; return 'รอบ ' + d.round + ' · ' + (d.method === 'company' ? '🚚 ' : '') + (d.car || '-') + ' · ' + this.delCabs(d) + (d.why ? ' · ' + d.why : ''); },
     weekBars(week) {
         const ws = week[0].date, we = week[week.length - 1].date;
-        const entries = this.calEntries().filter((e) => e.from <= we && e.to >= ws)
-          .sort((a, b) => (a.from === b.from ? a.t.so.localeCompare(b.t.so) : a.from.localeCompare(b.from)));
+        // same day: the bars first, then the round cards by their time
+        const entries = this.monthEntries().filter((e) => e.from <= we && e.to >= ws)
+          .sort((a, b) => (a.from === b.from ? (a.rd ? a.rd.time || '99' : '').localeCompare(b.rd ? b.rd.time || '99' : '') || a.t.so.localeCompare(b.t.so) : a.from.localeCompare(b.from)));
         const laneEnd = [], bars = [];
         for (const e of entries) {
             const cs = e.from < ws ? ws : e.from, ce = e.to > we ? we : e.to;
@@ -93,10 +122,12 @@ export default ({ config, board, starKey, loadStars, t0 }) => ({
     // "+n โครงการ" opens the whole week (every bar, its FAT band too); "▲ ย่อกลับ" closes it
     toggleWeek(week, open) { this.openWeeks = { ...this.openWeeks, [week[0].date]: open }; },
     barStyle(b) {
+        if (b.rd) { const c = b.late ? '#dc2626' : this.delColor(b.rd); return 'grid-column:' + b.col + ' / span ' + b.span + ';grid-row:' + (b.lane + 1) + ';--c:' + c + ';' + this.chipStyle(c, b.done); }
         const color = this.barColor(b.t);   // the bar is always the PROJECT's status colour (งานขนส่ง its own); late shows as "เลย n วัน"
         return 'grid-column:' + b.col + ' / span ' + b.span + ';grid-row:' + (b.lane + 1) + ';' + this.chipStyle(color, b.done);
     },
     barTitle(b) {
+        if (b.rd) return this.delTitle(b.t, b.rd) + ' — คลิกเพื่อเปิดรอบนี้';
         if (b.t.ship) return b.t.so + ' ' + b.t.title + ' — งานขนส่ง (ไม่ใช่งาน Sub Task): รอบส่ง ' + this.dels(b.t).filter((d) => !d.pending).length + ' รอบ · ' + this.fmtBE(b.from) + ' – ' + this.fmtBE(b.end) + (b.late ? ' (ยังไม่ส่งถึง เลย ' + diffDays(this.today, b.end) + ' วัน)' : '');
         return b.t.so + ' ' + b.t.title + (b.c ? ' · ' + b.c.mo + ' ' + b.c.text : '') + ' — สถานะโครงการ: ' + this.statusOf(b.t).name + (this.dept && this.stageOf(b.t, this.dept) ? ' · ' + this.deptOf(this.dept).name + ': ' + this.stageStatus(this.stageOf(b.t, this.dept)).name : '')
             + ' · ' + this.fmtBE(b.from) + ' – ' + this.fmtBE(b.end) + (b.late ? ' (เลยกำหนด ' + diffDays(this.today, b.end) + ' วัน)' : '');

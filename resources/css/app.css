@@ -401,6 +401,19 @@ button.del-band > span { bottom: auto; top: 100%; border-radius: 0 0 6px 6px; } 
 .del-band.del-wait, button.del-band.del-wait::before { background: repeating-linear-gradient(90deg, var(--del) 0 6px, transparent 6px 10px); }
 button.del-band.del-wait { background: none; }
 .del-band.del-wait > span { border: 1.5px dashed var(--del); background: #fff; color: color-mix(in srgb, var(--del) 80%, #000); line-height: 13px; }
+/* the delivery department (planning/calendar.js roundCards): in เดือน each round is its own card, dashed while it has no
+   vehicle (--c: its state's colour, red when late); in ไทม์ไลน์ a solid segment on its days with its words to the right */
+.rd-card { padding-top: 3px !important; padding-bottom: 3px !important; }
+@media (max-width: 639px) { .rd-card { padding-left: 4px !important; padding-right: 2px !important; justify-content: center; } }
+.rd-wait { background: #fff !important; border-left-style: dashed !important; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, #fff); }
+button.del-band.del-seg { height: 1.75rem; align-self: center; }
+button.del-band.del-seg::before { inset: 0; height: auto; border-radius: 6px; }
+button.del-band.del-seg.del-wait::before { background: #fff; border: 1.5px dashed var(--del); }
+button.del-band.del-seg > span {
+    top: 50%; bottom: auto; left: calc(100% + 6px); right: auto; transform: translateY(-50%);
+    background: none; border: 0; border-radius: 0; padding: 0; overflow: hidden; text-overflow: ellipsis;
+    color: color-mix(in srgb, var(--del) 85%, #000); font-size: 12px; line-height: 16px;
+}
 /* the FAT / จัดส่ง tabs (_events, resources/js/planning/delivery.js ev*): one bar per appointment over its days, in its state's colour (--c) */
 .ev-card {
     @apply mx-0.5 min-w-0 overflow-hidden rounded-md border border-l-4 px-2 py-1 text-left text-[11.5px] leading-snug hover:brightness-95 hover:shadow-sm;

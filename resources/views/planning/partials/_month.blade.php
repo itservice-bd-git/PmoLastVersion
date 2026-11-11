@@ -25,11 +25,11 @@
                 </div>
                 <div class="relative grid grid-cols-7 gap-y-1 px-0.5 pb-1.5" style="grid-auto-rows: 46px; min-height: 24px;">
                     <template x-for="b in shownBars(week)" :key="week[0].date + b.key">
-                        <div @click.stop="openModal(b.t.id)" :draggable="isPmo && !dept && !b.c" @dragstart="dragStart($event, b.t)"
+                        <div @click.stop="barGo(b.t)" :draggable="isPmo && !dept && !b.c" @dragstart="dragStart($event, b.t)"
                              :style="barStyle(b)" :title="barTitle(b)"
                              class="relative mx-0.5 min-w-0 cursor-pointer overflow-hidden rounded-md border-l-[3px] px-2 py-1 flex flex-col justify-center hover:brightness-95 hover:shadow-sm transition">
                             <template x-if="fatBand(b)"><span :class="fatBand(b).cls" :style="'left:' + fatBand(b).left + '%;width:' + fatBand(b).width + '%;--fat:' + fatBand(b).color"><span x-text="fatBand(b).label"></span></span></template>
-                            <template x-for="g in delBands(b)" :key="g.id"><span :class="g.cls" :style="'left:' + g.left + '%;width:' + g.width + '%;--del:' + g.color"><span x-text="g.label"></span></span></template>
+                            <template x-for="g in delBands(b)" :key="g.id"><span :class="g.cls" :style="'left:' + g.left + '%;width:' + g.width + '%;--del:' + g.color + (shipUrl ? ';pointer-events:auto;cursor:pointer' : '')" @click.stop="barGo(b.t, g.id)" :title="shipUrl ? g.title + ' — คลิกเพื่อเปิดรอบนี้' : null"><span x-text="g.label"></span></span></template>
                             <span class="relative z-[2] truncate text-xs font-medium leading-tight" :class="b.done ? 'line-through text-slate-500' : 'text-slate-800'"
                                   x-text="barLabel(b)"></span>
                             <span class="relative z-[2] mt-0.5 flex items-center gap-1.5">

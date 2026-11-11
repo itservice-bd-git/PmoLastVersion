@@ -75,7 +75,7 @@ class EventStatusesTest extends TestCase
         $this->actingAs($this->pm)->get(route('projects.deliveries.form', [$this->project, 'delivery' => $d->id]))->assertSee('รถรับจ้าง');
         $this->actingAs($this->pm)->get(route('planning.board'))->assertOk()->assertSee('ลูกค้ารับของแล้ว');
 
-        $this->actingAs($this->pm)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-15', 'receiver' => 'คุณสมชาย', 'cabinet_ids' => [$this->cab->id]])->assertSessionHasNoErrors();
+        $this->actingAs($this->pm)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-15', 'cabinet_ids' => [$this->cab->id]])->assertSessionHasNoErrors();
         $this->assertStringStartsWith('การจัดส่งรอบที่ 1: ลูกค้ารับของแล้ว 15/11/2569 · ', ActivityLog::where('action', 'delivery')->latest('id')->value('description'));
         $this->assertSame(['delivered', '#00aa00'], [$d->fresh()->stateKey(), $d->fresh()->stateColor()]);
     }

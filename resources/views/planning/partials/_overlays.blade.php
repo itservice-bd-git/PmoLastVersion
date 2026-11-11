@@ -122,6 +122,57 @@
     </div>
 </template>
 
+{{-- รอบส่ง (the delivery department, openShip): งานจัดส่ง for this one project in a frame - its cards, steps and windows
+     as they are there. The frame tells this page when something was saved (pmo-delivery-saved: the calendar asks again),
+     when one of its own panels opens or closes (pmo-ship-panel: this header is dimmed under it, so there is one ✕ to
+     press) and when Esc was pressed with nothing of its own open (pmo-ship-close) - embed-layout.blade.php --}}
+<template x-if="ship">
+    <div class="fixed inset-0 z-[60] flex justify-end" role="dialog" aria-modal="true" :aria-label="'รอบส่ง ' + ship.t.so + ' ' + ship.t.title">
+        <div class="absolute inset-0 bg-slate-900/40" @click="closeShip()" aria-hidden="true"></div>
+        <div class="ship-drawer relative flex h-full w-full max-w-4xl flex-col bg-slate-50 shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)]">
+            {{-- Shift+Tab from the header lands in the frame; Tab out of the frame comes back to ✕ (focus stays in here) --}}
+            <span tabindex="0" @focus="$refs.shipFrame.focus()" aria-hidden="true"></span>
+            <div class="relative flex items-center gap-2 border-b border-slate-200 bg-white py-2 pl-4 pr-2 sm:gap-3">
+                <span class="inline-flex h-6 shrink-0 items-center gap-1 rounded bg-teal-700 px-2 text-xs font-bold text-white"><svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7" cy="17.5" r="1.5"/><circle cx="17" cy="17.5" r="1.5"/></svg>รอบส่ง</span>
+                {{-- the project, and the round that was pressed; a long name wraps to two lines rather than being cut --}}
+                <p class="line-clamp-2 min-w-0 flex-1 text-sm font-bold leading-snug text-slate-900">
+                    <span x-text="ship.t.so"></span> <span class="font-semibold text-slate-600" x-text="ship.t.title"></span><span x-show="ship.round" class="whitespace-nowrap text-teal-800" x-text="' · รอบ ' + ship.round"></span>
+                </p>
+                <a :href="shipFullUrl()" target="_blank" rel="noopener" class="inline-flex h-11 shrink-0 items-center rounded-lg px-2 text-sm font-semibold text-teal-700 hover:bg-teal-50 hover:underline">
+                    <span class="hidden sm:inline">เปิดหน้างานจัดส่ง</span><span class="sm:hidden">เต็มหน้า</span>&nbsp;↗
+                </a>
+                <button type="button" x-ref="shipClose" @click="closeShip()" x-init="$nextTick(() => $el.focus())" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600" aria-label="ปิดหน้าต่างรอบส่ง">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+                </button>
+                {{-- a panel of the frame is open: this header goes dark with it; a tap here closes that panel, not the window --}}
+                <div x-show="ship.panel" @click="shipEsc()" class="absolute inset-0 bg-slate-900/40" aria-hidden="true"></div>
+            </div>
+            <div class="relative min-h-0 flex-1">
+                {{-- while it loads: the shape of a round's card --}}
+                <div x-show="!ship.loaded && !ship.failed" class="absolute inset-0 space-y-3 p-4" role="status" aria-label="กำลังโหลดรอบส่ง">
+                    <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4 motion-safe:animate-pulse">
+                        <div class="h-4 w-2/3 rounded bg-slate-200"></div>
+                        <div class="h-3 w-1/3 rounded bg-slate-200"></div>
+                        <div class="grid max-w-md grid-cols-4 gap-1.5"><div class="h-1.5 rounded-full bg-slate-200"></div><div class="h-1.5 rounded-full bg-slate-200"></div><div class="h-1.5 rounded-full bg-slate-200"></div><div class="h-1.5 rounded-full bg-slate-200"></div></div>
+                        <div class="flex gap-2"><div class="h-11 w-28 rounded-lg bg-slate-200"></div><div class="h-11 w-24 rounded-lg bg-slate-200"></div></div>
+                    </div>
+                    <p class="text-center text-sm text-slate-500">กำลังโหลดรอบส่ง…</p>
+                </div>
+                <div x-show="ship.failed" class="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
+                    <p class="text-base font-semibold text-slate-900">โหลดรอบส่งไม่สำเร็จ</p>
+                    <p class="text-sm text-slate-600">อินเทอร์เน็ตอาจช้าหรือหลุด ลองใหม่อีกครั้ง หรือเปิดหน้างานจัดส่งแทน</p>
+                    <div class="flex flex-wrap justify-center gap-2">
+                        <button type="button" @click="retryShip()" class="inline-flex h-11 items-center rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800">ลองใหม่</button>
+                        <a :href="shipFullUrl()" target="_blank" rel="noopener" class="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">เปิดหน้างานจัดส่ง ↗</a>
+                    </div>
+                </div>
+                <iframe x-ref="shipFrame" allow="web-share; clipboard-write" :src="ship.url" @load="shipLoaded($el)" class="h-full w-full border-0 transition-opacity" :class="ship.loaded ? 'opacity-100' : 'opacity-0'" :title="'รอบส่งของ ' + ship.t.so + ' ' + ship.t.title"></iframe>
+            </div>
+            <span tabindex="0" @focus="$refs.shipClose.focus()" aria-hidden="true"></span>
+        </div>
+    </div>
+</template>
+
 {{-- "เลื่อน / แก้วัน": หน้าโครงการ's windows, fetched in by openDates() --}}
 <div id="pb-dates" class="relative z-[80]"></div>
 

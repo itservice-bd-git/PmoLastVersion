@@ -28,9 +28,14 @@ class DeliveryController extends Controller
     public function index(Request $request)
     {
         $today = today();
+        // Planning's รอบส่ง window (?project=&embed=1): this page without the menu, only that project's rounds - all of them,
+        // in round order, no tabs - so the steps are the same buttons as here
+        $project = $request->integer('project') ?: null;
+        $embed = $request->boolean('embed');
         $all = ProjectDelivery::with('project', 'vehicles.vehicle', 'sender', 'rejecter', 'biller')->whereHas('project')
             ->where('status', '!=', ProjectDelivery::DRAFT)
-            ->where(fn ($q) => $q->where('status', '!=', ProjectDelivery::DELIVERED)->orWhere('delivered_at', '>=', $today->copy()->subDays(self::DELIVERED_DAYS)))
+            ->when($project, fn ($q) => $q->where('project_id', $project),
+                fn ($q) => $q->where(fn ($q) => $q->where('status', '!=', ProjectDelivery::DELIVERED)->orWhere('delivered_at', '>=', $today->copy()->subDays(self::DELIVERED_DAYS))))
             ->get();
         $day = fn ($d) => $d->delivery_date->format('Ymd').($d->delivery_time ?: '99');
         // a round waiting for sales is a draft again (ProjectDates) - not here; one billed before the wait goes on as usual
@@ -41,11 +46,15 @@ class DeliveryController extends Controller
             'today' => $live->filter(fn ($d) => in_array($d->status, [ProjectDelivery::WAITING, ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true) && $d->delivery_date->lte($today))->sortBy($day),
             'scheduled' => $live->where('status', ProjectDelivery::SCHEDULED)->sortBy($day),
             'departed' => $all->where('status', ProjectDelivery::DEPARTED)->sortBy($day),
-            'delivered' => $all->where('status', ProjectDelivery::DELIVERED)->sortByDesc('delivered_at'),
+            // รอตรวจ (from the driver's link) first, then the latest
+            'delivered' => $all->where('status', ProjectDelivery::DELIVERED)->sortBy([fn ($a, $b) => (bool) $b->review_at <=> (bool) $a->review_at, fn ($a, $b) => $b->delivered_at <=> $a->delivered_at]),
             'rejected' => $live->where('status', ProjectDelivery::REJECTED)->sortByDesc('rejected_at'),
         ];
+        if ($project) {
+            $tabs['all'] = $all->sortBy('round');
+        }
         $round = $request->integer('round');
-        $tab = $request->input('tab');
+        $tab = $project ? 'all' : $request->input('tab');
         if (! isset($tabs[$tab])) {   // a notice's round opens on its own tab; else the first tab with work in it
             $tab = $round && ($d = $all->firstWhere('id', $round)) ? ($tabs['today']->contains('id', $d->id) ? 'today' : $d->status)
                 : collect(['today', 'waiting', 'scheduled'])->first(fn ($k) => $tabs[$k]->isNotEmpty(), 'waiting');
@@ -58,7 +67,7 @@ class DeliveryController extends Controller
         $files = ProjectDelivery::filesOf($tabs[$tab]->where('status', ProjectDelivery::DELIVERED)->pluck('id'));   // ใบส่งของ / รูป sent with ส่งถึงแล้ว
 
         return view('deliveries.index', [
-            'tabs' => $tabs, 'tab' => $tab, 'round' => $round,
+            'tabs' => $tabs, 'tab' => $tab, 'round' => $round, 'embed' => $embed, 'project' => $project,
             'rows' => $tabs[$tab]->values()->map(fn ($d) => $this->row($d, $names, $today, $files))->all(),
             'vehicles' => $vehicles,
             'busy' => $this->busy($all),
@@ -78,7 +87,8 @@ class DeliveryController extends Controller
             'vehicles.*.crew' => ['nullable', 'array', 'max:20'],
             'vehicles.*.crew.*' => ['nullable', 'string', 'max:100'],
             'carrier' => ['nullable', 'string', 'max:150'],
-        ]);
+            'map_url' => ProjectDelivery::mapRule(),
+        ], [], ['map_url' => 'ลิงก์ GPS']);
         $again = $delivery->status === ProjectDelivery::SCHEDULED;
         $this->flow->assign($delivery, $data, $request->user());
 
@@ -122,20 +132,24 @@ class DeliveryController extends Controller
         $data = $request->validate([
             'delivered_date' => ['required', 'date'],
             'delivered_time' => ['nullable', 'date_format:H:i'],
-            'receiver' => ['required', 'string', 'max:150'],
-            'doc_no' => ['nullable', 'string', 'max:50'],
             'issue' => ['nullable', 'string', 'max:500'],
             'cabinet_ids' => ['required', 'array', 'min:1'],
             'cabinet_ids.*' => ['integer'],
             'files' => ['nullable', 'array', 'max:'.ProjectDelivery::FILES_MAX],
             'files.*' => ['file', 'max:20480', 'mimes:'.CommentAttachmentUploader::ALLOWED_MIMES],
-        ], ['delivered_date.required' => 'ใส่วันที่ส่งถึง', 'receiver.required' => 'ใส่ชื่อผู้รับ', 'cabinet_ids.required' => 'ติ๊กตู้ที่ส่งถึงอย่างน้อย 1 ตู้',
+        ], ['delivered_date.required' => 'ใส่วันที่ส่งถึง', 'cabinet_ids.required' => 'ติ๊กตู้ที่ส่งถึงอย่างน้อย 1 ตู้',
             'files.max' => 'แนบได้ครั้งละไม่เกิน '.ProjectDelivery::FILES_MAX.' ไฟล์', 'files.*.max' => 'ไฟล์ :attribute ใหญ่เกิน 20 MB',
             'files.*.mimes' => 'แนบได้เฉพาะ PDF, Word, Excel, รูปภาพ (JPG / PNG), DWG / DXF', 'files.*.uploaded' => 'อัปโหลดไฟล์ไม่สำเร็จ (ไฟล์อาจใหญ่เกินไป)'],
             ['files.*' => 'ที่แนบ']);
         $this->flow->deliver($delivery, $data, $request->user(), $request->file('files', []));
 
         return $this->done($request, 'บันทึกส่งถึงแล้ว');
+    }
+
+    /** ตรวจแล้ว · แจ้ง PM (what the driver sent through the link is in order). */
+    public function review(Request $request, ProjectDelivery $delivery)
+    {
+        return $this->done($request, 'ตรวจแล้ว · แจ้ง PM แล้ว', $this->flow->review($delivery, $request->user()));
     }
 
     public function back(Request $request, ProjectDelivery $delivery)
@@ -159,7 +173,7 @@ class DeliveryController extends Controller
                 'packed' => $d->isPacked((int) $id),
                 'at' => isset(($d->packed ?? [])[$id]) ? Carbon::parse($d->packed[$id])->format('d/m H:i') : ''])->values()->all(),
             'packable' => $d->beforeDeparture() && ! $d->billed_at,   // ห่อ / เอาการห่อออก still allowed (the panel's buttons)
-            'site' => (string) $d->site, 'contact' => collect([$d->contact_name, $d->contact_phone])->filter()->implode(' '), 'note' => (string) $d->note,
+            'site' => (string) $d->site, 'map' => (string) $d->map_url, 'nav' => (string) $d->navUrl(), 'contact' => collect([$d->contact_name, $d->contact_phone])->filter()->implode(' '), 'note' => (string) $d->note,
             'method' => $d->method, 'transport' => $d->transport() ?? 'ยังไม่มีรถ', 'carrier' => (string) $d->carrier,
             'vehicles' => $d->vehicles->map(fn ($v) => ['vehicle_id' => $v->vehicle_id ? (string) $v->vehicle_id : '', 'label' => (string) $v->label,
                 'name' => $v->name(), 'type' => (string) $v->vehicle?->type, 'driver_name' => (string) $v->driver_name, 'crew' => $v->crew ?? []])->values()->all(),
@@ -174,11 +188,17 @@ class DeliveryController extends Controller
             'billed' => $d->billed_at ? $d->billed_at->format('d/m H:i').($d->biller ? ' · '.$d->biller->name : '') : '',
             'departed' => $d->departed_at?->format('d/m H:i'), 'delivered' => $d->delivered_at ? $d->delivered_at->thaiDate().($d->delivered_at->format('H:i') !== '00:00' ? ' '.$d->delivered_at->format('H:i').' น.' : '') : '',
             'delivered_date' => $d->delivered_at?->format('Y-m-d') ?? '', 'delivered_time' => $d->delivered_at && $d->delivered_at->format('H:i') !== '00:00' ? $d->delivered_at->format('H:i') : '',
+            'review' => $d->review_at ? $d->review_at->format('d/m H:i') : '',   // รอตรวจ since (the driver's link)
             'receiver' => (string) $d->receiver, 'doc_no' => (string) $d->doc_no, 'issue' => (string) $d->issue,
             'files' => ($files ?? collect())->get($d->id, collect())->map(fn ($f) => ProjectDelivery::fileView($f))->values()->all(),
             'rejected' => $d->status === ProjectDelivery::REJECTED ? trim($d->rejected_reason.($d->rejected_note ? ' · '.$d->rejected_note : '').' · โดย '.$d->rejecter?->name.' '.$d->rejected_at?->format('d/m H:i')) : '',
+            // ลิงก์คนขับ (works once it has left: the driver sends the photos and ส่งถึงแล้ว without logging in) and ข้อความส่งงาน
+            // (the LINE message for the crew, DeliveryBrief) - from the day the vehicles are on it until it leaves
+            'driverUrl' => $briefed = in_array($d->status, [ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true) && auth()->user()
+                ? DriverLinkController::urlFor($d, auth()->user()) : null,
+            'brief' => $briefed ? \App\Services\DeliveryBrief::text($d, $names, $briefed) : null,
             'urls' => ['assign' => route('deliveries.assign', $d), 'reject' => route('deliveries.reject', $d), 'pack' => route('deliveries.pack', $d), 'bill' => route('deliveries.bill', $d),
-                'depart' => route('deliveries.depart', $d), 'deliver' => route('deliveries.deliver', $d), 'back' => route('deliveries.back', $d)],
+                'review' => route('deliveries.review', $d), 'depart' => route('deliveries.depart', $d), 'deliver' => route('deliveries.deliver', $d), 'back' => route('deliveries.back', $d)],
         ];
     }
 

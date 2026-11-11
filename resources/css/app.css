@@ -414,3 +414,8 @@ button.del-band.del-wait { background: none; }
 /* the project page: keyboard focus and selected text in the app's blue, not the browser's defaults */
 .pmo-project :focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; border-radius: 6px; }
 .pmo-project ::selection { background: #dbe7ff; color: #0b1f3a; }
+
+/* Planning's รอบส่ง window (planning/partials/_overlays): slides in from the right as the panels inside it do */
+@keyframes ship-drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.ship-drawer { animation: ship-drawer-in .2s cubic-bezier(.16, 1, .3, 1); }
+@media (prefers-reduced-motion: reduce) { .ship-drawer { animation: none; } }

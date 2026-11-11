@@ -88,6 +88,7 @@
                             <span class="text-sm font-bold text-teal-700">รอบที่ {{ $d->round }}</span>
                             <span class="font-bold tabular-nums {{ $d->date_pending_at ? 'text-indigo-700' : 'text-slate-900' }}">{{ $d->date_pending_at ? 'รอกำหนดส่ง' : ($d->status === 'delivered' && $d->delivered_at ? $d->delivered_at->thaiDate().' · ถึง '.$d->delivered_at->format('H:i').' น.' : $d->when()) }}</span>
                             <span class="st-pill rounded-full px-2.5 py-0.5 text-xs font-bold" style="--c: {{ $d->stateColor() }}">{{ $d->stateLabel() }}{{ $d->status === 'departed' && $d->departed_at ? ' '.$d->departed_at->format('H:i') : '' }}</span>
+                            @if ($d->review_at)<span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900" title="คนขับแจ้งส่งถึงผ่านลิงก์ · แผนกจัดส่งยังไม่ได้ตรวจ">รอแผนกจัดส่งตรวจ</span>@endif
                             @if ($d->date_pending_at)
                                 {{-- รอฝ่ายขายแจ้งกำหนดส่ง (ProjectDates): no day yet; the new one comes with the project's --}}
                                 <span class="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-bold text-indigo-800">{{ \App\Models\Project::PENDING_LABEL }}</span>
@@ -148,9 +149,15 @@
                                 <dt class="text-slate-500">ส่งที่</dt>
                                 <dd class="break-words">{{ collect([$d->site, $d->contact_name])->filter()->implode(' · ') }}@if ($d->contact_phone){{ $d->site || $d->contact_name ? ' · ' : '' }}<span class="whitespace-nowrap tabular-nums">{{ $d->contact_phone }}</span>@endif</dd>
                             @endif
+                            @if ($d->map_url)
+                                <dt class="text-slate-500">แผนที่</dt>
+                                <dd><a href="{{ $d->map_url }}" target="_blank" rel="noopener" class="font-semibold text-teal-700 hover:underline">เปิดลิงก์ GPS ↗</a></dd>
+                            @endif
                             @if ($d->status === 'delivered')
-                                <dt class="text-slate-500">ผู้รับ</dt>
-                                <dd>{{ collect([$d->receiver, $d->doc_no ? 'ใบส่งของ '.$d->doc_no : null])->filter()->implode(' · ') }}</dd>
+                                @if ($d->receiver || $d->doc_no)   {{-- rounds saved before 2026-11 (no longer asked) --}}
+                                    <dt class="text-slate-500">ผู้รับ</dt>
+                                    <dd>{{ collect([$d->receiver, $d->doc_no ? 'ใบส่งของ '.$d->doc_no : null])->filter()->implode(' · ') }}</dd>
+                                @endif
                                 @if ($roundFiles->has($d->id))
                                     <dt class="text-slate-500">ไฟล์</dt>
                                     {{-- as งานจัดส่ง shows them: square tiles, a photo itself and a document its kind; a photo / PDF opens over
@@ -168,7 +175,7 @@
                                 @endif
                             @endif
                             @if ($d->issue)
-                                <dt class="text-orange-700">ปัญหา</dt><dd class="text-orange-800">{{ $d->issue }}</dd>
+                                <dt class="text-slate-500">หมายเหตุ</dt><dd class="whitespace-pre-line break-words">{{ $d->issue }}</dd>
                             @endif
                             @if ($d->note)
                                 <dt class="text-slate-500">หมายเหตุ</dt><dd class="break-words">{{ $d->note }}</dd>

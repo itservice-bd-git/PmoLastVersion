@@ -27,6 +27,13 @@ Route::get('/', function () {
     return redirect()->route('dashboard');
 });
 
+// ลิงก์คนขับ (DriverLinkController): no login - the signed link names the round and who shared it; it works while the round
+// is ออกจากโรงงาน
+Route::middleware(['signed:relative', 'throttle:20,1'])->group(function () {
+    Route::get('drive/{delivery}', [\App\Http\Controllers\DriverLinkController::class, 'show'])->name('driver.show');
+    Route::post('drive/{delivery}', [\App\Http\Controllers\DriverLinkController::class, 'store'])->name('driver.store');
+});
+
 // Real per-user login is required for everything below. A project (or anything in one) opens only for people who see it;
 // 'perm:…' = Settings > สิทธิ์การใช้งาน (App\Support\Access).
 Route::middleware(['auth', 'project.visible'])->group(function () {
@@ -125,6 +132,7 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
         Route::post('deliveries/{delivery}/reject', [$deliveries, 'reject'])->name('deliveries.reject');
         Route::post('deliveries/{delivery}/depart', [$deliveries, 'depart'])->name('deliveries.depart');
         Route::post('deliveries/{delivery}/deliver', [$deliveries, 'deliver'])->name('deliveries.deliver');
+        Route::post('deliveries/{delivery}/review', [$deliveries, 'review'])->name('deliveries.review');
         Route::post('deliveries/{delivery}/back', [$deliveries, 'back'])->name('deliveries.back');
         $vehicles = \App\Http\Controllers\Settings\VehicleController::class;
         Route::get('settings/vehicles', [$vehicles, 'index'])->name('settings.vehicles.index');

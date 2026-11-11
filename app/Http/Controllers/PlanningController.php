@@ -138,7 +138,9 @@ class PlanningController extends Controller
             'isPmo' => $user->canDispatchWork(),            // admin / PM only: delete, alert a department, dispatch; the server enforces it
             'myDept' => $profile['dept_id'],                // '' for PMO roles (they see every department), and for one looking after several
             'myDepts' => array_map(fn ($id) => PlanningBoard::deptKey($id), $user->departmentIds()),   // the departments whose work is mine
-            'readOnly' => $user->isViewOnly(),              // "ดูได้อย่างเดียว" (edit.work off): nothing to tick, type or press; EnsureCanWork refuses it anyway
+            'readOnly' => $user->isViewOnly(),
+            // the delivery department (Access 'edit.delivery', not Admin / PM): a round opens งานจัดส่ง's steps for that project in a window
+            'shipUrl' => \App\Services\DeliveryFlow::canDeliver($user) && ! $user->canDispatchWork() && ! $user->isViewOnly() ? route('deliveries.index', ['embed' => 1]) : null,              // "ดูได้อย่างเดียว" (edit.work off): nothing to tick, type or press; EnsureCanWork refuses it anyway
             'userName' => $user->name,
             'userId' => $user->id,                          // keys the browser-local "★" list
             'boardNo' => $current?->id,                    // null = the main board

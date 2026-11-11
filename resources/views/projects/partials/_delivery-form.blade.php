@@ -87,6 +87,10 @@
                 <label class="block text-sm font-semibold text-slate-800">สถานที่ส่ง
                     <input type="text" name="site" x-model="f.site" maxlength="255" placeholder="เช่น โรงงานบางนา ประตู 2" class="mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal">
                 </label>
+                {{-- ลิงก์ GPS: a Google Maps link (as LINE shares it) or coordinates; the crew's message and the driver's link open it --}}
+                <label class="block text-sm font-semibold text-slate-800">ลิงก์ GPS / แผนที่ <span class="font-normal text-slate-500">(ไม่บังคับ)</span>
+                    <input type="text" name="map_url" x-model="f.map_url" maxlength="600" inputmode="url" autocomplete="off" placeholder="วางลิงก์ Google Maps หรือพิกัด เช่น 19.91, 99.84" class="mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal">
+                </label>
                 <div class="grid grid-cols-2 gap-3">
                     <label class="block text-sm font-semibold text-slate-800">ผู้ติดต่อหน้างาน
                         <input type="text" name="contact_name" x-model="f.contact_name" maxlength="100" class="mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal">

@@ -3,8 +3,8 @@
      it leaves and arrives. Each step posts to DeliveryFlow, which ticks the cabinets' Checklist to match. --}}
 @php
     $field = 'mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal';
-    $btn = 'inline-flex h-9 items-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50';
-    $main = 'inline-flex h-9 items-center rounded-lg bg-teal-700 px-3 text-sm font-semibold text-white hover:bg-teal-800';
+    $btn = 'inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50';
+    $main = 'inline-flex h-11 items-center rounded-lg bg-teal-700 px-3 text-sm font-semibold text-white hover:bg-teal-800';
     $steps = ['ห่อตู้', 'แจ้งเปิดบิล', 'ออกจากโรงงาน', 'ส่งถึง'];
     // small line icons for the card's details (one family, one stroke)
     $icons = [
@@ -18,7 +18,8 @@
     $phone = fn (string $text) => preg_replace('/(\+?\d[\d\- ]{5,}\d)/', '<span class="whitespace-nowrap">$1</span>', e($text));
     $cabIcon = '<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4"/></svg>';
 @endphp
-<x-app-layout>
+{{-- embed (Planning's รอบส่ง window, ?project=&embed=1): no menu around it --}}
+<x-dynamic-component :component="$embed ? 'embed-layout' : 'app-layout'">
     <x-slot name="header">
         <div class="flex min-w-0 items-baseline gap-3">
             <h2 class="shrink-0 text-lg font-semibold text-slate-900">งานจัดส่ง</h2>
@@ -36,7 +37,7 @@
                        const blank = (t) => ({ vehicle_id: '', label: '', driver_name: '', crew: [], want: t || '' });
                        const rows = row.vehicles.length ? row.vehicles.map((v) => ({ vehicle_id: v.vehicle_id, label: v.label, driver_name: v.driver_name, crew: [...v.crew], want: '' }))
                            : (row.method === 'company' && row.types.length ? row.types.map(blank) : [blank('')]);
-                       this.asg = { open: true, rows, carrier: row.carrier, saving: false, error: '', errors: {} };
+                       this.asg = { open: true, rows, carrier: row.carrier, map: row.map, saving: false, error: '', errors: {} };
                    },
                    asgErr(k) { return (this.asg.errors[k] || [])[0] || ''; },
                    // vehicles filled in so far (a picked one, or an external one's words)
@@ -75,7 +76,34 @@
                            this._quick = false;
                        }
                    },
-                   say(m) { this.toast = m; clearTimeout(this._toast); this._toast = setTimeout(() => { this.toast = ''; }, 3500); },
+                   // ตรวจแล้ว · แจ้ง PM asks once more, saying what PM will get
+                   rv: null,
+                   askReview(row) { this.rv = row; this.$nextTick(() => this.$refs.rvOk && this.$refs.rvOk.focus({ preventScroll: true })); },
+                   async doReview() { const row = this.rv; this.rv = null; if (row) await this.quick(row.urls.review); },
+                   // ข้อความส่งงาน: the LINE message for the crew written from the round (DeliveryBrief), changed here if need be
+                   // (the time to leave, the map link …) and copied; nothing is saved - it opens fresh from the round each time
+                   brief: { open: false, row: null, text: '' },
+                   openBrief(row) { this.brief = { open: true, row, text: row.brief }; },
+                   // one tap copies; the button says so for a moment (copied = its key). The Clipboard API needs https - on plain
+                   // http (the office network) a hidden text field is copied instead.
+                   copied: null,
+                   async copyText(text, key, said) {
+                       let ok = false;
+                       try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; } } catch (e) { /* below */ }
+                       if (!ok) {
+                           const t = document.createElement('textarea');
+                           t.value = text; t.setAttribute('readonly', ''); t.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px';
+                           document.body.appendChild(t); t.focus(); t.select(); t.setSelectionRange(0, text.length);
+                           try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+                           t.remove();
+                       }
+                       if (!ok) { window.prompt('คัดลอกข้อความนี้', text); return; }
+                       this.copied = key; clearTimeout(this._copied); this._copied = setTimeout(() => { this.copied = null; }, 2500);
+                       this.say(said);
+                   },
+                   say(m) { this.toast = m; clearTimeout(this._toast); this._toast = setTimeout(() => { this.toast = ''; }, 3500);
+                            // in Planning's รอบส่ง window: something was saved (or refused), so the calendar behind asks again
+                            if (window.parent !== window) window.parent.postMessage({ type: 'pmo-delivery-saved' }, location.origin); },
                    async refreshList() {
                        const u = new URL(location.href); u.searchParams.set('tab', this.tab);
                        const html = await fetch(u, { headers: { 'Accept': 'text/html' } }).then((x) => (x.ok ? x.text() : null)).catch(() => null);
@@ -183,70 +211,102 @@
                    },
                    openReject(row) { this.r = row; this.rej = { open: true, reason: '', note: '', saving: false, error: '', errors: {} }; },
                    openDeliver(row) { this.r = row; const now = new Date(); this.dlv = { date: row.delivered_date || now.toISOString().slice(0, 10), time: row.delivered_time || String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
-                       receiver: row.receiver, doc_no: row.doc_no, issue: row.issue, cabinet_ids: row.cabinets.map((c) => c.id), files: [], fileError: '', saving: false }; this.$dispatch('open-modal', 'dl-deliver'); },
-                   // the files picked for ส่งถึงแล้ว: shown by name, checked here first (the server checks again)
-                   pickFiles(input) { const max = {{ \App\Models\ProjectDelivery::FILES_MAX }}, big = [...input.files].filter((f) => f.size > 20 * 1024 * 1024);
-                       this.dlv.fileError = input.files.length > max ? 'แนบได้ครั้งละไม่เกิน ' + max + ' ไฟล์' : (big.length ? big.map((f) => f.name).join(', ') + ' ใหญ่เกิน 20 MB' : '');
-                       if (this.dlv.fileError) input.value = '';
-                       this.dlv.files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
-                       // a photo is shown from the phone itself before it goes up (the tile marked ใหม่)
-                       this.dlv.files = [...input.files].map((f) => { const ext = (f.name.includes('.') ? f.name.split('.').pop() : '').toLowerCase();
-                           return { name: f.name, size: f.size < 1048576 ? Math.max(1, Math.round(f.size / 1024)) + ' KB' : (f.size / 1048576).toFixed(1) + ' MB',
-                                    ext: ext.toUpperCase().slice(0, 4), preview: ['jpg', 'jpeg', 'png'].includes(ext) ? URL.createObjectURL(f) : '' }; }); },
-                   unpickFiles(input) { input.value = ''; this.pickFiles(input); } }">
+                       issue: row.issue, cabinet_ids: row.cabinets.map((c) => c.id), files: [], fileError: '', saving: false }; this.$dispatch('open-modal', 'dl-deliver'); },
+                   // the files picked for ส่งถึงแล้ว: each pick ADDS to the ones already picked (a phone's camera gives one photo a
+                   // time, so photo after photo), up to FILES_MAX; checked here first (the server checks again). The input's own
+                   // list is rebuilt from them (DataTransfer) so the form sends them all; a browser without it keeps the last pick.
+                   async pickFiles(input) {
+                       this.dlv.shrinking = true;   // a phone's photos made small first (window.pmoShrinkImage, app.js)
+                       const add = await Promise.all([...input.files].map((f) => (window.pmoShrinkImage ? window.pmoShrinkImage(f) : f)));
+                       this.dlv.shrinking = false;
+                       const max = {{ \App\Models\ProjectDelivery::FILES_MAX }};
+                       const big = add.filter((f) => f.size > 20 * 1024 * 1024), ok = add.filter((f) => f.size <= 20 * 1024 * 1024);
+                       const room = Math.max(0, max - this.dlv.files.length);
+                       this.dlv.fileError = big.length ? big.map((f) => f.name).join(', ') + ' ใหญ่เกิน 20 MB · ไม่ได้เพิ่ม'
+                           : (ok.length > room ? 'แนบได้ครั้งละไม่เกิน ' + max + ' ไฟล์ · ' + (ok.length - room) + ' ไฟล์หลังไม่ได้เพิ่ม' : '');
+                       this.dlv.files = this.dlv.files.concat(ok.slice(0, room).map((f) => this.fileTile(f)));
+                       this.syncFiles(input);
+                   },
+                   // a photo is shown from the phone itself before it goes up (the tile marked ใหม่)
+                   fileTile(f) { const ext = (f.name.includes('.') ? f.name.split('.').pop() : '').toLowerCase();
+                       return { file: f, name: f.name, size: f.size < 1048576 ? Math.max(1, Math.round(f.size / 1024)) + ' KB' : (f.size / 1048576).toFixed(1) + ' MB',
+                                ext: ext.toUpperCase().slice(0, 4), preview: ['jpg', 'jpeg', 'png'].includes(ext) || (f.type || '').startsWith('image/') ? URL.createObjectURL(f) : '' }; },
+                   syncFiles(input) {
+                       try {
+                           const dt = new DataTransfer();
+                           this.dlv.files.forEach((f) => dt.items.add(Alpine.raw(f).file));
+                           input.files = dt.files;
+                       } catch (e) {   // an old browser: only what it holds now goes up, so show just that
+                           this.dlv.files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
+                           this.dlv.files = [...input.files].map((f) => this.fileTile(f));
+                       }
+                   },
+                   dropFile(i, input) { const f = this.dlv.files[i]; if (f && f.preview) URL.revokeObjectURL(f.preview); this.dlv.files.splice(i, 1); this.dlv.fileError = ''; this.syncFiles(input); },
+                   unpickFiles(input) { this.dlv.files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview)); this.dlv.files = []; this.dlv.fileError = ''; input.value = ''; } }">
 
         @if ($errors->any())
             <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{{ $errors->first() }}</p>
         @endif
 
+        @unless ($project)
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
         <nav id="dl-tabs" class="flex min-w-0 basis-full gap-1 sm:basis-auto sm:flex-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 text-sm" aria-label="ขั้นงาน">
             @foreach (\App\Http\Controllers\DeliveryController::TABS as $key => $label)
-                @php $n = $tabs[$key]->count(); @endphp
+                @php $n = $key === 'delivered' ? $tabs[$key]->whereNotNull('review_at')->count() : $tabs[$key]->count(); @endphp   {{-- ส่งถึงแล้ว: how many wait to be checked --}}
                 <a href="{{ route('deliveries.index', ['tab' => $key]) }}" @if ($tab === $key) aria-current="page" @endif
-                   class="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium {{ $tab === $key ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100' }}">
+                   class="inline-flex min-h-[2.75rem] shrink-0 items-center gap-1.5 rounded-lg px-3 font-medium {{ $tab === $key ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100' }}">
                     {{ $label }}
-                    @if ($n && $key !== 'delivered')
-                        <span class="rounded-full px-1.5 text-xs font-bold tabular-nums {{ $tab === $key ? 'bg-white/20' : (in_array($key, ['waiting', 'today', 'rejected'], true) ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600') }}">{{ $n }}</span>
+                    @if ($n)
+                        <span @if ($key === 'delivered') title="รอตรวจ {{ $n }} รอบ" @endif class="rounded-full px-1.5 text-xs font-bold tabular-nums {{ $tab === $key ? 'bg-white/20' : (in_array($key, ['waiting', 'today', 'rejected', 'delivered'], true) ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600') }}">{{ $n }}</span>
                     @endif
                 </a>
             @endforeach
         </nav>
-            <a href="{{ route('settings.vehicles.index') }}" class="shrink-0 text-sm font-semibold text-teal-700 hover:underline">จัดการรถ / เหตุผลไม่รับงาน</a>
+            <a href="{{ route('settings.vehicles.index') }}" class="inline-flex min-h-[2.75rem] shrink-0 items-center text-sm font-semibold text-teal-700 hover:underline">จัดการรถ / เหตุผลไม่รับงาน</a>
         </div>
+        @endunless
 
         {{-- what the panels need that changes once something is saved; read again by refreshList() --}}
         <script type="application/json" id="dl-live">@json(['busy' => (object) $busy, 'people' => $people])</script>
-        <section id="dl-rows" class="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="{{ \App\Http\Controllers\DeliveryController::TABS[$tab] }}">
+        <section id="dl-rows" class="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="{{ \App\Http\Controllers\DeliveryController::TABS[$tab] ?? 'รอบส่งของโครงการ' }}">
             @forelse ($rows as $row)
                 @php
                     $before = in_array($row['status'], ['waiting', 'rejected', 'scheduled'], true);   // packing / แจ้งเปิดบิล may happen
                     $packable = $before && ! $row['billed'];
                 @endphp
-                <article class="grid gap-x-4 gap-y-3 break-words border-t border-slate-100 px-4 py-3 first:border-t-0 md:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] {{ $round === $row['id'] ? 'bg-amber-50/60 ring-2 ring-inset ring-amber-300' : '' }}"
-                         id="round-{{ $row['id'] }}">
+                <article class="grid gap-x-4 gap-y-3 break-words border-t border-slate-100 px-4 py-3 first:border-t-0 {{ $embed ? 'md:grid-cols-2' : 'md:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto]' }} {{ $round === $row['id'] ? 'bg-teal-50/70 ring-2 ring-inset ring-teal-600' : '' }}"
+                         id="round-{{ $row['id'] }}" @if ($round === $row['id']) data-picked @endif>
                     @php
                         $toBill = $packable && $row['allPacked'] && $row['status'] !== 'rejected';
                         $cabLabel = $packable && ! $row['allPacked'] ? 'ห่อตู้ '.$row['packedCount'].'/'.count($row['cabinets']) : ($toBill ? 'แจ้งเปิดบิล' : 'รายการตู้ ('.count($row['cabinets']).')');
                         // the panel's button leads the card when packing / แจ้งเปิดบิล is what is next (not before the vehicles)
                         $cabLeads = $row['status'] === 'scheduled' && (($packable && ! $row['allPacked']) || $toBill);
                         $cabTitles = collect($row['cabinets'])->map(fn ($c) => $c['model'] ?: $c['name']);
-                        $cabButton = fn (bool $lead) => '<button type="button" @click="openCabs('.e(\Illuminate\Support\Js::from($row)).')" class="'.($lead ? $main : $btn).' gap-1.5">'.$cabIcon.e($cabLabel).'</button>';
+                        // ข้อความส่งงาน: the LINE message for the crew (the panel below)
+                        // the card's buttons: the main one full width on top, then the others all the same width, always in this order -
+                        // รายการตู้, ข้อความส่งงาน, แก้…, ไม่รับงาน (two to a row on a phone, one column on a computer)
+                        $cMain = $main.' col-span-2 w-full justify-center md:col-span-1';
+                        $cBtn = $btn.' w-full min-w-0 gap-1.5';
+                        $ic = fn (string $d) => '<svg class="h-4 w-4 shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">'.$d.'</svg>';
+                        $editIcon = $ic('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>');
+                        $briefButton = '<button type="button" @click="openBrief('.e(\Illuminate\Support\Js::from($row)).')" class="'.$cBtn.'">'.$ic('<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>').'<span class="truncate">ข้อความส่งงาน</span></button>';
+                        $cabButton = fn (bool $lead) => '<button type="button" @click="openCabs('.e(\Illuminate\Support\Js::from($row)).')" class="'.($lead ? $cMain.' gap-1.5' : $cBtn).'">'.($lead ? $cabIcon : str_replace('class="h-4 w-4"', 'class="h-4 w-4 shrink-0 text-slate-500"', $cabIcon)).'<span class="truncate">'.e($cabLabel).'</span></button>';
                     @endphp
                     {{-- what goes: the cabinets' names (every detail in the panel), and how far it is --}}
                     <div class="min-w-0">
+                        @if ($round === $row['id'])<p class="mb-1"><span class="inline-flex h-5 items-center rounded bg-teal-700 px-1.5 text-xs font-bold text-white">รอบที่เลือก</span></p>@endif
                         <p class="truncate text-sm font-bold text-slate-900" title="{{ $row['project'] }} {{ $row['name'] }}">{{ $row['project'] }} <span class="font-semibold text-slate-600">{{ $row['name'] }}</span></p>
                         <p class="flex min-w-0 text-[13px] text-slate-600"><span class="shrink-0">รอบ {{ $row['round'] }} · {{ count($row['cabinets']) }} ตู้</span>@if ($row['site'])<span class="truncate" title="{{ $row['site'] }}">&nbsp;· {{ $row['site'] }}</span>@endif</p>
                         <p class="mt-1.5 flex items-baseline gap-1.5 text-[13px]">
                             <span class="line-clamp-2 min-w-0 text-slate-700" title="{{ $cabTitles->implode(', ') }}">{{ $cabTitles->take(8)->implode(', ') }}</span>
-                            @if ($cabTitles->count() > 2)<button type="button" @click="openCabs(@js($row))" class="shrink-0 font-semibold text-teal-700 hover:underline">ดูทั้งหมด</button>@endif
+                            @if ($cabTitles->count() > 2)<button type="button" @click="openCabs(@js($row))" class="-my-3 shrink-0 px-1 py-3 font-semibold text-teal-700 hover:underline">ดูทั้งหมด</button>@endif
                         </p>
                         {{-- the four steps --}}
                         <ol class="mt-2.5 grid max-w-md grid-cols-4 gap-1.5" aria-label="ขั้น: {{ $row['step']['text'] }}">
                             @foreach ($steps as $i => $label)
                                 @php $fill = $i === 0 ? ($row['step']['n'] >= 1 ? 100 : (int) round($row['packedCount'] / max(1, count($row['cabinets'])) * 100)) : ($row['step']['n'] > $i ? 100 : 0); @endphp
                                 <li class="min-w-0"><span class="block h-1.5 overflow-hidden rounded-full bg-slate-200"><span class="block h-full {{ $row['step']['n'] === $i && $fill < 100 ? 'bg-sky-600' : 'bg-emerald-600' }}" style="width: {{ $fill }}%"></span></span>
-                                    <span class="mt-0.5 block truncate text-[11px] {{ $row['step']['n'] === $i ? 'font-bold text-slate-900' : ($row['step']['n'] > $i ? 'text-emerald-700' : 'text-slate-500') }}">{{ $i === 0 ? 'ห่อ '.$row['packedCount'].'/'.count($row['cabinets']) : $label }}</span></li>
+                                    <span class="mt-0.5 block text-xs leading-tight {{ $row['step']['n'] === $i ? 'font-bold text-slate-900' : ($row['step']['n'] > $i ? 'text-emerald-700' : 'text-slate-600') }}">{{ $i === 0 ? 'ห่อ '.$row['packedCount'].'/'.count($row['cabinets']) : $label }}</span></li>
                             @endforeach
                         </ol>
                     </div>
@@ -262,13 +322,15 @@
                         @endforelse
                         @if ($row['fewer'])<p class="font-semibold text-amber-800">{{ $row['fewer'] }} · น้อยกว่าที่ขอ</p>@endif
                         @if ($row['people'])<p class="flex gap-1.5 {{ $row['short'] ? 'font-semibold text-amber-800' : 'text-slate-500' }}">{!! $icon('people') !!}<span class="min-w-0">{{ $row['people'] }}</span></p>@endif
+                        @if ($row['map'])<p><a href="{{ $row['map'] }}" target="_blank" rel="noopener" class="-my-2 inline-flex min-h-[2.75rem] items-center gap-1.5 font-semibold text-teal-700 hover:underline"><svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>แผนที่ (GPS)</a></p>@endif
                         @if ($row['contact'])<p class="flex gap-1.5 text-slate-500">{!! $icon('phone') !!}<span class="line-clamp-2 min-w-0" title="{{ $row['contact'] }}">{!! $phone($row['contact']) !!}</span></p>@endif
                     </div>
                     {{-- when: PM's day (right under the cabinets on a phone) --}}
                     <div class="order-1 min-w-0 text-[13px] md:order-none">
                         @if ($row['status'] === 'delivered')
                             <p class="font-semibold text-slate-800">ส่งถึง {{ $row['delivered'] }}</p>
-                            <p class="text-slate-500">ผู้รับ {{ $row['receiver'] }}{{ $row['doc_no'] ? ' · ใบส่งของ '.$row['doc_no'] : '' }}</p>
+                            @if ($row['review'])<p class="text-xs text-slate-500">คนขับแจ้งทางลิงก์ {{ $row['review'] }}</p>@endif
+                            @if ($row['receiver'] || $row['doc_no'])<p class="text-slate-500">{{ collect([$row['receiver'] ? 'ผู้รับ '.$row['receiver'] : null, $row['doc_no'] ? 'ใบส่งของ '.$row['doc_no'] : null])->filter()->implode(' · ') }}</p>@endif
                             @if ($row['files'])
                                 {{-- what was sent with ส่งถึงแล้ว (ใบส่งของที่เซ็นรับ, รูป) as a strip of tiles, 44px to tap with gloves on;
                                      past six, five and +n (the ส่งถึงแล้ว panel has them all) --}}
@@ -300,52 +362,66 @@
                             @if ($row['billed'])<p class="text-slate-500">แจ้งเปิดบิล {{ $row['billed'] }}</p>@endif
                         @endif
                         <span class="st-pill mt-1 inline-block rounded-full px-2 text-xs font-bold" style="--c: {{ $row['color'] }}">{{ $row['state'] }}</span>
+                        @if ($row['review'])<span class="mt-1 inline-block rounded-full bg-amber-100 px-2 text-xs font-bold text-amber-900" title="คนขับแจ้งส่งถึงทางลิงก์ · ยังไม่ได้แจ้ง PM">รอตรวจ</span>@endif
                     </div>
-                    {{-- one main button, always first: what is next for this round; then the others --}}
-                    <div class="order-3 flex flex-wrap content-start gap-2 md:order-none md:max-w-[13rem] md:justify-end">
+                    {{-- one main button, always first: what is next for this round; then the others, same width, same order --}}
+                    <div class="order-3 grid grid-cols-2 content-start gap-2 md:order-none md:w-48 md:grid-cols-1">
                         @if ($row['pending'])
                             {!! $cabButton(false) !!}
                         @elseif ($row['status'] === 'waiting')
                             @if ($row['method'] === 'pickup')
-                                <button type="button" class="{{ $main }}" @click="quick(@js($row['urls']['assign']))">รับงาน</button>
+                                <button type="button" class="{{ $cMain }}" @click="quick(@js($row['urls']['assign']))">รับงาน</button>
                             @else
-                                <button type="button" class="{{ $main }}" @click="openAssign(@js($row))">จัดรถ / คน</button>
+                                <button type="button" class="{{ $cMain }}" @click="openAssign(@js($row))">จัดรถ / คน</button>
                             @endif
                             {!! $cabButton(false) !!}
-                            <button type="button" class="{{ $btn }}" @click="openReject(@js($row))">ไม่รับงาน</button>
+                            <button type="button" class="{{ $cBtn }}" @click="openReject(@js($row))">{!! $ic('<circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/>') !!}<span class="truncate">ไม่รับงาน</span></button>
                         @elseif ($row['status'] === 'scheduled')
                             @if ($cabLeads)
                                 {!! $cabButton(true) !!}
                             @elseif ($row['billed'])
-                                <button type="button" class="{{ $main }}" @click="quick(@js($row['urls']['depart']))">{{ \App\Models\ProjectDelivery::statusName('departed') }}</button>
+                                <button type="button" class="{{ $cMain }}" @click="quick(@js($row['urls']['depart']))">{{ \App\Models\ProjectDelivery::statusName('departed') }}</button>
                                 {!! $cabButton(false) !!}
                             @else
                                 {!! $cabButton(false) !!}
                             @endif
+                            @if ($row['brief']){!! $briefButton !!}@endif
                             @if ($row['method'] !== 'pickup')
-                                <button type="button" class="{{ $btn }}" @click="openAssign(@js($row))">แก้รถ / คน</button>
+                                <button type="button" class="{{ $cBtn }}" @click="openAssign(@js($row))">{!! $editIcon !!}<span class="truncate">แก้รถ / คน</span></button>
                             @endif
                         @elseif ($row['status'] === 'departed')
-                            <button type="button" class="{{ $main }}" @click="openDeliver(@js($row))">{{ \App\Models\ProjectDelivery::statusName('delivered') }}</button>
+                            <button type="button" class="{{ $cMain }}" @click="openDeliver(@js($row))">{{ \App\Models\ProjectDelivery::statusName('delivered') }}</button>
                             {!! $cabButton(false) !!}
+                            @if ($row['brief']){!! $briefButton !!}@endif
                         @elseif ($row['status'] === 'delivered')
-                            <button type="button" class="{{ $btn }}" @click="openDeliver(@js($row))">แก้ข้อมูลส่งถึง</button>
+                            @if ($row['review'])
+                                <button type="button" class="{{ $cMain }}" @click="askReview(@js($row))">ตรวจแล้ว · แจ้ง PM</button>
+                            @endif
                             {!! $cabButton(false) !!}
+                            <button type="button" class="{{ $cBtn }}" @click="openDeliver(@js($row))">{!! $editIcon !!}<span class="truncate">แก้ข้อมูลส่งถึง</span></button>
                         @else
-                            <span class="w-full text-sm text-slate-500 md:text-right">รอ PM เลือกวันใหม่แล้วส่งมาอีกครั้ง</span>
+                            <span class="col-span-2 text-sm text-slate-500 md:col-span-1">รอ PM เลือกวันใหม่แล้วส่งมาอีกครั้ง</span>
                             {!! $cabButton(false) !!}
                         @endif
                     </div>
-                    @if ($row['rejected'] || $row['issue'] || $row['note'])
-                        <p class="order-4 text-[13px] md:order-none md:col-span-4 {{ $row['rejected'] || $row['issue'] ? 'rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-red-800' : 'text-slate-600' }}">
-                            {{ $row['rejected'] ? 'ไม่รับงาน · '.$row['rejected'] : ($row['issue'] ? 'ปัญหาที่หน้างาน: '.$row['issue'] : 'หมายเหตุ: '.$row['note']) }}
-                        </p>
+                    @if ($row['rejected'])
+                        <p class="order-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800 md:order-none {{ $embed ? 'md:col-span-2' : 'md:col-span-4' }}">ไม่รับงาน · {{ $row['rejected'] }}</p>
+                    @endif
+                    @if ($row['issue'])
+                        {{-- หมายเหตุ said at arrival (the driver's or the department's), on its own row; PM gets it with ส่งถึงแล้ว --}}
+                        <div class="order-4 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-900 ring-1 ring-inset ring-slate-200 md:order-none {{ $embed ? 'md:col-span-2' : 'md:col-span-4' }}">
+                            <p class="text-xs font-bold text-slate-600">หมายเหตุตอนส่งถึง</p>
+                            <p class="whitespace-pre-line break-words">{{ $row['issue'] }}</p>
+                        </div>
+                    @endif
+                    @if ($row['note'])
+                        <p class="order-4 text-[13px] text-slate-600 md:order-none {{ $embed ? 'md:col-span-2' : 'md:col-span-4' }}">หมายเหตุจาก PM: {{ $row['note'] }}</p>
                     @endif
                 </article>
             @empty
                 <p class="px-4 py-10 text-center text-sm text-slate-500">
                     {{ ['waiting' => 'ไม่มีรอบที่รอจัดรถ', 'today' => 'วันนี้ไม่มีรอบส่ง', 'scheduled' => 'ยังไม่มีรอบที่จัดรถแล้ว', 'departed' => 'ไม่มีรถที่ออกจากโรงงานอยู่',
-                        'delivered' => 'ยังไม่มีรอบที่ส่งถึงใน 30 วันนี้', 'rejected' => 'ไม่มีรอบที่ส่งกลับให้ PM'][$tab] }}
+                        'delivered' => 'ยังไม่มีรอบที่ส่งถึงใน 30 วันนี้', 'rejected' => 'ไม่มีรอบที่ส่งกลับให้ PM', 'all' => 'โครงการนี้ยังไม่มีรอบที่ PM ส่งมาให้แผนกจัดส่ง'][$tab] }}
                 </p>
             @endforelse
         </section>
@@ -354,8 +430,8 @@
         {{-- รายการตู้ / ห่อตู้: every cabinet of the round, big rows to tap (gloves, phones); a tick saves at once --}}
         <div x-show="cab.open" x-cloak role="dialog" aria-modal="true" :aria-label="cab.row ? 'รายการตู้ ' + cab.row.project + ' รอบ ' + cab.row.round : 'รายการตู้'"
              x-transition:leave="transition-[visibility] duration-150"
-             class="fixed inset-0 z-40 flex justify-end"
-             x-effect="document.body.classList.toggle('overflow-hidden', cab.open || asg.open || rej.open)"
+             class="fixed inset-0 z-40 !mt-0 flex justify-end"
+             x-effect="document.body.classList.toggle('overflow-hidden', cab.open || asg.open || rej.open || brief.open || !!rv)"
              @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) cab.open = false">
             <div x-show="cab.open" @click="cab.open = false" aria-hidden="true" class="absolute inset-0 bg-slate-900/40"
                  x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
@@ -393,7 +469,7 @@
                                 <div class="inline-flex rounded-lg bg-slate-100 p-1 text-sm" role="group" aria-label="แสดง">
                                     <template x-for="f in [['todo', 'ยังไม่ห่อ'], ['done', 'ห่อแล้ว'], ['all', 'ทั้งหมด']]" :key="f[0]">
                                         <button type="button" @click="cab.filter = f[0]" :aria-pressed="cab.filter === f[0]"
-                                                class="inline-flex h-9 items-center gap-1.5 rounded-md px-3 font-semibold" :class="cab.filter === f[0] ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'">
+                                                class="inline-flex h-11 items-center gap-1.5 rounded-md px-3 font-semibold" :class="cab.filter === f[0] ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'">
                                             <span x-text="f[1]"></span><span class="tabular-nums text-xs" :class="cab.filter === f[0] ? 'text-slate-600' : 'text-slate-500'" x-text="cabCount(f[0])"></span>
                                         </button>
                                     </template>
@@ -499,7 +575,7 @@
              at the bottom; saved without reloading (saveAssign) --}}
         <div x-show="asg.open" x-cloak role="dialog" aria-modal="true" :aria-label="r ? (r.vehicles.length ? 'แก้รถ / คน ' : 'จัดรถ / คน ') + r.project + ' รอบ ' + r.round : 'จัดรถ / คน'"
              x-transition:leave="transition-[visibility] duration-150"
-             class="fixed inset-0 z-40 flex justify-end"
+             class="fixed inset-0 z-40 !mt-0 flex justify-end"
              @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) asg.open = false">
             <div x-show="asg.open" @click="asg.open = false" aria-hidden="true" class="absolute inset-0 bg-slate-900/40"
                  x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
@@ -615,6 +691,12 @@
                             <button type="button" @click="asg.rows.push({ vehicle_id: '', label: '', driver_name: '', crew: [], want: '' })"
                                     class="flex h-11 w-full items-center justify-center rounded-xl border border-dashed border-slate-300 text-sm font-semibold text-teal-700 hover:bg-slate-50">+ เพิ่มรถอีกคัน</button>
                             <datalist id="dl-people"><template x-for="n in people" :key="n"><option :value="n"></option></template></datalist>
+                            {{-- ลิงก์ GPS: PM's (if any) to change, or the one the customer sent in LINE --}}
+                            <label class="block text-sm font-semibold text-slate-800">ลิงก์ GPS / แผนที่ <span class="font-normal text-slate-500">(ไม่บังคับ)</span>
+                                <input type="text" name="map_url" x-model="asg.map" maxlength="600" inputmode="url" autocomplete="off" placeholder="วางลิงก์ Google Maps หรือพิกัด เช่น 19.91, 99.84"
+                                       class="{{ $field }}" :class="asgErr('map_url') ? 'border-red-400' : ''">
+                                <span x-show="asgErr('map_url')" class="mt-1 block text-sm font-normal text-red-700" x-text="asgErr('map_url')"></span>
+                            </label>
                         </div>
 
                         {{-- short of what PM asked (allowed), a refusal, save --}}
@@ -642,11 +724,86 @@
         <div x-show="toast" x-cloak x-transition.opacity role="status" aria-live="polite"
              class="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit max-w-[calc(100%-2rem)] rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-lg" x-text="toast"></div>
 
+        {{-- ตรวจแล้ว · แจ้ง PM, once more: what goes to PM (the cabinets, the files, the note) --}}
+        <template x-if="rv">
+            <div class="fixed inset-0 z-50 !mt-0 flex items-end justify-center sm:items-center sm:p-4" role="alertdialog" aria-modal="true" aria-labelledby="rv-title"
+                 @keydown.escape.window="rv = null">
+                <div class="absolute inset-0 bg-slate-900/40" @click="rv = null" aria-hidden="true"></div>
+                <div class="relative w-full max-w-md space-y-4 rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl sm:p-6">
+                    <div>
+                        <h3 id="rv-title" class="text-lg font-bold text-slate-900">ยืนยันว่าตรวจแล้ว?</h3>
+                        <p class="text-sm text-slate-600" x-text="rv.project + ' รอบ ' + rv.round + ' · ' + rv.name"></p>
+                    </div>
+                    <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 rounded-xl bg-slate-50 p-3 text-sm">
+                        <dt class="text-slate-600">ส่งถึง</dt><dd class="font-semibold text-slate-900" x-text="rv.delivered"></dd>
+                        <dt class="text-slate-600">ตู้</dt><dd class="font-semibold text-slate-900" x-text="rv.cabinets.length + ' ตู้'"></dd>
+                        <dt class="text-slate-600">รูป / ไฟล์</dt><dd class="font-semibold text-slate-900" x-text="rv.files.length ? rv.files.length + ' ไฟล์' : 'ไม่มี'"></dd>
+                        <dt class="text-slate-600">หมายเหตุ</dt><dd class="whitespace-pre-line break-words text-slate-900" x-text="rv.issue || '-'"></dd>
+                    </dl>
+                    <p class="text-sm text-slate-700" x-text="'PM จะได้แจ้งเตือนว่าส่งถึงแล้ว' + (rv.issue ? ' พร้อมหมายเหตุ' : '') + (rv.files.length ? ' และรูป / ไฟล์' : '')"></p>
+                    <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                        <button type="button" @click="rv = null" class="{{ $btn }} justify-center">ยกเลิก</button>
+                        <button type="button" x-ref="rvOk" @click="doReview()" class="{{ $main }} justify-center px-5">ยืนยัน · แจ้ง PM</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        {{-- ข้อความส่งงาน (DeliveryBrief): the message the admin sends the crew in LINE, written from the round; changed here
+             if need be (what the system does not keep: the time to leave, the map link), then copied. Nothing is saved. --}}
+        <div x-show="brief.open" x-cloak role="dialog" aria-modal="true" :aria-label="brief.row ? 'ข้อความส่งงาน ' + brief.row.project + ' รอบ ' + brief.row.round : 'ข้อความส่งงาน'"
+             x-transition:leave="transition-[visibility] duration-150"
+             class="fixed inset-0 z-40 !mt-0 flex justify-end"
+             @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) brief.open = false">
+            <div x-show="brief.open" @click="brief.open = false" aria-hidden="true" class="absolute inset-0 bg-slate-900/40"
+                 x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="transition-opacity duration-150 ease-in" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"></div>
+            <div x-show="brief.open" x-transition:enter="transition-transform duration-200 ease-[cubic-bezier(.16,1,.3,1)]" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transition-transform duration-150 ease-in" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
+                 x-init="$watch('brief.open', (v) => v && $nextTick(() => $refs.closeBrief.focus({ preventScroll: true })))"
+                 class="relative flex h-full w-full max-w-xl flex-col break-words bg-white shadow-[-12px_0_32px_-12px_rgba(11,31,58,.25)] will-change-transform">
+                <template x-if="brief.row">
+                    <div class="flex min-h-0 flex-1 flex-col">
+                        <div class="border-b border-slate-200 p-4 pr-14 sm:p-5 sm:pr-16">
+                            <h3 class="text-base font-bold text-slate-900">ข้อความส่งงาน</h3>
+                            <p class="truncate text-sm text-slate-600" :title="brief.row.project + ' ' + brief.row.name" x-text="brief.row.project + ' รอบ ' + brief.row.round + ' · ' + brief.row.name"></p>
+                        </div>
+                        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 sm:p-5">
+                            <p class="text-sm text-slate-700">เขียนจากข้อมูลในระบบให้แล้ว แก้หรือเติมได้ก่อนคัดลอก เช่น <span class="font-semibold">เวลาออก</span> <span class="font-semibold">ช่วงเวลานัด</span> <span class="font-semibold">ลิงก์แผนที่</span> · ที่แก้ไม่ถูกเก็บ</p>
+                            <label class="block">
+                                <span class="sr-only">ข้อความ</span>
+                                <textarea x-model="brief.text" rows="18" spellcheck="false"
+                                          class="block w-full resize-y rounded-lg border-slate-300 px-3 py-2.5 text-[15px] leading-relaxed text-slate-900 focus:border-teal-600 focus:ring-teal-600"></textarea>
+                            </label>
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                                <button type="button" x-show="brief.text !== brief.row.brief" @click="brief.text = brief.row.brief" class="inline-flex h-11 items-center font-semibold text-slate-600 underline underline-offset-2 hover:text-slate-900">เริ่มใหม่จากข้อมูลในระบบ</button>
+                                <p x-show="brief.row.status !== 'departed'" class="text-slate-600">ลิงก์ส่งรูปท้ายข้อความ ใช้ได้เมื่อกด ออกจากโรงงาน แล้ว</p>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 p-4 sm:px-5">
+                            <button type="button" @click="copyText(brief.row.driverUrl, 'link' + brief.row.id, 'คัดลอกลิงก์แล้ว')" class="{{ $btn }} mr-auto"
+                                    x-text="copied === 'link' + brief.row.id ? '✓ คัดลอกลิงก์แล้ว' : 'คัดลอกแค่ลิงก์'"></button>
+                            <button type="button" @click="copyText(brief.text, 'brief' + brief.row.id, 'คัดลอกข้อความแล้ว · วางใน LINE ได้เลย')" class="{{ $main }} gap-1.5 px-5"
+                                    :class="copied === 'brief' + brief.row.id ? '!bg-emerald-700' : ''">
+                                <svg x-show="copied !== 'brief' + brief.row.id" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+                                <svg x-show="copied === 'brief' + brief.row.id" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>
+                                <span x-text="copied === 'brief' + brief.row.id ? 'คัดลอกแล้ว' : 'คัดลอกข้อความ'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+                <button type="button" x-ref="closeBrief" @click="brief.open = false" aria-label="ปิด"
+                        class="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+            </div>
+        </div>
+
         {{-- ไม่รับงาน: a panel as จัดรถ / คน - a reason (Settings > รถขนส่ง) or "อื่น ๆ" with its words; back to PM for another
              day; saved without reloading --}}
         <div x-show="rej.open" x-cloak role="dialog" aria-modal="true" :aria-label="r ? 'ไม่รับงาน ' + r.project + ' รอบ ' + r.round : 'ไม่รับงาน'"
              x-transition:leave="transition-[visibility] duration-150"
-             class="fixed inset-0 z-40 flex justify-end"
+             class="fixed inset-0 z-40 !mt-0 flex justify-end"
              @keydown.escape.window="if (! document.body.classList.contains('overflow-y-hidden')) rej.open = false">
             <div x-show="rej.open" @click="rej.open = false" aria-hidden="true" class="absolute inset-0 bg-slate-900/40"
                  x-transition:enter="transition-opacity duration-150 ease-out" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
@@ -715,9 +872,22 @@
         <x-modal panel name="dl-deliver" maxWidth="lg">
             {{-- only once ส่งถึงแล้ว is opened (openDeliver fills dlv): r alone is set by the other panels too --}}
             <template x-if="r && dlv.cabinet_ids">
-                <form method="POST" :action="r.urls.deliver" enctype="multipart/form-data" @submit="dlv.saving = true" class="space-y-4 p-6">
+                {{-- laid out as the driver's page (driver/show): the job, the cabinets that arrived, the photos, หมายเหตุ - plus the
+                     day and time, which are the department's to say --}}
+                <form method="POST" :action="r.urls.deliver" enctype="multipart/form-data" @submit="dlv.saving = true" class="space-y-5 p-5 sm:p-6">
                     @csrf
-                    <h3 class="text-base font-semibold text-slate-900" x-text="'{{ \App\Models\ProjectDelivery::statusName('delivered') }} · ' + r.project + ' รอบ ' + r.round"></h3>
+                    {{-- which job --}}
+                    {{-- the title stays at the top while the list scrolls under it (the panel's ✕ sits on it, never on the content) --}}
+                    <h3 class="sticky top-0 z-[5] -mx-5 -mt-5 border-b border-slate-200 bg-white py-4 pl-5 pr-16 text-lg font-bold leading-snug text-slate-900 sm:-mx-6 sm:-mt-6 sm:pl-6"
+                        x-text="'บันทึกส่งถึง · ' + r.project + ' รอบ ' + r.round"></h3>
+                    <div class="space-y-1">
+                        <p class="text-base text-slate-700" x-text="r.name"></p>
+                        <p x-show="r.site" class="flex gap-2 pt-1 text-base text-slate-900"><svg class="mt-0.5 h-5 w-5 shrink-0 text-teal-700" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span class="min-w-0 break-words" x-text="r.site"></span></p>
+                        <a x-show="r.map" :href="r.map" target="_blank" rel="noopener" class="inline-flex min-h-[2.75rem] items-center gap-1.5 text-sm font-semibold text-teal-700 hover:underline">เปิดแผนที่ (GPS) ↗</a>
+                    </div>
+                    <p x-show="r.review" class="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-inset ring-amber-200">
+                        <span x-text="'คนขับแจ้งส่งถึง ' + r.review"></span><span class="block font-normal">ตรวจข้อมูลด้านล่าง · บันทึกแล้วนับว่าตรวจแล้ว และแจ้ง PM</span></p>
+
                     <div class="grid grid-cols-2 gap-3">
                         <label class="block text-sm font-semibold text-slate-800">ส่งถึงวันที่ *
                             <input type="date" name="delivered_date" x-model="dlv.date" required class="{{ $field }}">
@@ -727,32 +897,39 @@
                                    x-init="window.flatpickr($el, { enableTime: true, noCalendar: true, dateFormat: 'H:i', time_24hr: true, allowInput: true, defaultDate: dlv.time || null, onChange: (d, v) => { dlv.time = v; } })"
                                    class="{{ $field }} tabular-nums">
                         </label>
-                        <label class="block text-sm font-semibold text-slate-800">ชื่อผู้รับ *
-                            <input type="text" name="receiver" x-model="dlv.receiver" required maxlength="150" class="{{ $field }}">
-                        </label>
-                        <label class="block text-sm font-semibold text-slate-800">เลขใบส่งของ
-                            <input type="text" name="doc_no" x-model="dlv.doc_no" maxlength="50" class="{{ $field }}">
-                        </label>
                     </div>
-                    <fieldset>
-                        <legend class="text-sm font-semibold text-slate-800">ตู้ที่ส่งถึง <span class="font-normal text-slate-500">(ตู้ที่ไม่ได้ส่ง เอาติ๊กออก PM จะนัดรอบใหม่ได้)</span></legend>
-                        {{-- the name first and its MO under it (as จัดรถ / คน); one column on a phone --}}
-                        <div class="mt-1.5 grid grid-cols-1 gap-x-4 text-sm text-slate-700 sm:grid-cols-2">
-                            <template x-for="c in r.cabinets" :key="c.id">
-                                <label class="flex min-h-[2.75rem] items-start gap-2.5 py-1.5"><input type="checkbox" name="cabinet_ids[]" :value="c.id" x-model.number="dlv.cabinet_ids" class="mt-0.5 shrink-0 rounded">
-                                    <span class="min-w-0"><span class="block font-medium text-slate-800" x-text="c.model || c.name"></span><span x-show="c.model" class="block text-xs tabular-nums text-slate-500" x-text="c.name"></span></span></label>
-                            </template>
+
+                    {{-- the cabinets, one row each as on the driver's page (name big, MO · kind · size under it, how many); a tick = it arrived --}}
+                    <fieldset class="overflow-hidden rounded-xl border border-slate-200">
+                        <legend class="sr-only">ตู้ที่ส่งถึง</legend>
+                        <div class="border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+                            <p class="flex items-baseline justify-between gap-3 text-base font-bold text-slate-900">ตู้ที่ส่งถึง <span class="text-sm font-semibold tabular-nums text-slate-600" x-text="dlv.cabinet_ids.length + '/' + r.cabinets.length + ' ตู้'"></span></p>
+                            <p class="text-[13px] text-slate-600">ตู้ที่ไม่ได้ส่ง เอาติ๊กออก · PM นัดรอบใหม่ได้</p>
                         </div>
+                        <ul class="divide-y divide-slate-100">
+                            <template x-for="c in r.cabinets" :key="c.id">
+                                <li>
+                                    <label class="flex min-h-[3.5rem] cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
+                                        <input type="checkbox" name="cabinet_ids[]" :value="c.id" x-model.number="dlv.cabinet_ids" class="h-5 w-5 shrink-0 rounded border-slate-400 text-teal-700 focus:ring-teal-600">
+                                        <span class="min-w-0 flex-1">
+                                            <span class="block break-words text-base font-semibold leading-snug text-slate-900" :class="dlv.cabinet_ids.includes(c.id) ? '' : 'text-slate-500 line-through'" x-text="c.model || c.name"></span>
+                                            <span x-show="c.model || c.type || c.size" class="block break-words text-sm text-slate-600"
+                                                  x-text="[c.model ? 'MO ' + c.name : '', c.type, c.size ? 'ขนาด ' + c.size : ''].filter(Boolean).join(' · ')"></span>
+                                        </span>
+                                        <span x-show="c.qty > 1" class="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-sm font-bold tabular-nums text-slate-800" x-text="'× ' + c.qty"></span>
+                                    </label>
+                                </li>
+                            </template>
+                        </ul>
                     </fieldset>
-                    <label class="block text-sm font-semibold text-slate-800">ปัญหาที่หน้างาน <span class="font-normal text-slate-500">(มีแล้ว PM ได้แจ้งเตือนแบบต้องทำ)</span>
-                        <input type="text" name="issue" x-model="dlv.issue" maxlength="500" placeholder="เช่น ตู้มีรอยขีดข่วนด้านซ้าย · ลูกค้ารับไว้ก่อน" class="{{ $field }}">
-                    </label>
+
                     {{-- ใบส่งของที่เซ็นรับ / รูปหน้างาน: saved as a project comment for this round (DeliveryFlow::deliver) --}}
-                    <div>
-                        <p class="text-sm font-semibold text-slate-800" id="dl-files-label">แนบไฟล์ <span class="font-normal text-slate-500">(ใบส่งของที่เซ็นรับ รูปหน้างาน · ไม่บังคับ)</span></p>
+                    <div class="space-y-2">
+                        <p class="text-base font-bold text-slate-900" id="dl-files-label">รูป / ไฟล์ตอนส่งถึง <span class="font-normal text-slate-600">(ไม่บังคับ)</span></p>
+                        <p class="text-sm text-slate-600">ใบส่งของที่ลูกค้าเซ็นรับ และรูปตู้ที่หน้างาน · ครั้งละไม่เกิน {{ \App\Models\ProjectDelivery::FILES_MAX }} ไฟล์</p>
                         {{-- one gallery: what is already there (opens over the panel, <x-file-viewer> below) and what was just picked
                              (shown from the phone, marked ใหม่), each with its name under it --}}
-                        <ul x-show="(r.files || []).length || dlv.files.length" class="mt-2 grid grid-cols-4 gap-x-2 gap-y-2.5 sm:grid-cols-5" aria-label="ไฟล์ของรอบนี้" aria-live="polite">
+                        <ul x-show="(r.files || []).length || dlv.files.length" class="grid grid-cols-3 gap-x-2 gap-y-2.5 sm:grid-cols-5" aria-label="ไฟล์ของรอบนี้" aria-live="polite">
                             <template x-for="(f, i) in (r.files || [])" :key="'o' + i">
                                 <li class="min-w-0">
                                     <a :href="f.url" target="_blank" rel="noopener" :title="f.name + ' · ' + f.size" :aria-label="(f.kind === 'image' ? 'ดูรูป ' : 'เปิดไฟล์ ') + f.name"
@@ -770,31 +947,45 @@
                                         <template x-if="f.preview"><img :src="f.preview" alt="" class="h-full w-full object-cover"></template>
                                         <template x-if="!f.preview"><span class="flex h-full w-full flex-col items-center justify-center gap-0.5 text-teal-700"><svg class="h-[42%] w-[42%]" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg><span class="text-[10px] font-bold leading-none tracking-wide" x-text="f.ext"></span></span></template>
                                         <span class="absolute left-1 top-1 rounded bg-teal-700 px-1 text-[10px] font-bold leading-4 text-white">ใหม่</span>
+                                        {{-- take this one out (the others stay) --}}
+                                        <button type="button" @click="dropFile(i, $el.closest('form').querySelector('input[name=&quot;files[]&quot;]'))" :aria-label="'เอา ' + f.name + ' ออก'"
+                                                class="absolute right-0 top-0 flex h-11 w-11 items-start justify-end p-1 focus-visible:outline-none">
+                                            <span class="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900/75 text-white ring-2 ring-white" aria-hidden="true"><svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" viewBox="0 0 24 24"><path d="M6 18 18 6M6 6l12 12"/></svg></span>
+                                        </button>
                                     </div>
                                     <p class="mt-1 truncate text-[11px] leading-tight text-slate-600" :title="f.name + ' · ' + f.size" x-text="f.name"></p>
                                 </li>
                             </template>
                         </ul>
-                        <label class="mt-2 flex min-h-[2.75rem] cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-teal-600 hover:bg-teal-50 focus-within:ring-2 focus-within:ring-teal-600">
-                            <svg class="h-4 w-4 shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/></svg>
-                            <span x-text="dlv.files.length ? 'เลือกใหม่' : ((r.files || []).length ? 'เพิ่มไฟล์' : 'เลือกไฟล์ หรือถ่ายรูป')"></span>
+                        <label x-show="dlv.files.length < {{ \App\Models\ProjectDelivery::FILES_MAX }}" class="flex min-h-[3.5rem] cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-teal-600 bg-teal-50 px-4 text-base font-bold text-teal-800 hover:bg-teal-100 focus-within:ring-2 focus-within:ring-teal-600">
+                            <svg class="h-6 w-6 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.3l1.4-2h7.6l1.4 2h2.3A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                            <span x-text="dlv.files.length ? 'ถ่าย / เพิ่มอีก (' + dlv.files.length + '/{{ \App\Models\ProjectDelivery::FILES_MAX }})' : ((r.files || []).length ? 'ถ่ายรูป หรือเพิ่มไฟล์' : 'ถ่ายรูป หรือเลือกไฟล์')"></span>
                             <input type="file" name="files[]" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.dwg,.dxf,image/jpeg,image/png" aria-labelledby="dl-files-label"
                                    @change="pickFiles($event.target)" class="sr-only">
                         </label>
                         <button type="button" x-show="dlv.files.length" @click="unpickFiles($el.closest('form').querySelector('input[name=&quot;files[]&quot;]'))"
-                                class="mt-1 inline-flex h-9 items-center text-[13px] font-semibold text-slate-600 underline underline-offset-2 hover:text-slate-900"
-                                x-text="'เอาไฟล์ที่เลือก ' + dlv.files.length + ' ไฟล์ออก'"></button>
-                        <p x-show="dlv.fileError" x-text="dlv.fileError" class="mt-1 text-[13px] font-semibold text-red-700" role="alert"></p>
-                        <p class="mt-1 text-xs text-slate-500">ครั้งละไม่เกิน {{ \App\Models\ProjectDelivery::FILES_MAX }} ไฟล์ · PDF, Word, Excel, รูป JPG / PNG, DWG / DXF · ไม่เกิน 20 MB ต่อไฟล์ · เห็นได้ที่คอมเมนต์ของโครงการด้วย</p>
+                                class="inline-flex h-11 items-center text-[13px] font-semibold text-slate-600 underline underline-offset-2 hover:text-slate-900"
+                                x-text="'เอาไฟล์ที่เลือกออกทั้งหมด (' + dlv.files.length + ')'"></button>
+                        <p x-show="dlv.files.length >= {{ \App\Models\ProjectDelivery::FILES_MAX }}" class="text-[13px] text-slate-600">ครบ {{ \App\Models\ProjectDelivery::FILES_MAX }} ไฟล์แล้ว · บันทึกก่อน แล้วกด แก้ข้อมูลส่งถึง เพื่อเพิ่มได้อีก</p>
+                        <p x-show="dlv.fileError" x-text="dlv.fileError" class="text-[13px] font-semibold text-red-700" role="alert"></p>
+                        <p class="text-[13px] text-slate-600">PDF, Word, Excel, รูป JPG / PNG, DWG / DXF · ไม่เกิน 20 MB ต่อไฟล์ · เห็นได้ที่คอมเมนต์ของโครงการด้วย</p>
                     </div>
+
+                    {{-- หมายเหตุ (the driver's page says it the same way); PM gets it with ส่งถึงแล้ว --}}
+                    <label class="block space-y-1.5">
+                        <span class="block text-base font-bold text-slate-900">หมายเหตุ <span class="font-normal text-slate-600">(ถ้ามี · PM เห็นด้วย)</span></span>
+                        <textarea name="issue" x-model="dlv.issue" rows="4" maxlength="500" placeholder="เช่น ลูกค้ารับไว้ก่อน · ตู้มีรอยขีดข่วนด้านซ้าย · วางตู้ไว้หน้าห้องไฟ"
+                                  class="block w-full resize-y rounded-lg border-slate-300 px-3 py-2.5 text-base leading-relaxed placeholder:text-slate-500 focus:border-teal-600 focus:ring-teal-600"></textarea>
+                    </label>
+
                     <div class="panel-foot flex items-center gap-2">
-                        <button type="button" @click="$dispatch('close-modal', 'dl-deliver')" class="ml-auto h-10 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ปิด</button>
-                        <button type="submit" :disabled="!dlv.cabinet_ids.length || dlv.saving" class="h-10 rounded-lg bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-                                x-text="dlv.saving ? (dlv.files.length ? 'กำลังอัปโหลด…' : 'กำลังบันทึก…') : 'บันทึก'">บันทึก</button>
+                        <button type="button" @click="$dispatch('close-modal', 'dl-deliver')" class="ml-auto h-11 rounded-lg px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100">ปิด</button>
+                        <button type="submit" :disabled="!dlv.cabinet_ids.length || dlv.saving || dlv.shrinking" class="h-11 rounded-lg bg-teal-700 px-5 text-base font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+                                x-text="dlv.shrinking ? 'กำลังย่อรูป…' : dlv.saving ? (dlv.files.length ? 'กำลังอัปโหลด…' : 'กำลังบันทึก…') : (r.review ? 'บันทึก · แจ้ง PM' : 'บันทึกส่งถึง')">บันทึกส่งถึง</button>
                     </div>
                 </form>
             </template>
         </x-modal>
     </div>
     <x-file-viewer />
-</x-app-layout>
+</x-dynamic-component>

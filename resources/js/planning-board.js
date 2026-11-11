@@ -86,6 +86,8 @@ export default function registerPlanningBoard() {
             myDept: config.myDept,
             myDepts: config.myDepts || (config.myDept ? [config.myDept] : []),   // my department and the ones I look after too
             readOnly: !!config.readOnly,   // "ดูได้อย่างเดียว": the page only shows
+            shipUrl: config.shipUrl || null,   // the delivery department: งานจัดส่ง for one project, in the รอบส่ง window (PlanningController)
+            ship: null,                        // that window open: { t, url, did, round, loaded, failed, panel, saved }
             urls: config.urls,
             priorities: PRIORITIES,
 
@@ -176,6 +178,14 @@ export default function registerPlanningBoard() {
                 setInterval(poll, 15000);
                 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
                 window.addEventListener('resize', () => { if (this.cl && this.cl.anchor) this.clPlace(); });   // e.g. an iPad turned round
+                // the รอบส่ง window's frame (embed-layout): a step saved (the calendar behind shows it at once), one of its panels
+                // open / closed (this header dims with it), Esc with nothing of its own open (the window closes)
+                window.addEventListener('message', (e) => {
+                    const m = e.origin === location.origin && e.data ? e.data : {};
+                    if (m.type === 'pmo-delivery-saved') { if (this.ship) this.ship.saved = true; this.refresh(true); }
+                    else if (m.type === 'pmo-ship-panel' && this.ship) this.ship.panel = !!m.open;
+                    else if (m.type === 'pmo-ship-close' && this.ship) this.closeShip();
+                });
             },
 
             // =================================================== lookups
@@ -400,6 +410,40 @@ export default function registerPlanningBoard() {
             canFat(t) { return this.isPmo && !['completed', 'cancelled'].includes(t.pmoStatus); },   // Admin / PM, an open project
             openDates(t) { return this.openPmoWindow(t.pmoUrl + '/dates', 'project-dates', 'เลื่อนวัน'); },
             openFat(t) { return this.openPmoWindow(t.pmoUrl + '/fat', 'project-fat', 'วัน FAT'); },
+            // รอบส่ง (the delivery department): a งานขนส่ง bar or a round opens งานจัดส่ง's own card and steps for that project,
+            // at that round (did); anything else on a bar opens the project as before
+            barGo(t, did) { if (this.shipUrl && (t.ship || did)) return this.openShip(t, did); this.openModal(t.id); },
+            openShip(t, did) {
+                const d = did ? this.dels(t).find((x) => x.id === did) : null;
+                this.shipFrom = document.activeElement;   // focus goes back there when it closes
+                this.ship = { t, did: did || null, round: d ? d.round : null, url: this.shipUrl + '&project=' + String(t.id).replace(/^p/, '') + (did ? '&round=' + did : ''),
+                              loaded: false, failed: false, panel: false, saved: false };
+                this.shipTimer();
+            },
+            // no answer in 20 s: say so, with ลองใหม่ (shared hosting can be slow, a phone can lose its signal)
+            shipTimer() { clearTimeout(this._shipWait); this._shipWait = setTimeout(() => { if (this.ship && !this.ship.loaded) this.ship.failed = true; }, 20000); },
+            // the frame finished loading: งานจัดส่ง's list is there, or it is the login page (session over: the whole page goes
+            // to it, then back here), or something else (an error page): ลองใหม่
+            shipLoaded(el) {
+                if (!this.ship) return;
+                let doc = null;
+                try { doc = el.contentDocument; } catch (e) { /* not ours */ }
+                if (doc && doc.getElementById('dl-rows')) { this.ship.loaded = true; this.ship.failed = false; clearTimeout(this._shipWait); return; }
+                if (doc && doc.querySelector('form input[name=password]')) { location.reload(); return; }
+                if (doc && doc.URL === 'about:blank') return;
+                this.ship.failed = true; clearTimeout(this._shipWait);
+            },
+            retryShip() { if (!this.ship) return; Object.assign(this.ship, { loaded: false, failed: false, panel: false }); this.$refs.shipFrame.src = this.ship.url; this.shipTimer(); },
+            // a tap on the dimmed header: Esc inside the frame (its open panel closes, as its own Esc does)
+            shipEsc() { try { this.$refs.shipFrame.contentWindow.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch (e) { /* not loaded */ } },
+            shipFullUrl() { return this.shipUrl.split('?')[0] + (this.ship && this.ship.did ? '?round=' + this.ship.did : ''); },
+            closeShip() {
+                const saved = this.ship && this.ship.saved, from = this.shipFrom;
+                clearTimeout(this._shipWait);
+                this.ship = null; this.shipFrom = null;
+                if (saved) this.refresh(true);
+                if (from && from.isConnected && from.focus) from.focus({ preventScroll: true });
+            },
             openDelivery(t, d) { return this.openPmoWindow(t.pmoUrl + '/delivery' + (d ? '?delivery=' + d.id : ''), 'project-delivery', 'การจัดส่ง'); },   // d = that round, else a new one
             async openPmoWindow(url, modal, what) {
                 const host = document.getElementById('pb-dates');
@@ -555,7 +599,7 @@ export default function registerPlanningBoard() {
             },
             evTitle(e) { return e.kind === 'fat' ? this.fatTitle(e.t) : this.delTitle(e.t, e.d); },
             // Admin / PM open the FAT / delivery window itself (an open project, as the project window's buttons); others the project's window
-            evGo(e) { if (!this.canFat(e.t)) return this.openModal(e.t.id); return e.kind === 'fat' ? this.openFat(e.t) : this.openDelivery(e.t, e.d); },
+            evGo(e) { if (e.kind === 'del' && this.shipUrl) return this.openShip(e.t, e.d.id); if (!this.canFat(e.t)) return this.openModal(e.t.id); return e.kind === 'fat' ? this.openFat(e.t) : this.openDelivery(e.t, e.d); },
             tlDels(r) {
                 const days = this.tlDays();
                 return this.dels(r.t, r.c).filter((d) => !d.pending).map((d) => ({ d, i: days.findIndex((x) => x.date >= d.date), z: days.findLastIndex((x) => x.date <= (d.end || d.date)) })).filter((x) => x.i >= 0 && x.z >= x.i)
@@ -658,7 +702,7 @@ export default function registerPlanningBoard() {
                 const listed = new Set([...b.late, ...b.due].map((g) => g.t.id));
                 const run = this.dayTasks(this.focusDate).filter((t) => !listed.has(t.id)).map((t) => ({ t, cabs: t.ship
                     ? this.dels(t).filter((d) => !d.pending && d.date <= this.focusDate && this.focusDate <= (d.end || d.date))
-                        .map((d) => ({ c: null, label: 'งานขนส่ง · รอบ ' + d.round + ' · ' + this.delState(d), ed: d.end || d.date, done: d.status === 'delivered', key: 'd' + d.id }))
+                        .map((d) => ({ c: null, label: 'งานขนส่ง · รอบ ' + d.round + ' · ' + this.delState(d), ed: d.end || d.date, done: d.status === 'delivered', key: 'd' + d.id, did: d.id }))
                     : (t.subtasks.length ? t.subtasks : [null]).map((c) => ({ c, ed: this.cabEff(t, c), done: this.cabIsDone(t, c) })) })).filter((g) => g.cabs.length);
                 out.push({ key: 'run', label: 'งานในวันที่ ' + this.fmtBE(this.focusDate), danger: false, count: run.length, groups: run });
                 // handed out with no due date yet (they cannot be on the calendar): one row per department
@@ -1344,7 +1388,7 @@ export default function registerPlanningBoard() {
             openModal(id) { this.projectInUrl(id); this.modalId = id; this.replyTo = null; this.cabOpen = {}; this.feedTab = 'activity'; this.remarkDept = this.dept || ''; this.remarkCab = ''; this.logTree.id = null; this.stageDept = null; this.cl = null; this.comment = ''; this.alertDept = ''; this.scrollFeed(); },
             setModalSize(size) { this.modalSize = size; try { localStorage.setItem('planning.modalSize', size); } catch (e) { /* storage blocked: it just won't be remembered */ } },
             closeModal() { this.modalId = null; this.stageDept = null; this.cl = null; this.projectInUrl(null); },
-            onEscape() { if (this.escHeld) { this.escHeld = false; return; } if (this.dispatch) { this.dispatch = null; return; } if (this.cabDialog) { this.cabDialog = null; return; } if (this.viewer) { this.viewer = null; return; } if (this.statusPop) { this.statusPop = null; return; } if (this.resPop) { this.resPop = null; return; } if (this.newProject) { this.newProject = null; return; } if (this.drawer) { this.drawer = null; return; } if (this.cl) this.closeChecklist(); else if (this.stageDept) this.stageDept = null; else if (this.modalId) this.closeModal();  },
+            onEscape() { if (this.escHeld) { this.escHeld = false; return; } if (this.ship) { if (this.ship.panel) this.shipEsc(); else this.closeShip(); return; } if (this.dispatch) { this.dispatch = null; return; } if (this.cabDialog) { this.cabDialog = null; return; } if (this.viewer) { this.viewer = null; return; } if (this.statusPop) { this.statusPop = null; return; } if (this.resPop) { this.resPop = null; return; } if (this.newProject) { this.newProject = null; return; } if (this.drawer) { this.drawer = null; return; } if (this.cl) this.closeChecklist(); else if (this.stageDept) this.stageDept = null; else if (this.modalId) this.closeModal();  },
             // ---- รอรับงาน: work this user may accept (their department's - or any, for Admin / PM allowed to act for departments) ----
             waitingList() {
                 return this.tasks.flatMap((t) => (t.deptStages || []).filter((s) => s.pmo && s.pmo.canAccept && (!this.dept || s.deptId === this.dept))
@@ -1598,7 +1642,7 @@ export default function registerPlanningBoard() {
             dateField(el, get, set, enabled, width) {
                 if (!window.flatpickr) { el.type = 'date'; el.value = get() || ''; el.disabled = !enabled; el.addEventListener('change', () => set(el.value || null)); return; }
                 window.flatpickr(el, {
-                    dateFormat: 'Y-m-d', altInput: true, altFormat: 'd/m/Y', allowInput: true, clickOpens: enabled, formatDate: beFormat, parseDate: beParse,
+                    dateFormat: 'Y-m-d', altInput: true, altFormat: 'd/m/Y', allowInput: true, clickOpens: enabled, formatDate: beFormat, parseDate: beParse, disableMobile: true,   // the พ.ศ. calendar on phones too (app.js)
                     altInputClass: (width || 'w-[6.75rem]') + ' rounded-lg border-slate-300 px-2 py-1 pr-7 text-[13px] ' + (enabled ? '' : 'bg-slate-50 text-slate-500'),
                     defaultDate: get() || null,
                     onChange: (d, str) => { if (enabled && str !== (get() || '')) set(str || null); },

@@ -5,16 +5,16 @@
 
     <div class="max-w-3xl mx-auto">
         <div class="mb-3 flex gap-1 text-sm">
-            <a href="{{ route('notifications.index') }}" class="rounded-lg px-3 py-1.5 font-medium {{ $unreadOnly ? 'text-slate-600 hover:bg-slate-100' : 'bg-slate-800 text-white' }}">ทั้งหมด</a>
-            <a href="{{ route('notifications.index', ['filter' => 'unread']) }}" class="rounded-lg px-3 py-1.5 font-medium {{ $unreadOnly ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100' }}">ยังไม่อ่าน ({{ $unreadCount }})</a>
-            <a href="{{ route('settings.notifications.edit') }}" class="ml-auto rounded-lg px-3 py-1.5 text-slate-500 hover:bg-slate-100">ตั้งค่าการแจ้งเตือน</a>
+            <a href="{{ route('notifications.index') }}" class="inline-flex min-h-[2.75rem] items-center rounded-lg px-3 font-medium {{ $unreadOnly ? 'text-slate-600 hover:bg-slate-100' : 'bg-slate-800 text-white' }}">ทั้งหมด</a>
+            <a href="{{ route('notifications.index', ['filter' => 'unread']) }}" class="inline-flex min-h-[2.75rem] items-center rounded-lg px-3 font-medium {{ $unreadOnly ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100' }}">ยังไม่อ่าน ({{ $unreadCount }})</a>
+            <a href="{{ route('settings.notifications.edit') }}" class="ml-auto inline-flex min-h-[2.75rem] items-center rounded-lg px-3 text-slate-500 hover:bg-slate-100">ตั้งค่าการแจ้งเตือน</a>
         </div>
         <x-card title="การแจ้งเตือนของฉัน">
             <x-slot name="actions">
                 @if (auth()->user()->unreadNotifications()->exists())
                     <form method="POST" action="{{ route('notifications.read-all') }}">
                         @csrf
-                        <button class="text-sm font-medium text-blue-600 hover:underline">รับทราบทั้งหมด</button>
+                        <button class="inline-flex min-h-[2.75rem] items-center text-sm font-medium text-blue-600 hover:underline">รับทราบทั้งหมด</button>
                     </form>
                 @endif
             </x-slot>

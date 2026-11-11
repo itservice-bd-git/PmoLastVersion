@@ -47,12 +47,12 @@ class ProjectDelivery extends Model
     public const REJECT_REASONS = ['รถไม่ว่างวันนั้น', 'คนไม่พอวันนั้น', 'ตู้ยังไม่พร้อม', 'รถเข้าที่ส่งไม่ได้'];
 
     protected $fillable = ['project_id', 'round', 'delivery_date', 'delivery_end_date', 'delivery_time', 'date_pending_at', 'status',
-        'cabinet_ids', 'packed', 'billed_at', 'billed_by', 'method', 'vehicle_types', 'crew_size', 'carrier', 'site', 'contact_name', 'contact_phone', 'note', 'departed_at', 'delivered_at',
+        'cabinet_ids', 'packed', 'billed_at', 'billed_by', 'method', 'vehicle_types', 'crew_size', 'carrier', 'site', 'map_url', 'contact_name', 'contact_phone', 'note', 'departed_at', 'delivered_at', 'review_at',
         'receiver', 'doc_no', 'issue', 'sent_by', 'scheduled_by', 'scheduled_at', 'rejected_by', 'rejected_at', 'rejected_reason', 'rejected_note', 'created_by'];
 
     protected function casts(): array
     {
-        return ['delivery_date' => 'date', 'delivery_end_date' => 'date', 'cabinet_ids' => 'array', 'packed' => 'array', 'vehicle_types' => 'array', 'crew_size' => 'integer',
+        return ['delivery_date' => 'date', 'delivery_end_date' => 'date', 'review_at' => 'datetime', 'cabinet_ids' => 'array', 'packed' => 'array', 'vehicle_types' => 'array', 'crew_size' => 'integer',
             'billed_at' => 'datetime', 'date_pending_at' => 'datetime', 'departed_at' => 'datetime', 'delivered_at' => 'datetime', 'scheduled_at' => 'datetime', 'rejected_at' => 'datetime'];
     }
 
@@ -300,6 +300,51 @@ class ProjectDelivery extends Model
     public function isOverdue(?Carbon $today = null): bool
     {
         return $this->status !== self::DELIVERED && $this->delivery_date && $this->lastDay()->lt(($today ?? today())->copy()->startOfDay());
+    }
+
+    /** Google Maps' own addresses: a ลิงก์ GPS must be one of them (not any link pasted by mistake). */
+    public const MAP_HOSTS = ['maps.app.goo.gl', 'goo.gl', 'www.google.com', 'google.com', 'maps.google.com', 'www.google.co.th', 'google.co.th'];
+
+    /**
+     * What was typed in ลิงก์ GPS, as the link to keep: a Google Maps link as it is, coordinates ("19.91, 99.84") as a link
+     * to that point; '' = none; null = not a map (refused).
+     */
+    public static function mapLink(?string $input): ?string
+    {
+        $v = trim((string) $input);
+        if ($v === '') {
+            return '';
+        }
+        if (preg_match('/^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/', $v, $m) && abs((float) $m[1]) <= 90 && abs((float) $m[2]) <= 180) {
+            return 'https://www.google.com/maps/search/?api=1&query='.$m[1].','.$m[2];
+        }
+        // a link inside the words LINE shares it with ("📍 … https://maps.app.goo.gl/…")
+        if (preg_match('~https?://\S+~u', $v, $m)) {
+            $v = rtrim($m[0], '.,)>');
+        }
+        $parts = parse_url($v);
+        $host = strtolower($parts['host'] ?? '');
+        $path = $parts['path'] ?? '';
+        $ok = in_array($parts['scheme'] ?? '', ['http', 'https'], true) && in_array($host, self::MAP_HOSTS, true)
+            && (in_array($host, ['maps.app.goo.gl', 'maps.google.com'], true) || str_starts_with($path, '/maps'));
+
+        return $ok && strlen($v) <= 500 ? $v : null;
+    }
+
+    /** The validation rule of ลิงก์ GPS (PM's form, จัดรถ / คน). */
+    public static function mapRule(): array
+    {
+        return ['nullable', 'string', 'max:600', function ($attribute, $value, $fail) {
+            if (self::mapLink($value) === null) {
+                $fail('ลิงก์ GPS ต้องเป็นลิงก์ Google Maps (เช่น https://maps.app.goo.gl/…) หรือพิกัด เช่น 19.91, 99.84');
+            }
+        }];
+    }
+
+    /** Where ไปที่หมุด / นำทาง goes: its ลิงก์ GPS, else a search for the site's words; null = nothing to go by. */
+    public function navUrl(): ?string
+    {
+        return $this->map_url ?: ($this->site ? 'https://www.google.com/maps/search/?api=1&query='.rawurlencode($this->site) : null);
     }
 
     /** Its first day (PM's). */

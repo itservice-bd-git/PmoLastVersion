@@ -4,7 +4,7 @@
 <div x-data="{ viewer: null }" @pmo-file.window="viewer = $event.detail; $nextTick(() => $refs.viewerClose?.focus({ preventScroll: true }))"
      @keydown.escape.window.capture="if (viewer) { $event.stopPropagation(); viewer = null }">
     <template x-if="viewer">
-        <div class="fixed inset-0 z-[70] flex flex-col bg-slate-900/90" role="dialog" aria-modal="true" :aria-label="viewer.name">
+        <div data-file-viewer class="fixed inset-0 z-[70] flex flex-col bg-slate-900/90" role="dialog" aria-modal="true" :aria-label="viewer.name">
             <div class="flex items-center gap-3 px-4 py-2 text-sm text-white">
                 <span class="min-w-0 flex-1 truncate" x-text="viewer.name"></span>
                 <a :href="viewer.url" target="_blank" rel="noopener" class="rounded border border-white/40 px-2 py-0.5 text-xs hover:bg-white/10">เปิดแท็บใหม่ / ดาวน์โหลด</a>

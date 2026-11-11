@@ -64,7 +64,7 @@
                     </div>
                     <template x-for="g in sec.groups" :key="sec.key + g.t.id">
                         <div class="mb-2 overflow-hidden rounded-[9px] border border-slate-200 bg-white">
-                            <div @click="openModal(g.t.id)" :title="(g.t.so ? g.t.so + ' ' : '') + g.t.title" class="flex cursor-pointer items-center gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-[9px] hover:bg-slate-100">
+                            <div @click="barGo(g.t)" :title="(g.t.so ? g.t.so + ' ' : '') + g.t.title" class="flex cursor-pointer items-center gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-[9px] hover:bg-slate-100">
                                 <span class="h-[18px] w-[18px] shrink-0 rounded-full border-2 border-white" :style="'background-color:' + statusColor(g.t) + ';box-shadow:0 0 0 1.5px ' + statusColor(g.t)" :title="'สถานะโปรเจค: ' + statusOf(g.t).name"></span>
                                 <span class="flex min-w-0 flex-1 items-center gap-1 truncate text-[13px] font-semibold text-slate-900">
                                     <svg x-show="flag(g.t)" :style="'color:' + flag(g.t)" class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3v18h2v-7h11l-2-4 2-4H7V3H5z"/></svg>
@@ -76,12 +76,12 @@
                             <div class="relative mb-1.5 ml-2.5 mr-2 flex flex-col pl-4 pt-0.5">
                                 <span class="absolute bottom-3 left-1 top-[-2px] w-[1.5px] bg-slate-200"></span>
                                 <template x-for="u in g.cabs" :key="u.key || (u.c ? u.c.id : 'whole')">
-                                    <div @click="openModal(g.t.id)" :title="rowName(u.c, g.t, u) + ' — ' + g.t.title" class="relative flex cursor-pointer items-center gap-[7px] rounded-md px-1.5 py-[3px] hover:bg-slate-50">
+                                    <div @click="barGo(g.t, u.did)" :title="rowName(u.c, g.t, u) + ' — ' + g.t.title" class="relative flex min-h-[2.75rem] cursor-pointer items-center gap-[7px] rounded-md px-1.5 py-1 hover:bg-slate-50 sm:min-h-0 sm:py-[3px]">
                                         <span class="absolute -left-3 top-1/2 h-[1.5px] w-2.5 bg-slate-200"></span>
                                         <span class="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-white" :style="'background-color:' + rowColor(g.t, u.c) + ';box-shadow:0 0 0 1.2px ' + rowColor(g.t, u.c)"></span>
                                         <span class="min-w-0 flex-1 truncate text-xs" :class="u.done ? 'text-slate-400 line-through' : 'text-slate-900'" x-text="rowName(u.c, g.t, u)"></span>
                                         <button type="button" x-show="u.c && cabProgress(u.c, dept || null).total > 0" @click.stop="openChecklist(g.t.id, u.c.id, $event)"
-                                                class="inline-flex shrink-0 items-center gap-[3px] rounded-[10px] border bg-white px-[5px] py-px text-[9px] font-bold hover:border-blue-500 hover:text-blue-600"
+                                                class="inline-flex min-h-[2rem] shrink-0 items-center gap-[3px] rounded-[10px] border bg-white px-2 py-px text-[12px] font-bold sm:min-h-0 sm:px-[5px] sm:text-[9px] hover:border-blue-500 hover:text-blue-600"
                                                 :class="u.c && cabProgress(u.c, dept || null).total > 0 && cabProgress(u.c, dept || null).done === cabProgress(u.c, dept || null).total ? 'border-emerald-500 text-emerald-600' : 'border-slate-300 text-slate-500'" title="เปิด checklist">
                                             <svg class="h-2.5 w-2.5" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M8 12l3 3 5-6"/></svg>
                                             <span class="tabular-nums" x-text="u.c ? cabProgress(u.c, dept || null).done + '/' + cabProgress(u.c, dept || null).total : ''"></span>

@@ -67,7 +67,9 @@ const nativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 
 
 function enhanceDate(el) {
     el.setAttribute('data-flatpickr-init', '1');
-    const fp = flatpickr(el, { dateFormat: 'Y-m-d', altInput: true, altFormat: 'd/m/Y', formatDate: thaiFormat, parseDate: thaiParse, altInputClass: el.className, allowInput: true });
+    // disableMobile: on a phone flatpickr would put the phone's own date field in instead (its locale, often ค.ศ.) - the
+    // พ.ศ. calendar is the same on every screen
+    const fp = flatpickr(el, { dateFormat: 'Y-m-d', altInput: true, altFormat: 'd/m/Y', formatDate: thaiFormat, parseDate: thaiParse, altInputClass: el.className, allowInput: true, disableMobile: true });
     const alt = fp.altInput;
     if (!alt) return;
     // a <label for> of the original (now hidden) input points at the field people see and type in
@@ -96,8 +98,12 @@ function enhanceDate(el) {
     new MutationObserver(mirror).observe(el, { attributes: true, attributeFilter: ['disabled', 'style', 'class'] });
 }
 
+// not one already done, nor a field flatpickr made itself (its phone field, .flatpickr-mobile): enhancing that one made
+// flatpickr add another, and so on - the page froze on phones as soon as a form with a date opened (ส่งถึงแล้ว, 2026-11)
+const DATE_TODO = 'input[type="date"]:not([data-flatpickr-init]):not(.flatpickr-mobile)';
+
 function initDatePickers(root = document) {
-    root.querySelectorAll('input[type="date"]:not([data-flatpickr-init])').forEach(enhanceDate);
+    root.querySelectorAll(DATE_TODO).forEach(enhanceDate);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -105,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // date inputs that appear later (Alpine x-if / x-for, fetched HTML); a removed one takes its calendar with it
     new MutationObserver((records) => {
         for (const r of records) {
-            r.addedNodes.forEach((n) => { if (n.nodeType === 1) { if (n.matches && n.matches('input[type="date"]')) enhanceDate(n); else initDatePickers(n); } });
+            r.addedNodes.forEach((n) => { if (n.nodeType === 1) { if (n.matches && n.matches('input[type="date"]')) { if (n.matches(DATE_TODO)) enhanceDate(n); } else initDatePickers(n); } });
             r.removedNodes.forEach((n) => {
                 if (n.nodeType !== 1) return;
                 (n._flatpickr ? [n] : [...(n.querySelectorAll ? n.querySelectorAll('[data-flatpickr-init]') : [])]).forEach((x) => { if (x._flatpickr) x._flatpickr.destroy(); });
@@ -113,6 +119,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }).observe(document.body, { childList: true, subtree: true });
 });
+
+/**
+ * A photo from a phone's camera (3-5 MB) made small before it goes up - quicker on a site's mobile data, and well under
+ * the server's upload limits: its long side to 1600 px, JPEG. Anything else (PDF, a small picture) as it is; a picture the
+ * browser cannot draw too. Used by งานจัดส่ง's ส่งถึงแล้ว and the driver's page (driver/show).
+ */
+window.pmoShrinkImage = function (file, max = 1600) {
+    if (!/^image\/(jpeg|png)$/.test(file.type || '') || file.size < 700 * 1024) return Promise.resolve(file);
+    return new Promise((resolve) => {
+        const url = URL.createObjectURL(file), img = new Image();
+        img.onload = () => {
+            const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+            const c = document.createElement('canvas');
+            c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+            URL.revokeObjectURL(url);
+            c.toBlob((blob) => resolve(blob && blob.size < file.size
+                ? new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: file.lastModified }) : file), 'image/jpeg', 0.82);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+        img.src = url;
+    });
+};
 
 // Exposed so pages that insert new date inputs via fetch (no full reload)
 // can enhance them the same way without duplicating this setup.

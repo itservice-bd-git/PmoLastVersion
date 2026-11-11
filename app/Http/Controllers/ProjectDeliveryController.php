@@ -118,7 +118,7 @@ class ProjectDeliveryController extends Controller
             'cabinet_ids' => $cabinets, 'method' => $d?->method ?? ProjectDelivery::COMPANY,
             'vehicle_types' => $d?->vehicle_types ?? [], 'crew_size' => $d?->crew_size ? (string) $d->crew_size : '', 'carrier' => (string) $d?->carrier,
             'types' => Vehicle::types($d?->vehicle_types ?? []),
-            'site' => (string) $last?->site, 'contact_name' => (string) $last?->contact_name, 'contact_phone' => (string) $last?->contact_phone, 'note' => (string) $d?->note,
+            'site' => (string) $last?->site, 'map_url' => (string) $last?->map_url, 'contact_name' => (string) $last?->contact_name, 'contact_phone' => (string) $last?->contact_phone, 'note' => (string) $d?->note,
             // what the delivery department did with it: the vehicles and people put on it, or why it was sent back
             'picked' => $d && $d->status === ProjectDelivery::SCHEDULED ? ($d->transport() ?? '-').($d->people() ? ' · '.$d->peopleText() : '') : '',
             'billed' => (bool) $d?->billed_at,
@@ -182,6 +182,7 @@ class ProjectDeliveryController extends Controller
         $data = $request->validate(self::rules($project, $current, $send, $request->input('method')) + [
             'carrier' => ['nullable', 'string', 'max:150'],
             'site' => ['nullable', 'string', 'max:255'],
+            'map_url' => ProjectDelivery::mapRule(),
             'contact_name' => ['nullable', 'string', 'max:100'],
             'contact_phone' => ['nullable', 'string', 'max:30'],
             'note' => ['nullable', 'string', 'max:500'],
@@ -212,7 +213,7 @@ class ProjectDeliveryController extends Controller
             'crew_size' => $method !== ProjectDelivery::PICKUP && ! empty($data['crew_size']) ? (int) $data['crew_size'] : null,
         ] + [
             'carrier' => $method === ProjectDelivery::EXTERNAL ? $text('carrier') : null,
-            'site' => $text('site'), 'contact_name' => $text('contact_name'), 'contact_phone' => $text('contact_phone'), 'note' => $text('note'),
+            'site' => $text('site'), 'map_url' => ProjectDelivery::mapLink($data['map_url'] ?? '') ?: null, 'contact_name' => $text('contact_name'), 'contact_phone' => $text('contact_phone'), 'note' => $text('note'),
         ];
     }
 

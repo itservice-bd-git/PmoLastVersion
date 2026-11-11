@@ -342,11 +342,12 @@ class NotificationService
      * A round for the delivery department to act on (sent / sent again / its window moved): "ต้องทำ" until they pick a day.
      * $todo false = only news (PM changed a round that already has its day).
      */
-    public function deliveryForDepartment(\App\Models\ProjectDelivery $d, User $actor, string $title, bool $todo = true): int
+    public function deliveryForDepartment(\App\Models\ProjectDelivery $d, User $actor, string $title, bool $todo = true, bool $tellActor = false): int
     {
         $project = $d->project;
 
-        return $this->send($this->deliveryDepartment($actor), new PmoNotice(
+        // $tellActor: it was not the actor's own doing (the driver's link: the one who sent it hears it too)
+        return $this->send($this->deliveryDepartment($tellActor ? null : $actor), new PmoNotice(
             $todo ? 'delivery_todo' : 'delivery',
             $title,
             $this->deliveryText($d),

@@ -26,12 +26,12 @@
                         <span x-show="(r.c || r.t).reschedule" @mouseenter="showRes($event, (r.c || r.t).reschedule)" @mouseleave="hideRes()" class="ml-auto res-chip" x-text="(r.c || r.t).reschedule ? resChip((r.c || r.t).reschedule) : ''"></span>
                     </div>
                     <div class="grid items-center py-3" :style="'grid-template-columns:' + tlTemplate()">
-                        <div @click="openModal(r.t.id)" :title="barTitle(r)"
+                        <div @click="barGo(r.t)" :title="barTitle(r)"
                              :style="'grid-column:' + r.col + ' / span ' + r.span + ';grid-row:1;' + chipStyle(barColor(r.t), r.done)"
                              class="relative flex items-center gap-1.5 h-8 rounded-md border-l-[3px] px-2 text-xs cursor-pointer hover:brightness-95 hover:shadow-sm transition">
                             <span x-show="!r.t.ship" class="absolute -top-1.5 right-2 w-2.5 h-2.5 rounded-full ring-2 ring-white" :style="'background-color:' + statusColor(r.t)"></span>
                             <span x-show="r.before" class="shrink-0">◄</span>
-                            <span class="truncate font-semibold" :class="r.done ? 'line-through text-slate-500' : 'text-slate-800'" x-text="r.t.so + ' ' + r.t.title"></span>
+                            <span class="truncate font-semibold" :class="r.done ? 'line-through text-slate-500' : 'text-slate-800'" x-text="r.t.ship ? r.t.so : r.t.so + ' ' + r.t.title"></span>
                             <span class="truncate text-[11.5px]" :class="r.late ? 'font-semibold text-red-600' : 'text-slate-500'" x-text="r.late ? (r.t.ship ? '· ยังไม่ส่งถึง เลย ' : '· เลยกำหนด ') + daysFromToday(r.end) * -1 + ' วัน' : (r.c ? '' : (r.t.ship ? '· งานขนส่ง ' + dels(r.t).filter((d) => !d.pending).length + ' รอบ' : '· ' + r.t.subtasks.length + ' ตู้'))"></span>
                             <span x-show="remarkCount(r.t)" class="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-100 px-1.5 text-[11.5px] font-semibold text-amber-800" :title="'หมายเหตุ ' + remarkCount(r.t) + ' รายการ'"><svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4h16v12H8l-4 4z"/></svg><span x-text="remarkCount(r.t)"></span></span>
                             <span x-show="r.after" class="shrink-0" :class="remarkCount(r.t) ? '' : 'ml-auto'">►</span>
@@ -42,7 +42,7 @@
                                     class="relative z-[6] h-8" :class="fatBandCls(r.t)"><span x-text="tlFat(r).label"></span></button>
                         </template>
                         <template x-for="g in tlDels(r)" :key="g.id">
-                            <button type="button" @click="openModal(r.t.id)" :style="'grid-column:' + g.col + ' / span ' + g.span + ';grid-row:1;--del:' + g.color" :title="g.title" class="relative z-[6]" :class="g.cls"><span x-text="g.label"></span></button>
+                            <button type="button" @click="barGo(r.t, g.id)" :style="'grid-column:' + g.col + ' / span ' + g.span + ';grid-row:1;--del:' + g.color" :title="g.title" class="relative z-[6]" :class="g.cls"><span x-text="g.label"></span></button>
                         </template>
                     </div>
                 </div>

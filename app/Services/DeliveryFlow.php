@@ -175,6 +175,8 @@ class DeliveryFlow
             $d->fill([
                 'status' => ProjectDelivery::SCHEDULED,
                 'carrier' => $d->method === ProjectDelivery::EXTERNAL ? (trim((string) ($data['carrier'] ?? '')) ?: $d->carrier) : null,
+                // ลิงก์ GPS: the delivery department may put it on (or change it) with the vehicles; left out = as it was
+                'map_url' => array_key_exists('map_url', $data) ? (ProjectDelivery::mapLink($data['map_url']) ?: null) : $d->map_url,
                 'scheduled_by' => $actor->id, 'scheduled_at' => now(),
             ])->save();
             $d->load('vehicles.vehicle');
@@ -302,25 +304,29 @@ class DeliveryFlow
     }
 
     /**
-     * ส่งถึงแล้ว: when, who received it, the delivery note, a problem on site, and the cabinets that arrived (the rest leave
-     * the round, free to book again). Saved again = a correction.
+     * ส่งถึงแล้ว: when, a problem on site, and the cabinets that arrived (the rest leave the round, free to book again).
+     * Saved again = a correction. The receiver's name and the delivery note number are no longer asked (2026-11: the signed
+     * note goes up as a file); a round saved before keeps the ones it has.
      *
-     * @param  array{delivered_date: string, delivered_time?: ?string, receiver: string, doc_no?: ?string, issue?: ?string, cabinet_ids: list<int>}  $data
+     * @param  array{delivered_date: string, delivered_time?: ?string, issue?: ?string, cabinet_ids: list<int>}  $data
      */
     /**
      * ส่งถึงแล้ว (again = แก้การส่งถึง). $files (ใบส่งของที่เซ็นรับ, รูปหน้างาน …) go up as a project comment carrying the
      * round's id (ProjectDelivery::filesOf): seen in the Comment tab and on the round; each save adds, none is replaced.
      *
      * @param  array<int, \Illuminate\Http\UploadedFile>  $files
+     * @param  string|null  $via  how it came in, said in the history (the driver's link: ผ่านลิงก์คนขับ - $actor is the one who sent it)
+     * @param  bool  $review  รอตรวจ (the driver's link): delivered, but PM is told only once the delivery department has looked
+     *                        at it (review(), or its own ส่งถึงแล้ว / แก้ข้อมูลส่งถึง saved over it)
      */
-    public function deliver(ProjectDelivery $delivery, array $data, User $actor, array $files = []): ProjectDelivery
+    public function deliver(ProjectDelivery $delivery, array $data, User $actor, array $files = [], ?string $via = null, bool $review = false): ProjectDelivery
     {
         $this->assert(self::canDeliver($actor), 'บันทึกได้เฉพาะแผนกจัดส่ง');
         if ($files && ! $this->uploader->ready()) {   // before anything is written: the log is MyISAM, a failed upload would leave half a save
             throw ValidationException::withMessages(['files' => 'เซิร์ฟเวอร์เก็บไฟล์ไม่ได้ (โฟลเดอร์ uploads/comment-attachments เขียนไม่ได้) · ยังไม่ได้บันทึก · แจ้งผู้ดูแลระบบ หรือบันทึกโดยไม่แนบไฟล์']);
         }
 
-        return DB::transaction(function () use ($delivery, $data, $actor, $files) {
+        return DB::transaction(function () use ($delivery, $data, $actor, $files, $via, $review) {
             $d = $this->lock($delivery);
             $this->assert(! $d->isOpen(), 'รอบนี้ยังไม่ได้จัดรถ');
             // straight from จัดรถแล้ว (it left unrecorded) still needs แจ้งเปิดบิล; one already out (rounds from before the step too) does not
@@ -331,11 +337,12 @@ class DeliveryFlow
             }
             $left = array_values(array_diff(array_map('intval', $d->cabinet_ids ?? []), $ids));
             $again = $d->status === ProjectDelivery::DELIVERED;
+            $checked = ! $review && (bool) $d->review_at;   // the department's own save over the driver's report = looked at
             $at = Carbon::parse($data['delivered_date'].' '.(($data['delivered_time'] ?? null) ?: '00:00'));
             $text = fn (string $k) => trim((string) ($data[$k] ?? '')) ?: null;
             $d->fill(['status' => ProjectDelivery::DELIVERED, 'cabinet_ids' => $ids, 'packed' => array_intersect_key($d->packed ?? [], array_flip($ids)) ?: null,
-                'departed_at' => $d->departed_at ?? $at, 'delivered_at' => $at,
-                'receiver' => $text('receiver'), 'doc_no' => $text('doc_no'), 'issue' => $text('issue')])->save();
+                'departed_at' => $d->departed_at ?? $at, 'delivered_at' => $at, 'review_at' => $review ? now() : null,
+                'issue' => $text('issue')])->save();
             $this->checklist->mark($ids, DeliveryChecklist::DEPART, true, $actor);
             $this->checklist->mark($ids, DeliveryChecklist::DELIVER, true, $actor);
             if ($left) {   // back at the factory: no longer on the way
@@ -344,26 +351,58 @@ class DeliveryFlow
             }
 
             $line = ($again ? 'แก้การส่งถึง' : ProjectDelivery::statusName(ProjectDelivery::DELIVERED)).' '.$at->thaiDate().($at->format('H:i') !== '00:00' ? ' '.$at->format('H:i').' น.' : '')
-                .' · '.$this->describe($d).' · ผู้รับ '.$d->receiver.($d->doc_no ? ' · ใบส่งของ '.$d->doc_no : '').($d->issue ? ' · ปัญหา: '.$d->issue : '')
-                .($left ? ' · ไม่ได้ส่ง '.$this->names($left)->implode(', ') : '').($files ? ' · แนบไฟล์ '.count($files).' ไฟล์' : '');
+                .' · '.$this->describe($d).($d->receiver ? ' · ผู้รับ '.$d->receiver : '').($d->doc_no ? ' · ใบส่งของ '.$d->doc_no : '').($d->issue ? ' · หมายเหตุ: '.$d->issue : '')
+                .($left ? ' · ไม่ได้ส่ง '.$this->names($left)->implode(', ') : '').($files ? ' · แนบไฟล์ '.count($files).' ไฟล์' : '').($via ? ' · '.$via : '').($review ? ' · รอแผนกจัดส่งตรวจ' : '').($checked ? ' · ตรวจแล้ว' : '');
             $this->log($actor, $d, "การจัดส่งรอบที่ {$d->round}: {$line}");
             if ($files) {
                 $note = ActivityLog::record($d->project_id, $actor->id, $d->project, 'note',
-                    "ไฟล์การจัดส่งรอบที่ {$d->round} · ".ProjectDelivery::statusName(ProjectDelivery::DELIVERED).' '.$at->thaiDate().' · ผู้รับ '.$d->receiver, ['delivery_id' => $d->id]);
+                    "ไฟล์การจัดส่งรอบที่ {$d->round} · ".ProjectDelivery::statusName(ProjectDelivery::DELIVERED).' '.$at->thaiDate(), ['delivery_id' => $d->id]);
                 foreach ($files as $file) {
                     $this->uploader->store($note, $file, $actor->id);
                 }
             }
-            // PM hears it arrived (again: only a problem, or files added); the files are named so PM knows to look (the notice opens the panel)
-            if (! $again || $d->issue || $files) {
-                $attached = $files ? ($again ? 'แนบไฟล์เพิ่ม ' : 'แนบไฟล์ ').count($files).' ไฟล์' : null;
-                $title = $d->issue ? 'ส่งถึงแล้ว · มีปัญหาที่หน้างาน' : ProjectDelivery::statusName(ProjectDelivery::DELIVERED).($attached ? ' · '.$attached : '');
-                $extra = collect([$d->issue ? 'ปัญหา: '.$d->issue : null, $left ? 'ไม่ได้ส่ง '.$this->names($left)->implode(', ') : null, $d->issue ? $attached : null])->filter()->implode(' · ');
-                $this->notices->deliveryForManager($d, $actor, $title, $extra ?: null, todo: (bool) $d->issue);
+            // PM hears it arrived (again: only a problem, or files added) - not while it waits to be checked; checked by this
+            // save, PM hears it as it arrives (with all the files the round has)
+            if (! $review) {
+                $this->arrived($d, $actor, $again && ! $checked, $checked ? ProjectDelivery::filesOf([$d->id])->get($d->id, collect())->count() : count($files), $left);
             }
 
             return $d;
         });
+    }
+
+    /**
+     * ตรวจแล้ว · แจ้ง PM: the delivery department looked at what the driver sent (photos, the note) and found it in order;
+     * PM hears it arrived now. Wrong instead: แก้ข้อมูลส่งถึง (deliver() again) or ย้อนขั้น.
+     */
+    public function review(ProjectDelivery $delivery, User $actor): ProjectDelivery
+    {
+        $this->assert(self::canDeliver($actor), 'ตรวจได้เฉพาะแผนกจัดส่ง');
+
+        return DB::transaction(function () use ($delivery, $actor) {
+            $d = $this->lock($delivery);
+            $this->assert($d->status === ProjectDelivery::DELIVERED && $d->review_at, 'รอบนี้ไม่มีอะไรรอตรวจ');
+            $d->fill(['review_at' => null])->save();
+            $this->log($actor, $d, "การจัดส่งรอบที่ {$d->round}: แผนกจัดส่งตรวจข้อมูลจากคนขับแล้ว");
+            $this->arrived($d, $actor, false, ProjectDelivery::filesOf([$d->id])->get($d->id, collect())->count(), []);
+
+            return $d;
+        });
+    }
+
+    /**
+     * PM hears it arrived: ส่งถึงแล้ว with how many files to look at and the หมายเหตุ said at arrival (the notice opens the
+     * panel). Only news - since 2026-11 the arrival has one หมายเหตุ, no "ปัญหาที่หน้างาน" asking PM to act.
+     */
+    private function arrived(ProjectDelivery $d, User $actor, bool $again, int $files, array $left): void
+    {
+        if ($again && ! $files) {   // corrected: PM hears it again only for files added
+            return;
+        }
+        $attached = $files ? ($again ? 'แนบไฟล์เพิ่ม ' : 'แนบไฟล์ ').$files.' ไฟล์' : null;
+        $title = ProjectDelivery::statusName(ProjectDelivery::DELIVERED).($attached ? ' · '.$attached : '');
+        $extra = collect([$d->issue ? 'หมายเหตุ: '.$d->issue : null, $left ? 'ไม่ได้ส่ง '.$this->names($left)->implode(', ') : null])->filter()->implode(' · ');
+        $this->notices->deliveryForManager($d, $actor, $title, $extra ?: null);
     }
 
     /**
@@ -379,7 +418,7 @@ class DeliveryFlow
             $ids = array_map('intval', $d->cabinet_ids ?? []);
             $from = $d->step()['text'];
             if ($d->status === ProjectDelivery::DELIVERED) {
-                $d->fill(['status' => ProjectDelivery::DEPARTED, 'delivered_at' => null, 'receiver' => null, 'issue' => null])->save();
+                $d->fill(['status' => ProjectDelivery::DEPARTED, 'delivered_at' => null, 'review_at' => null, 'receiver' => null, 'issue' => null])->save();
                 $this->checklist->mark($ids, DeliveryChecklist::DELIVER, false, $actor);
             } elseif ($d->status === ProjectDelivery::DEPARTED) {
                 $d->fill(['status' => ProjectDelivery::SCHEDULED, 'departed_at' => null])->save();

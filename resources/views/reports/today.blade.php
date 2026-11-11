@@ -460,7 +460,7 @@
                 if (!window.flatpickr) return;
                 if (!this.datePicker) {
                     this.datePicker = window.flatpickr(this.$refs.datePickerInput, {
-                        mode: 'range', dateFormat: 'Y-m-d', positionElement: this.$refs.datePickerButton,
+                        mode: 'range', dateFormat: 'Y-m-d', disableMobile: true, positionElement: this.$refs.datePickerButton,
                         onReady: (selectedDates, dateText, picker) => picker.calendarContainer.classList.add('work-summary-calendar'),
                         locale: {
                             firstDayOfWeek: 1, rangeSeparator: ' ถึง ',

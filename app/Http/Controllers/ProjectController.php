@@ -3,157 +3,69 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\AssignmentException;
+use App\Http\Requests\ProjectRequest;
 use App\Models\ActivityLog;
 use App\Models\AppSetting;
+use App\Models\Board;
+use App\Models\CabinetTemplate;
+use App\Models\Department;
 use App\Models\JobType;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\CommentAttachmentUploader;
+use App\Services\NewProjectAppointments;
+use App\Services\NotificationService;
+use App\Services\PlanningBoard;
 use App\Services\ProjectFollowers;
+use App\Services\ProjectList;
 use App\Services\ProjectOverview;
 use App\Services\SubtaskAssignmentService;
 use App\Support\Csv;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ProjectController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, ProjectList $list)
     {
-        $query = $this->filteredProjects($request);
-
-        // The same list and order as Planning's dashboard table (resources/js/planning/dashboard.js dash().rows): the open projects,
-        // late first - its due date passed and not marked done on Planning - then those waiting for sales to give the new
-        // dates (รอฝ่ายขายแจ้งกำหนดส่ง), then the nearest due date, then the order made (id); no due date last. Closed ones (ปิดแล้ว, or found by a search) come after, in the same order.
-        $locked = [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED];
-        $projects = $query
-            ->orderByRaw('CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END', $locked)
-            // late, then รอฝ่ายขายแจ้งกำหนดส่ง (never late), then the rest by their due date
-            ->orderByRaw('CASE WHEN due_pending_at IS NOT NULL THEN 1 WHEN due_date < ? AND NOT EXISTS (SELECT 1 FROM board_statuses bs WHERE bs.id = projects.board_status_id AND bs.is_done = ?) THEN 0 ELSE 2 END', [today()->toDateString(), true])
-            ->orderByRaw('CASE WHEN due_date IS NULL THEN 1 ELSE 0 END')
-            ->orderBy('due_date')
-            ->orderBy('id')
+        $projects = $list->ordered($list->query($request))
             ->with('latestFat', 'jobType:id,name')   // วัน FAT column (the latest round), ประเภทงาน column
             ->paginate(15)
             ->withQueryString();
 
-        // which departments have dispatched work in each listed project (the coloured dots, as on Planning)
-        $deptIds = \App\Models\CabinetSubtask::query()
-            ->join('cabinet_tasks', 'cabinet_tasks.id', '=', 'cabinet_subtasks.cabinet_task_id')
-            ->join('cabinets', 'cabinets.id', '=', 'cabinet_tasks.cabinet_id')
-            ->whereIn('cabinets.project_id', $projects->pluck('id'))
-            ->whereNull('cabinet_tasks.deleted_at')->whereNull('cabinets.deleted_at')
-            ->whereNotNull('cabinet_subtasks.department_id')
-            ->whereIn('cabinet_subtasks.assignment_status', \App\Services\WorkScope::ACTIVE_STATUSES)
-            ->distinct()->get(['cabinets.project_id', 'cabinet_subtasks.department_id'])
-            ->groupBy('project_id')->map(fn ($rows) => $rows->pluck('department_id')->all());
-
         return view('projects.index', [
             'projects' => $projects,
-            'projectDepartments' => $deptIds,
-            'departmentColors' => \App\Services\PlanningBoard::departmentColors(),
-            'departmentNames' => \App\Models\Department::pluck('name', 'id'),
+            'projectDepartments' => $list->departmentsOf($projects->pluck('id')),
+            'departmentColors' => PlanningBoard::departmentColors(),
+            'departmentNames' => Department::pluck('name', 'id'),
             'statuses' => Project::$statuses,
             'filters' => $request->only(['q', 'status', 'priority', 'due']),
-            // the open ones only (no status, no search): how many closed ones that leaves out, for the link under the list
-            'closedCount' => $request->filled('status') || $request->filled('q') ? 0
-                : $this->filteredProjects($request->duplicate(array_merge($request->query(), ['status' => 'closed'])))->count(),
+            'closedCount' => $list->closedCount($request),
         ]);
     }
 
-    /**
-     * Same search/status filters as the list, as a CSV (all matching rows, not just the page).
-     */
-    public function export(Request $request)
+    /** Same search/status filters as the list, as a CSV (all matching rows, not just the page). */
+    public function export(Request $request, ProjectList $list)
     {
-        $projects = $this->filteredProjects($request)->with('projectManager', 'jobType')->orderBy('project_no')->get();
+        $projects = $list->query($request)->with('projectManager', 'jobType')->orderBy('project_no')->get();
 
-        $rows = $projects->map(fn (Project $p) => [
-            $p->project_no,
-            $p->project_name,
-            $p->customer_name,
-            $p->po_no,
-            Project::$statuses[$p->status] ?? $p->status,
-            Project::$priorities[$p->priority] ?? $p->priority,
-            $p->projectManager?->name,
-            $p->jobType?->name,
-            $p->start_date?->thaiDate(),
-            $p->due_date?->thaiDate(),
-            $p->cabinets_count,
-            $p->production_progress.'%',
-            ['overdue' => 'Delayed', 'at_risk' => 'At Risk', 'pending' => 'Waiting for a new due date'][$p->risk_level] ?? 'On Track',
-        ]);
-
-        return Csv::download(
-            'โครงการ-'.today()->format('Y-m-d').'.csv',
-            ['Project No.', 'ชื่อโครงการ', 'ลูกค้า', 'PO No.', 'สถานะ', 'ความสำคัญ', 'Project Manager', 'ประเภทงาน', 'เริ่ม', 'กำหนดส่ง', 'จำนวนตู้', 'ความคืบหน้าการผลิต', 'ความเสี่ยง'],
-            $rows
-        );
-    }
-
-    private function filteredProjects(Request $request)
-    {
-        $query = Project::visibleTo($request->user())   // the list and its CSV: only the projects this person may see
-            ->withAvg('cabinets', 'progress')
-            ->withAvg('projectTasks', 'progress')
-            ->withCount('cabinets');
-
-        if ($search = $request->get('q')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('project_no', 'like', "%{$search}%")
-                    ->orWhere('project_name', 'like', "%{$search}%")
-                    ->orWhere('customer_name', 'like', "%{$search}%");
-            });
-        }
-
-        if ($status = $request->get('status')) {
-            if ($status === 'not_started') {   // the dashboard card "รอเริ่ม": Draft and Planning together
-                $query->whereIn('status', [Project::STATUS_DRAFT, Project::STATUS_PLANNING]);
-            } elseif ($status === 'closed') {   // "ปิดแล้ว": Completed and Cancelled together (the link under the list)
-                $query->whereIn('status', Project::LOCKED_STATUSES);
-            } else {
-                $query->where('status', $status);
-            }
-        } elseif (! $request->filled('q')) {
-            // the open ones by default, as Planning's dashboard; a search still finds a closed one
-            $query->whereNotIn('status', Project::LOCKED_STATUSES);
-        }
-
-        if (in_array($priority = $request->get('priority'), [Project::PRIORITY_URGENT, Project::PRIORITY_HIGH], true)) {   // the ⚑ ด่วน / ⚑ สูง buttons
-            $query->where('priority', $priority);
-        }
-
-        // the dashboard cards "ล่าช้า" / "ตามแผน": in progress and past / not past the due date (Project::scopeRunningLate)
-        match ($request->get('due')) {
-            'late' => $query->runningLate(),
-            'ontrack' => $query->runningLate(false),
-            default => null,
-        };
-
-        return $query;
+        return Csv::download('โครงการ-'.today()->format('Y-m-d').'.csv', ProjectList::CSV_HEADERS, $projects->map(fn (Project $p) => $list->csvRow($p)));
     }
 
     public function create()
     {
-        return view('projects.create', [
-            'users' => $this->managers(),
-            'statuses' => Project::$statuses,
-            'priorities' => Project::$priorities,
-            'jobTypes' => JobType::where('is_active', true)->orderBy('name')->get(),
-            'boards' => \App\Models\Board::orderBy('sort')->orderBy('id')->get(),
-            'salesPeople' => ProjectFollowers::salesPeople(),
-            'salesChosen' => [],
-        ]);
+        return view('projects.create', $this->formOptions());
     }
 
-    public function store(Request $request, ProjectFollowers $followers)
+    public function store(ProjectRequest $request, ProjectFollowers $followers, NewProjectAppointments $newAppointments)
     {
-        $data = $this->validateData($request);
-        $appointments = app(\App\Services\NewProjectAppointments::class)->validate($request);
+        $data = $request->projectData();
+        $appointments = $newAppointments->validate($request);
 
-        $project = \Illuminate\Support\Facades\DB::transaction(function () use ($data, $appointments, $request, $followers) {
+        $project = DB::transaction(function () use ($data, $appointments, $request, $followers, $newAppointments) {
             $project = Project::create($data);
             $followers->setSales($project, $request->input('sales_ids', []), $request->user());   // the ticked พนักงานขาย follow it
-            app(\App\Services\NewProjectAppointments::class)->store($project, $appointments, $request->user());
+            $newAppointments->store($project, $appointments, $request->user());
 
             return $project;
         });
@@ -216,40 +128,24 @@ class ProjectController extends Controller
 
         return view('projects.show', [
             'project' => $project,
-            'cabinetTemplates' => \App\Models\CabinetTemplate::where('is_active', true)->get(),
+            'cabinetTemplates' => CabinetTemplate::where('is_active', true)->get(),
             // For the Cabinet Quick Detail Panel's Assignment Modal (department
             // select) - same unfiltered query the Cabinet full page/Dispatch page
             // already use, not a new Department query.
-            'departments' => \App\Models\Department::orderBy('name')->get(),
+            'departments' => Department::orderBy('name')->get(),
             'comments' => $comments,
-            'overview' => app(\App\Services\ProjectOverview::class)->build($project, auth()->user()),
+            'overview' => app(ProjectOverview::class)->build($project, auth()->user()),
         ]);
     }
 
     public function edit(Project $project)
     {
-        return view('projects.edit', [
-            'project' => $project,
-            'users' => $this->managers($project),
-            'statuses' => Project::$statuses,
-            'priorities' => Project::$priorities,
-            'jobTypes' => JobType::where('is_active', true)->orderBy('name')->get(),
-            'boards' => \App\Models\Board::orderBy('sort')->orderBy('id')->get(),
-            'salesPeople' => ProjectFollowers::salesPeople(),
-            'salesChosen' => $project->followers()->wherePivot('source', ProjectFollowers::SALES)->pluck('users.id')->all(),
-        ]);
+        return view('projects.edit', ['project' => $project] + $this->formOptions($project));
     }
 
-    public function update(Request $request, Project $project, ProjectFollowers $followers)
+    public function update(ProjectRequest $request, Project $project, ProjectFollowers $followers)
     {
-        $data = $this->validateData($request, $project);
-        foreach (['start_date', 'due_date'] as $f) {   // set ones move only through "เลื่อน / แก้วัน" (ProjectDates, with a reason)
-            if ($project->{$f}) {
-                unset($data[$f]);
-            }
-        }
-
-        $project->update($data);
+        $project->update($request->projectData());
         $followers->setSales($project, $request->input('sales_ids', []), $request->user());
 
         return redirect()->route('projects.show', $project)->with('success', 'บันทึกการแก้ไขโครงการเรียบร้อยแล้ว');
@@ -290,7 +186,7 @@ class ProjectController extends Controller
         foreach ($request->file('attachments', []) as $file) {
             $uploader->store($log, $file, auth()->id());
         }
-        app(\App\Services\NotificationService::class)->commented($project, $request->user(), $log);   // the people following the project hear it
+        app(NotificationService::class)->commented($project, $request->user(), $log);   // the people following the project hear it
 
         // Comment tab is client-side (Alpine) state, not reflected in the URL -
         // redirect straight back to it (rather than back()/Referer, which would
@@ -319,56 +215,18 @@ class ProjectController extends Controller
         return back()->with('success', 'อัปเดตสีโครงการเรียบร้อยแล้ว');
     }
 
-    private function validateData(Request $request, ?Project $project = null): array
+    /** What the new-project and edit forms offer. */
+    private function formOptions(?Project $project = null): array
     {
-        // amounts as typed ("1,250,000") -> plain numbers
-        $request->merge(collect(['contract_value', 'margin'])->filter(fn ($k) => $request->has($k))->mapWithKeys(fn ($k) => [$k => Project::cleanAmount($request->input($k))])->all());
-
-        $data = $request->validate([
-            'project_no' => ['required', 'string', 'max:50', 'unique:projects,project_no,'.($project?->id ?? 'NULL').',id,deleted_at,NULL'],
-            'project_name' => ['required', 'string', 'max:255'],
-            'customer_name' => ['required', 'string', 'max:255'],
-            'customer_phone' => ['nullable', 'string', 'max:50'],
-            'contract_value' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
-            'margin' => ['nullable', 'numeric', 'max:9999999999999'],
-            'po_no' => ['nullable', 'string', 'max:100'],
-            'sales_order_no' => ['nullable', 'string', 'max:100'],
-            'project_owner' => ['nullable', 'string', 'max:255'],
-            // พนักงานขาย: ticked from the sales people (they follow the project), plus names typed for anyone without an account
-            'sales_ids' => ['nullable', 'array'],
-            'sales_ids.*' => ['integer', 'exists:users,id'],
-            'sales_person' => ['nullable', 'string', 'max:255'],
-            // Admin / PM only (a manager already on the project before this rule may stay when it is edited)
-            'project_manager_id' => ['nullable', 'exists:users,id', function (string $attr, mixed $value, \Closure $fail) use ($project) {
-                if ($value && (int) $value !== $project?->project_manager_id && ! User::whereKey($value)->whereIn('role', Project::MANAGER_ROLES)->exists()) {
-                    $fail('ผู้จัดการโครงการต้องเป็น Admin หรือ Project Manager');
-                }
-            }],
-            'start_date' => ['nullable', 'date'],
-            'due_date' => ['nullable', 'date'],
-            'description' => ['nullable', 'string'],
-            'payment_terms' => ['nullable', 'string', 'max:255'],
-            'job_type_id' => ['nullable', 'exists:job_types,id'],
-            'board_id' => ['nullable', 'exists:boards,id'],
-            // a new project has no status field (it starts as Draft); it is changed on the edit page / Planning
-            'status' => [$project ? 'required' : 'nullable', 'in:'.implode(',', array_keys(Project::$statuses))],
-            'priority' => ['required', 'in:'.implode(',', array_keys(Project::$priorities))],
-        ], ['contract_value.numeric' => 'มูลค่างานต้องเป็นตัวเลข', 'margin.numeric' => 'Margin ต้องเป็นตัวเลข']);
-
-        if (! $project) {
-            $data['status'] ??= Project::STATUS_DRAFT;
-        }
-        $data['sales_person'] = ProjectFollowers::salesText($data['sales_ids'] ?? [], $data['sales_person'] ?? null);
-        unset($data['sales_ids']);
-        // what this person may not see, they do not change either (the old values stay) - Settings > สิทธิ์การใช้งาน
-        if (! $request->user()->allows('data.finance')) {
-            unset($data['contract_value'], $data['margin']);
-        }
-        if (! $request->user()->allows('data.contact')) {
-            unset($data['customer_phone']);
-        }
-
-        return $data;
+        return [
+            'users' => $this->managers($project),
+            'statuses' => Project::$statuses,
+            'priorities' => Project::$priorities,
+            'jobTypes' => JobType::where('is_active', true)->orderBy('name')->get(),
+            'boards' => Board::orderBy('sort')->orderBy('id')->get(),
+            'salesPeople' => ProjectFollowers::salesPeople(),
+            'salesChosen' => $project ? $project->followers()->wherePivot('source', ProjectFollowers::SALES)->pluck('users.id')->all() : [],
+        ];
     }
 
     /** The people the form offers as Project Manager: Admin / PM, plus whoever already is this project's manager. */

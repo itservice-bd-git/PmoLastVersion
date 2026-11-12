@@ -16,15 +16,9 @@ class DepartmentController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(\App\Http\Requests\Settings\DepartmentRequest $request)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'code' => ['required', 'string', 'max:50', 'unique:departments,code'],
-            'description' => ['nullable', 'string'],
-            'color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
-            'icon' => ['nullable', 'string', 'max:8'],
-        ]);
+        $data = $request->validated();
         $data['is_active'] = true;
         $data['sees_all'] = $request->boolean('sees_all');
 
@@ -33,17 +27,9 @@ class DepartmentController extends Controller
         return back()->with('success', 'เพิ่มแผนกเรียบร้อยแล้ว');
     }
 
-    public function update(Request $request, Department $department)
+    public function update(\App\Http\Requests\Settings\DepartmentRequest $request, Department $department)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'code' => ['required', 'string', 'max:50', 'unique:departments,code,'.$department->id],
-            'description' => ['nullable', 'string'],
-            'is_active' => ['sometimes', 'boolean'],
-            'color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
-            'icon' => ['nullable', 'string', 'max:8'],
-            'handoff_date_label' => ['nullable', 'string', 'max:40'],
-        ]);
+        $data = $request->validated();
         $data['handoff_date_label'] = trim((string) ($data['handoff_date_label'] ?? '')) ?: null;
         $data['is_active'] = $request->boolean('is_active');
         $data['sees_all'] = $request->boolean('sees_all');

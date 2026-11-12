@@ -15,12 +15,9 @@ class JobTypeController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(\App\Http\Requests\Settings\JobTypeRequest $request)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:job_types,name'],
-            'description' => ['nullable', 'string'],
-        ]);
+        $data = $request->validated();
         $data['is_active'] = true;
 
         JobType::create($data);
@@ -28,13 +25,9 @@ class JobTypeController extends Controller
         return back()->with('success', 'เพิ่มประเภทงานเรียบร้อยแล้ว');
     }
 
-    public function update(Request $request, JobType $jobType)
+    public function update(\App\Http\Requests\Settings\JobTypeRequest $request, JobType $jobType)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', 'unique:job_types,name,'.$jobType->id],
-            'description' => ['nullable', 'string'],
-            'is_active' => ['sometimes', 'boolean'],
-        ]);
+        $data = $request->validated();
         $data['is_active'] = $request->boolean('is_active');
 
         $jobType->update($data);

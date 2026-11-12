@@ -21,25 +21,13 @@ class UserController extends Controller
     {
         return view('settings.users.create', [
             'departments' => Department::orderBy('name')->get(),
-            'roles' => $this->roles(),
+            'roles' => User::roleLabels(),
         ]);
     }
 
-    public function store(Request $request)
+    public function store(\App\Http\Requests\Settings\UserRequest $request)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            // Plain username for now, not a real email address (2026-09-30).
-            'email' => ['required', 'string', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8'],
-            'role' => ['required', 'in:'.implode(',', array_keys($this->roles()))],
-            'department_id' => ['nullable', 'exists:departments,id'],
-            // "ดูแลแผนกเพิ่มเติม": departments they work for on top of their own (User::departmentIds)
-            'extra_department_ids' => ['nullable', 'array'],
-            'extra_department_ids.*' => ['integer', 'exists:departments,id'],
-            'position' => ['nullable', 'string', 'max:255'],
-            'is_active' => ['sometimes', 'boolean'],
-        ]);
+        $data = $request->validated();
 
         $data['password'] = Hash::make($data['password']);
         $data['is_active'] = $request->boolean('is_active', true);
@@ -58,25 +46,13 @@ class UserController extends Controller
         return view('settings.users.edit', [
             'user' => $user,
             'departments' => Department::orderBy('name')->get(),
-            'roles' => $this->roles(),
+            'roles' => User::roleLabels(),
         ]);
     }
 
-    public function update(Request $request, User $user)
+    public function update(\App\Http\Requests\Settings\UserRequest $request, User $user)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            // Plain username for now, not a real email address (2026-09-30).
-            'email' => ['required', 'string', 'max:255', 'unique:users,email,'.$user->id],
-            'password' => ['nullable', 'string', 'min:8'],
-            'role' => ['required', 'in:'.implode(',', array_keys($this->roles()))],
-            'department_id' => ['nullable', 'exists:departments,id'],
-            // "ดูแลแผนกเพิ่มเติม": departments they work for on top of their own (User::departmentIds)
-            'extra_department_ids' => ['nullable', 'array'],
-            'extra_department_ids.*' => ['integer', 'exists:departments,id'],
-            'position' => ['nullable', 'string', 'max:255'],
-            'is_active' => ['sometimes', 'boolean'],
-        ]);
+        $data = $request->validated();
 
         if (! empty($data['password'])) {
             $data['password'] = Hash::make($data['password']);
@@ -108,16 +84,5 @@ class UserController extends Controller
     private function setExtraDepartments(User $user, array $ids): void
     {
         $user->extraDepartments()->sync(collect($ids)->map(fn ($id) => (int) $id)->reject(fn ($id) => $id === $user->department_id)->unique()->values()->all());
-    }
-
-    private function roles(): array
-    {
-        return [
-            User::ROLE_ADMIN => 'Admin',
-            User::ROLE_PROJECT_MANAGER => 'Project Manager',
-            User::ROLE_SALES => 'Sales',
-            User::ROLE_PRODUCTION => 'Production',
-            User::ROLE_MEMBER => 'Member',
-        ];
     }
 }

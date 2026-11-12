@@ -39,6 +39,18 @@ class User extends Authenticatable
 
     const ROLE_MEMBER = 'member';
 
+    /** The roles as Settings > ผู้ใช้งาน names them (its select, and UserRequest's allowed values). */
+    public static function roleLabels(): array
+    {
+        return [
+            self::ROLE_ADMIN => 'Admin',
+            self::ROLE_PROJECT_MANAGER => 'Project Manager',
+            self::ROLE_SALES => 'Sales',
+            self::ROLE_PRODUCTION => 'Production',
+            self::ROLE_MEMBER => 'Member',
+        ];
+    }
+
     /** The profile picture, or null (the page then draws the initial on a colour). */
     public function getAvatarUrlAttribute(): ?string
     {

@@ -107,6 +107,7 @@ The old single-file SPA (`resources/planning/index.html`, `public/planning-asset
 - The old My Department page was removed (2026-11). `/my-department` redirects to Planning, and its CSV export (`my-department.export`) is `DepartmentExportController`. The scope query it uses is `DepartmentSchedule`. Prefer putting logic in `app/Services` over controllers.
 - Project fields such as owner / sales person are plain text columns (`project_owner`, `sales_person`), not user FKs. Extra per-department project fields are `DepartmentField` / `ProjectFieldValue`; Planning boards, statuses and labels are `Board` / `BoardStatus` / `BoardLabel`.
 - The public `/request` intake form was removed (2026-10). The `project_requests` table and `ProjectRequest` model are kept only for the old data; nothing in the app reads or writes them.
+- Validation: a form with an add / edit pair shares one Form Request in `app/Http/Requests` (e.g. `Settings\UserRequest`; the route's model tells edit from add). One-off checks stay inline `$request->validate()` with their Thai messages.
 - Exports are CSV via `App\Support\Csv`.
 - งานจัดส่ง (`deliveries/index`) is one Alpine component, `deliveriesPage` in `resources/js/deliveries.js`. The view passes it what only the server knows. Page scripts live in `resources/js`, not inline in Blade.
 - A round's card buttons on งานจัดส่ง are `<x-round-button>` (`main`, `icon`). Do not build HTML in PHP strings in views; make a component instead.

@@ -16,9 +16,12 @@ php artisan test                        # whole suite (composer test also clears
 php artisan test --filter=TrashAndLockTest
 php artisan test tests/Feature/PlanningSyncTest.php
 
+node tests/browser/smoke.mjs           # a browser walk through every main page + Planning (see the file: users.php up, serve, run, down)
 php artisan pmo:send-reminders          # due-soon/overdue notices; scheduled daily 08:00 in routes/console.php
 php artisan pmo:migration-sql --since=<last migration prod has> --output=database/sql/<name>.sql
 ```
+
+The PHP tests do not run the page's JavaScript: after a refactor of views or `resources/js`, also run `tests/browser/smoke.mjs` (Playwright). It opens pages and windows, saves nothing, and fails on any JS error.
 
 Tests run on in-memory **sqlite** (phpunit.xml) while the app runs on MySQL, so migrations and raw SQL must work on both (e.g. no `UPDATE ... JOIN`). Run the full suite after refactors: it is the main safety net.
 

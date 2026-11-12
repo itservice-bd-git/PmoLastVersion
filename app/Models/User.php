@@ -90,7 +90,7 @@ class User extends Authenticatable
         return $query->where(fn ($q) => $q->whereIn('department_id', $ids)->orWhereHas('extraDepartments', fn ($d) => $d->whereIn('departments.id', $ids)));
     }
 
-    /** Sub Tasks this user bookmarked ("ติดดาว") - personal, see MyDepartmentController::toggleStar(). */
+    /** Sub Tasks this user bookmarked ("ติดดาว") - personal, set on the old My Department page (removed 2026-11; the rows are kept). */
     public function starredSubtasks()
     {
         return $this->belongsToMany(CabinetSubtask::class, 'subtask_stars')->withTimestamps();

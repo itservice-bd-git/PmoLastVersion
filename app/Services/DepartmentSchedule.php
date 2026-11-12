@@ -10,7 +10,8 @@ use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * Read side of "My Department": who may look at which department, the one schedule query behind the calendar
+ * Read side of a department's schedule (now the Planning page's "Export CSV", DepartmentExportController; the My Department
+ * page it was written for was removed in 2026-11): who may look at which department, the one schedule query behind the calendar
  * JSON and the CSV export, and the array shape of a single Sub Task item. Nothing is stored for it.
  */
 class DepartmentSchedule
@@ -45,13 +46,6 @@ class DepartmentSchedule
         abort_if($requested && ! $user->inDepartment((int) $requested), 403, 'คุณไม่มีสิทธิ์ดูงานของแผนกอื่น');
 
         return $requested ? Department::findOrFail((int) $requested) : $user->department;   // one they look after too, when asked
-    }
-
-    /** You can only open (or star) a Sub Task that is dispatched to a department you may look at. */
-    public function canViewSubtask(User $user, CabinetSubtask $subtask): bool
-    {
-        return $subtask->department_id !== null
-            && ($user->canViewOtherDepartments() || $user->inDepartment($subtask->department_id));
     }
 
     /**
@@ -168,8 +162,6 @@ class DepartmentSchedule
                 'accept' => route('cabinet-subtasks.accept', $subtask),
                 'start' => route('cabinet-subtasks.start', $subtask),
                 'complete' => route('cabinet-subtasks.complete', $subtask),
-                'detail' => route('my-department.show', $subtask),
-                'star' => route('my-department.star', $subtask),
             ],
         ] + $this->assignments->actionsFor($subtask, $user);
     }

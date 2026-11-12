@@ -5,7 +5,7 @@ namespace Tests\Feature;
 use Tests\TestCase;
 
 /**
- * A static guard for the two Alpine pages (Planning, My Department): every function a template calls from an event
+ * A static guard for the Alpine page (Planning): every function a template calls from an event
  * handler (@click, @change, @input, ...) must be defined in that page's script. PHPUnit cannot run Alpine, so a typo'd
  * handler name (a click that silently does nothing) would otherwise only show up in a browser.
  */
@@ -83,7 +83,6 @@ class AlpineHandlersTest extends TestCase
     {
         return [
             'planning board' => ['planning', 'js/planning'],
-            'my department' => ['my-department', 'views/my-department/partials/_script.blade.php'],
         ];
     }
 }

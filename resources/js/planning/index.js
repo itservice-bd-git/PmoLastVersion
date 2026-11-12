@@ -1,6 +1,5 @@
 // The Planning page's Alpine component (registered from app.js before Alpine starts; was an inline <script> in the page,
 // now in the bundle so the browser caches it instead of every page load carrying ~90 KB).
-// The Planning page's Alpine component (same pattern as my-department/partials/_script).
 // Data: the board built by App\Services\PlanningBoard (project -> task, cabinet -> subtask with checklist items tagged by
 // department, "deptStages" = one chip per department). Writes: ONE operation per user action, POSTed to planning.sync
 // (App\Services\PlanningSync -> PMO's own services and rules). The page updates optimistically; the server's answer

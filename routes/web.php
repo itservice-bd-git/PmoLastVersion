@@ -9,7 +9,6 @@ use App\Http\Controllers\CabinetTaskController;
 use App\Http\Controllers\CabinetTemplateController;
 use App\Http\Controllers\CabinetTemplateItemController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\MyDepartmentController;
 use App\Http\Controllers\PlanningController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\NotificationController;
@@ -56,7 +55,6 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
         Route::put('activity-logs/{activityLog}', [ActivityLogController::class, 'update'])->name('activity-logs.update');
         Route::post('projects/{project}/notes', [ProjectController::class, 'storeNote'])->name('projects.notes.store');
         Route::post('cabinets/{cabinet}/notes', [CabinetController::class, 'storeNote'])->name('cabinets.notes.store');
-        Route::post('my-department/projects/{project}/notes', [MyDepartmentController::class, 'storeProjectNote'])->name('my-department.project.note');
     });
 
     // "งานแผนกของฉัน" and Planning are ONE page now: the Planning board. The old URL (bookmarks, old notices) lands there.
@@ -79,13 +77,7 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
         Route::delete('planning/day-notes/{note}', [\App\Http\Controllers\DayNoteController::class, 'destroy'])->middleware('throttle:60,1')->name('planning.day-notes.destroy');
         Route::post('planning/sync', [PlanningController::class, 'sync'])->middleware('throttle:240,1')->name('planning.sync');
     });
-    Route::get('my-department/tasks', [MyDepartmentController::class, 'tasks'])->name('my-department.tasks');
-    Route::get('my-department/projects/{project}', [MyDepartmentController::class, 'project'])->name('my-department.project');
-    Route::patch('my-department/projects/{project}', [MyDepartmentController::class, 'updateProject'])->name('my-department.project.update');
-    Route::get('my-department/dashboard', [MyDepartmentController::class, 'dashboard'])->name('my-department.dashboard');
-    Route::get('my-department/export', [MyDepartmentController::class, 'export'])->middleware('perm:page.export')->name('my-department.export');
-    Route::get('my-department/subtasks/{cabinetSubtask}', [MyDepartmentController::class, 'show'])->name('my-department.show');
-    Route::post('my-department/subtasks/{cabinetSubtask}/star', [MyDepartmentController::class, 'toggleStar'])->name('my-department.star');
+    Route::get('my-department/export', \App\Http\Controllers\DepartmentExportController::class)->middleware('perm:page.export')->name('my-department.export');
 
     Route::get('status-report', [StatusReportController::class, 'show'])->name('status-report.show');
     Route::post('status-report/acknowledge', [StatusReportController::class, 'acknowledge'])->name('status-report.acknowledge');

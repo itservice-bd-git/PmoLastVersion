@@ -131,34 +131,4 @@ class DashboardDepartmentTest extends TestCase
         $this->assertSame(1, $one['totals']['total']);
         $this->assertSame(['Wiring'], array_column($one['departments'], 'name'));
     }
-
-    public function test_my_department_dashboard_endpoint_is_scoped_and_lists_projects(): void
-    {
-        $this->subtask($this->busbar, '2026-09-20');                      // overdue -> project status overdue
-        $this->subtask($this->busbar, '2026-10-01', 'COMPLETED');
-        $this->subtask($this->wiring, '2026-09-30');
-
-        $member = $this->user($this->busbar);
-        $json = $this->actingAs($member)->getJson(route('my-department.dashboard'))->assertOk()->json();
-
-        $this->assertSame(2, $json['totals']['total']);
-        $this->assertSame(1, $json['totals']['overdue']);
-        $this->assertCount(1, $json['projects']);
-        $this->assertSame('overdue', $json['projects'][0]['status']);
-        $this->assertSame(['Busbar'], $json['projects'][0]['departments']);
-        $this->assertSame('Busbar', $json['department']['name']);
-
-        // a department user can neither ask for another department nor for "all"
-        $this->actingAs($member)->getJson(route('my-department.dashboard', ['department_id' => $this->wiring->id]))->assertForbidden();
-        $this->actingAs($member)->getJson(route('my-department.dashboard', ['department_id' => 'all']))->assertForbidden();
-
-        $pm = $this->user($this->busbar, 'project_manager');
-        $all = $this->actingAs($pm)->getJson(route('my-department.dashboard', ['department_id' => 'all']))->assertOk()->json();
-        $this->assertSame(3, $all['totals']['total']);
-        $this->assertSame('ทุกแผนก', $all['department']['name']);
-        $this->assertEqualsCanonicalizing(['Busbar', 'Wiring'], $all['projects'][0]['departments']);
-
-        $this->app['auth']->forgetGuards();   // actingAs() sticks for the rest of the test - drop it to act as a guest
-        $this->getJson(route('my-department.dashboard'))->assertUnauthorized();
-    }
 }

@@ -104,7 +104,7 @@ The old single-file SPA (`resources/planning/index.html`, `public/planning-asset
 ## Other structure
 
 - The new-project page's FAT / delivery are checked and saved by `NewProjectAppointments` (called from `ProjectController::store`).
-- `MyDepartmentController` is thin; query/scope/serialising logic lives in `DepartmentSchedule` and `ProjectModal`. Prefer putting logic in `app/Services` over controllers.
+- The old My Department page was removed (2026-11). `/my-department` redirects to Planning, and its CSV export (`my-department.export`) is `DepartmentExportController`. The scope query it uses is `DepartmentSchedule`. Prefer putting logic in `app/Services` over controllers.
 - Project fields such as owner / sales person are plain text columns (`project_owner`, `sales_person`), not user FKs. Extra per-department project fields are `DepartmentField` / `ProjectFieldValue`; Planning boards, statuses and labels are `Board` / `BoardStatus` / `BoardLabel`.
 - The public `/request` intake form was removed (2026-10). The `project_requests` table and `ProjectRequest` model are kept only for the old data; nothing in the app reads or writes them.
 - Exports are CSV via `App\Support\Csv`.

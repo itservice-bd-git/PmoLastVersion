@@ -16,7 +16,8 @@ php artisan test                        # whole suite (composer test also clears
 php artisan test --filter=TrashAndLockTest
 php artisan test tests/Feature/PlanningSyncTest.php
 
-node tests/browser/smoke.mjs           # a browser walk through every main page + Planning (see the file: users.php up, serve, run, down)
+node tests/browser/smoke.mjs           # a browser walk through every main page + Planning, read-only (see the file: users.php up, serve, run, down)
+BASE=http://127.0.0.1:8001 node tests/browser/e2e.mjs   # the save paths (project, cabinet, checklist, trash, a round from PM to ตรวจแล้ว via the driver link) - WRITES: only on a copy of the database (pmo_e2e), see the file
 php artisan pmo:send-reminders          # due-soon/overdue notices; scheduled daily 08:00 in routes/console.php
 php artisan pmo:migration-sql --since=<last migration prod has> --output=database/sql/<name>.sql
 ```

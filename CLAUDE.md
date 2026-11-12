@@ -29,7 +29,7 @@ Tests run on in-memory **sqlite** (phpunit.xml) while the app runs on MySQL, so 
 
 Production has **no shell, no `npm`, and no `artisan`**: schema changes go through phpMyAdmin and front-end assets must be built locally and uploaded. Consequences:
 - Never write hand-made `.sql` for schema changes; generate it from the migrations with `pmo:migration-sql` and run it **before** uploading the matching code (and back up first).
-- `public/build/` and `public/planning-assets/` are what prod serves; `public/build` is gitignored, so it has to be handed over separately.
+- `public/build/` is what prod serves for CSS/JS. It is gitignored, so build it locally and hand it over separately.
 - `DisableResponseCaching` middleware sends no-store on every web response because shared-hosting caches (LiteSpeed) otherwise show stale data. Don't remove it.
 - Reminders need a `* * * * * php artisan schedule:run` cron entry.
 
@@ -42,6 +42,17 @@ Production has **no shell, no `npm`, and no `artisan`**: schema changes go throu
 - **Visibility**: PMO roles see all departments; others only their own department's subtasks. `WorkScope`, `DepartmentSchedule::resolveDepartment` and `PlanningBoard` implement this and must stay in agreement. Enforce on the server, not just in the UI. A user may also look after extra departments (`department_user`, Settings > ผู้ใช้งาน) and works for them as a member: ask "is this my department's work" with `User::departmentIds()` / `inDepartment()` and find a department's people with `User::ofDepartment()`, never `department_id` alone. Permissions (`Access`) still come from the user's own department.
 - **Checklist pairs** (`SubtaskPairs`, set on the cabinet template and per cabinet): a Sub Task comparing with another shares its list (`SharedChecklist`). The receiver holds a copy of each source item (`cabinet_checklists.source_checklist_id`); add / rename / order / delete happen at the source and reach the copies, a copy ticked by the receiver blocks deleting it at the source, and each side ticks its own copy, except that a receiver ticking its copy ticks the source item too (and unticking takes back only that tick); the source department is notified. Any new code path that adds, renames, moves or deletes cabinet checklist items must go through `SharedChecklist`.
 - **Checklist notice rules** (`ChecklistNoticeRules`, Settings > แจ้งเตือน Checklist): per department and event (date / tick / cabinet / before N / late N) who hears what about its paired checklist. A department with a rule for an event replaces the built-in `HandoffService` notice of that event; one with none keeps it.
+- **Delivery** (`ProjectDelivery`, `DeliveryFlow`): PM sends a round to the delivery department, which moves it through these steps:
+  1. จัดรถ / คน
+  2. ห่อ (packing)
+  3. แจ้งเปิดบิล
+  4. ออกจากโรงงาน
+  5. ส่งถึงแล้ว
+
+  It may also refuse a round (ไม่รับงาน, with a reason).
+  - A driver can report the arrival with photos through a signed link that needs no login (`DriverLinkController`). That round waits as รอตรวจ (`review_at`) until the department presses ตรวจแล้ว, and only then does PM hear about it.
+  - `DeliveryBrief` writes the LINE message for the crew.
+  - The งานจัดส่ง page is `DeliveryController`.
 - **Automation** (`AutomationService`): admin-defined rules run after a checklist tick and call the normal `start()/complete()` service methods, so all workflow checks still apply; they only move work forward. Date-limit rules constrain dates.
 
 ## Cross-cutting model behaviour (traits in `app/Models/Concerns`)
@@ -77,7 +88,7 @@ Production has **no shell, no `npm`, and no `artisan`**: schema changes go throu
   | `assign` | handing work out |
   | `feed` | remarks, comments, work waiting to be accepted |
   | `checklist` | checklists |
-| `day-notes` | หมายเหตุรายวัน |
+  | `day-notes` | หมายเหตุรายวัน |
 
   Constants and date helpers are in `shared.js`.
 - **Module rules:**
@@ -101,16 +112,38 @@ Production has **no shell, no `npm`, and no `artisan`**: schema changes go throu
 
 The old single-file SPA (`resources/planning/index.html`, `public/planning-assets/`, `planning:build`) was removed in 2026-11; `/planning/classic` redirects to the board.
 
-## Other structure
+## Where things live
 
-- The new-project page's FAT / delivery are checked and saved by `NewProjectAppointments` (called from `ProjectController::store`).
-- The old My Department page was removed (2026-11). `/my-department` redirects to Planning, and its CSV export (`my-department.export`) is `DepartmentExportController`. The scope query it uses is `DepartmentSchedule`. Prefer putting logic in `app/Services` over controllers.
-- Project fields such as owner / sales person are plain text columns (`project_owner`, `sales_person`), not user FKs. Extra per-department project fields are `DepartmentField` / `ProjectFieldValue`; Planning boards, statuses and labels are `Board` / `BoardStatus` / `BoardLabel`.
-- The public `/request` intake form was removed (2026-10). The `project_requests` table and `ProjectRequest` model are kept only for the old data; nothing in the app reads or writes them.
-- Validation: a form with an add / edit pair shares one Form Request in `app/Http/Requests` (e.g. `Settings\UserRequest`; the route's model tells edit from add). One-off checks stay inline `$request->validate()` with their Thai messages.
-- `ProjectDelivery`: how a round is said and shown (state names and colours, vehicles / people / cabinets as text, its days, the nav link) is in `Models\Concerns\PresentsDelivery`. Its rules stay on the model.
-- A trait in a `Concerns` folder is in a different namespace from the class it belongs to: import every class it names. A missing import only fails when that code runs. The browser smoke and its server-error check catch it.
+| Area | Code |
+|---|---|
+| Controllers | `app/Http/Controllers`. Thin: they validate, call a service, answer. Settings screens are under `Settings/`. |
+| Business rules | `app/Services`, one class per workflow or report. Traits that split a large service by area live in `app/Services/Concerns`: `NotificationService` → `*Notices`, `Reminders`; `PlanningSync` → `Sync*`; `PlanningBoard` → `BoardProjectShape`. |
+| Form Requests | `app/Http/Requests`. Used for a form with an add / edit pair (e.g. `Settings\UserRequest`, where the route's model tells edit from add). One-off checks stay inline `$request->validate()` with their Thai messages. |
+| Models | `app/Models`, with behaviour traits in `app/Models/Concerns` (see above). How a delivery round is said and shown is `PresentsDelivery`; the rules stay on the model. |
+| Page scripts | `resources/js`, registered from `app.js` before Alpine starts. Not inline in Blade. |
+| Views | `resources/views`. Reusable pieces are `components/`, e.g. `<x-round-button>`. Never build HTML in PHP strings in a view: make a component. |
+
+`resources/js` in detail:
+
+| File | Page |
+|---|---|
+| `planning/` | Planning (see above) |
+| `deliveries.js` | งานจัดส่ง, `deliveriesPage` |
+| `assignment.js` | handing work to departments on the cabinet / project / dispatch pages; its functions are on `window` |
+| `activity-tree.js` | `x-activity-tree` |
+| `work-summary.js` | reports/today |
+| `template-editor.js` | cabinet-templates/show |
+| `checklist-editor.js` | `x-checklist-editor` |
+
+Smaller pages may still carry a short inline `<script>`, such as the layout, settings and the CEO report.
+
+## Conventions
+
+- Prefer putting logic in `app/Services` over controllers. The new-project page's FAT / delivery go through `NewProjectAppointments`; the Planning page's CSV export is `DepartmentExportController`, at its old `my-department.export` address.
+- A trait in a `Concerns` folder is in a different namespace from the class that uses it, so import every class it names. A missing import fails only when that code runs; the browser smoke's server-error check catches it.
+- Project fields such as owner / sales person are plain text columns (`project_owner`, `sales_person`), not user FKs. Extra per-department project fields are `DepartmentField` / `ProjectFieldValue`. Planning boards, statuses and labels are `Board` / `BoardStatus` / `BoardLabel`.
 - Exports are CSV via `App\Support\Csv`.
-- งานจัดส่ง (`deliveries/index`) is one Alpine component, `deliveriesPage` in `resources/js/deliveries.js`. The view passes it what only the server knows. Page scripts live in `resources/js`, not inline in Blade.
-- A round's card buttons on งานจัดส่ง are `<x-round-button>` (`main`, `icon`). Do not build HTML in PHP strings in views; make a component instead.
 - Admin-only settings routes use the `admin` middleware alias (`EnsureAdmin`); the `gzip` alias compresses the planning responses.
+- Removed and kept only as data:
+  - The public `/request` form (2026-10): the `project_requests` table and the `ProjectRequest` model.
+  - The My Department page (2026-11): its starred Sub Tasks rows. `/my-department` redirects to Planning.

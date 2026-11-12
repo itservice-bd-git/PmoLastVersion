@@ -37,10 +37,33 @@ const open = (p, who, url, expect = [200]) => step(p, `${who} ${url}`, async () 
 
 const b = await chromium.launch();
 await session(b, 'probe-adm@example.test', { viewport: { width: 1440, height: 1000 } }, 'admin', async (p) => {
-    for (const u of ['/dashboard', '/projects', '/projects/create', '/deliveries', '/deliveries?tab=all', '/notifications', '/reports/today', '/reports/production', '/reports/ceo', '/settings', '/cabinets', '/cabinet-templates', '/planning/classic'])
+    for (const u of ['/dashboard', '/projects', '/projects/create', '/deliveries', '/deliveries?tab=all', '/notifications', '/reports/today', '/reports/production', '/reports/ceo', '/settings', '/settings/notice-rules', '/settings/notifications', '/cabinets', '/cabinet-templates', '/planning/classic'])
         await open(p, 'admin', u);
     const pid = await p.evaluate(async () => (await (await fetch('/planning/data')).json()).root.boards.pmo.tasks[0]?.id?.slice(1));
-    if (pid) await open(p, 'admin', '/projects/' + pid);
+    if (pid) {
+        await open(p, 'admin', '/projects/' + pid);
+        await step(p, 'project info table (project-info.js)', async () => {
+            const n = await p.evaluate(() => { const el = document.querySelector('[x-data^="pmoProjectInfo"]'); return el ? Alpine.$data(el).filtered().length : -1; });
+            if (n < 0) throw new Error('pmoProjectInfo not mounted');
+        });
+    }
+    await step(p, 'the bell opens (bell.js)', async () => {
+        const ok = await p.evaluate(() => { const el = document.querySelector('[x-data^="pmoBell"]'); if (!el) return false; const d = Alpine.$data(el); d.toggle(); const o = d.open; d.close(); return o; });
+        if (!ok) throw new Error('bell did not open');
+    });
+    await step(p, 'status report mounted (status-report.js)', async () => {
+        if (!(await p.evaluate(() => { const el = document.querySelector('[x-data^="statusReport"]'); return !!el && typeof Alpine.$data(el).openReport === 'function'; }))) throw new Error('statusReport missing');
+    });
+    await open(p, 'admin', '/settings/notice-rules');
+    await step(p, 'notice rule window (notice-rules.js)', async () => {
+        if (!(await p.evaluate(() => { const el = document.querySelector('[x-data^="noticeRules"]'); if (!el) return false; const d = Alpine.$data(el); d.openNew(); return typeof d.preview() === 'string'; }))) throw new Error('noticeRules failed');
+        await p.keyboard.press('Escape');
+    });
+    await open(p, 'admin', '/reports/ceo');
+    await step(p, 'ceo cabinet picker (ceo-report.js)', async () => {
+        const ok = await p.evaluate(() => { const g = document.querySelector('[data-cab-group]'); return !g || /\d+\/\d+/.test(g.querySelector('[data-cab-count]').textContent); });
+        if (!ok) throw new Error('picker counts not drawn');
+    });
     const cab = await p.evaluate(() => document.querySelector('a[href*="/cabinets/"]')?.getAttribute('href'));
     if (cab) {
         await open(p, 'admin', new URL(cab, base).pathname);
@@ -87,7 +110,13 @@ await session(b, 'probe-ship@example.test', { ...devices['iPhone 13'] }, 'ship-p
     await step(p, 'ship day notes window', async () => { await p.locator('button[aria-label^="หมายเหตุของแผนก"]').first().click(); await p.keyboard.press('Escape'); });
     await step(p, 'ship รอบส่ง drawer', async () => {
         const has = await p.evaluate(`(() => { const d = ${comp}; const t = d.tasks.find((x) => x.ship); if (t) d.openShip(t); return !!t; })()`);
-        if (has) { await p.waitForSelector('iframe', { timeout: 5000 }); await p.keyboard.press('Escape'); }
+        if (!has) { log.push('skip ship รอบส่ง drawer: no project with a round'); return; }
+        const frame = await (await p.waitForSelector('iframe[title^="รอบส่งของ"]', { timeout: 5000 })).contentFrame();
+        await frame.waitForSelector('body[data-embed]', { timeout: 10000 });
+        // Esc inside the frame (a key press would land on Planning, which closes it by itself): embed-bridge.js tells Planning
+        await frame.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+        await p.waitForTimeout(500);
+        if (await p.evaluate(`(() => !!${comp}.ship)()`)) throw new Error('Esc inside the รอบส่ง window did not close it');
     });
 });
 await b.close();

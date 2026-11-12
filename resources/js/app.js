@@ -9,6 +9,12 @@ import registerAssignment from './assignment';
 import registerWorkSummary from './work-summary';
 import registerTemplateEditor from './template-editor';
 import registerCabinetPage from './cabinet-page';
+import pmoBell from './bell';
+import statusReport from './status-report';
+import pmoProjectInfo from './project-info';
+import noticeRules from './notice-rules';
+import pushDevice from './push-device';
+import embedBridge from './embed-bridge';
 import { registerWorkDays } from './work-days';
 import pmoProjectDates from './project-dates';
 import watchSession from './session-expiry';
@@ -39,6 +45,12 @@ registerAssignment();                               // cabinet / project / dispa
 registerWorkSummary();                              // reports/today
 registerTemplateEditor();                           // cabinet-templates/show
 registerCabinetPage();                              // cabinets/show
+Alpine.data('pmoBell', pmoBell);                    // the top bar's bell (layouts/app)
+Alpine.data('statusReport', statusReport);          // x-status-report: the daily report / urgent alerts window
+Alpine.data('pmoProjectInfo', pmoProjectInfo);      // projects/show "ข้อมูลโครงการ"
+Alpine.data('noticeRules', noticeRules);            // Settings > แจ้งเตือน Checklist
+Alpine.data('pushDevice', pushDevice);              // Settings > การแจ้งเตือน: web push on this device
+embedBridge();                                     // x-embed-layout pages inside Planning's รอบส่ง window
 registerWorkDays();                                // "จำนวนวัน" beside a Sub Task's start / due dates (work-days.js)
 watchSession();                                    // logged out (left open too long): back to log in, then to this page - before Alpine starts, so its first calls are watched too
 Alpine.start();

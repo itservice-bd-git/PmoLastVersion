@@ -113,6 +113,8 @@ class TrashAndLockTest extends TestCase
 
         $this->actingAs($member)->get(route('trash.index'))->assertForbidden();
         $this->actingAs($member)->post(route('trash.cabinets.restore', $this->cabinet->id))->assertForbidden();
+        $this->actingAs($member)->postJson(route('trash.cabinets.restore', $this->cabinet->id))->assertForbidden()
+            ->assertJson(['message' => 'เฉพาะผู้ดูแลระบบ (Admin) หรือ Project Manager']);   // Gate manage-trash
         $this->actingAs($this->admin)->get(route('trash.index'))->assertOk()->assertSee('MO-1');
     }
 

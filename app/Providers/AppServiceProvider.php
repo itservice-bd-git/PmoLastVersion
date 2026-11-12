@@ -23,6 +23,10 @@ class AppServiceProvider extends ServiceProvider
         // any saved / deleted record: the Planning board's version moves, so its 15-second poll rebuilds (PlanningBoard::stamp)
         \Illuminate\Support\Facades\Event::listen(['eloquent.saved: *', 'eloquent.deleted: *', 'eloquent.restored: *'], fn () => \App\Services\PlanningBoard::touch());
 
+        // ถังขยะ (routes: 'can:manage-trash'): Admin / Project Manager
+        \Illuminate\Support\Facades\Gate::define('manage-trash', fn (\App\Models\User $user) => $user->canManageTrash()
+            ? \Illuminate\Auth\Access\Response::allow() : \Illuminate\Auth\Access\Response::deny('เฉพาะผู้ดูแลระบบ (Admin) หรือ Project Manager'));
+
         // @editplan … @endeditplan: buttons that change project data / dates - Admin / Project Manager only (routes: 'pmo')
         \Illuminate\Support\Facades\Blade::if('editplan', fn () => (bool) auth()->user()?->canDispatchWork());
         // @edittemplates … @endedittemplates: changing the cabinet templates (Settings > สิทธิ์การใช้งาน: edit.templates; routes: 'perm:edit.templates')

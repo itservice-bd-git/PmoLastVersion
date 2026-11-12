@@ -117,9 +117,12 @@ The old single-file SPA (`resources/planning/index.html`, `public/planning-asset
 | Area | Code |
 |---|---|
 | Controllers | `app/Http/Controllers`. Thin: they validate, call a service, answer. Settings screens are under `Settings/`. |
-| Business rules | `app/Services`, one class per workflow or report. Traits that split a large service by area live in `app/Services/Concerns`: `NotificationService` → `*Notices`, `Reminders`; `PlanningSync` → `Sync*`; `PlanningBoard` → `BoardProjectShape`. |
-| Form Requests | `app/Http/Requests`. Used for a form with an add / edit pair (e.g. `Settings\UserRequest`, where the route's model tells edit from add). One-off checks stay inline `$request->validate()` with their Thai messages. |
-| Models | `app/Models`, with behaviour traits in `app/Models/Concerns` (see above). How a delivery round is said and shown is `PresentsDelivery`; the rules stay on the model. |
+| Business rules | `app/Services`, one class per workflow or report. A service that grows past ~300 lines is split by area into traits in `app/Services/Concerns`; the class keeps its constructor, constants, public entry points and shared helpers, so callers never change: |
+| | `NotificationService` → `*Notices`, `Reminders` · `PlanningSync` → `Sync*` · `PlanningBoard` → `BoardProjectShape`, `BoardStamp`, `BoardPalette` · `DeliveryFlow` → `DeliveryRequests` (PM), `DeliverySteps` (delivery dept) · `DailyWork` → `DailyWorkChart`, `DailyWorkFeed` · `ChecklistEditor` → `ChecklistEdits`, `ChecklistLive` · `HandoffService` → `HandoffNotices` · `ProjectDates` → `MovesLinkedDates`, `DescribesDateChanges` · `SubtaskAssignmentService` → `DispatchesWork`, `AssignmentChecks` |
+| Lists | The โครงการ list and its CSV (filters, order, department dots) are `ProjectList`. |
+| Permissions | The rules are methods on `User` (`canDispatchWork()`, `canManageTrash()`, `allows()`) and on the models (`CabinetSubtask::isChecklistEditableBy()` / `canTickBy()`), used by both the views and the server. Routes use the middleware aliases (`pmo`, `admin`, `perm:…`, `project.visible`) and `can:manage-trash` (a Gate in `AppServiceProvider`). `app/Policies/CabinetSubtaskPolicy` gives the checklist routes their Thai refusals (`Gate::authorize('editChecklist', $subtask)`). A refusal always says why in Thai. |
+| Form Requests | `app/Http/Requests`. Used for a form with an add / edit pair (`ProjectRequest`, `Settings\UserRequest`, …), where the route's model tells edit from add; `ProjectRequest::projectData()` also drops what the person may not change. One-off checks stay inline `$request->validate()` with their Thai messages. |
+| Models | `app/Models`, with behaviour traits in `app/Models/Concerns` (see above), and traits that split a large model: `PresentsDelivery` (how a round is said and shown), `ProjectMoney`, `ProjectProgress`, `SubtaskAssignmentRules`, `SubtaskDue`. Relations, casts, `booted()` and the `LogsActivity` overrides stay on the model (two traits may not define the same method). |
 | Page scripts | `resources/js`, registered from `app.js` before Alpine starts. Not inline in Blade. |
 | Views | `resources/views`. Reusable pieces are `components/`, e.g. `<x-round-button>`. Never build HTML in PHP strings in a view: make a component. |
 
@@ -134,12 +137,18 @@ The old single-file SPA (`resources/planning/index.html`, `public/planning-asset
 | `work-summary.js` | reports/today |
 | `template-editor.js` | cabinet-templates/show |
 | `checklist-editor.js` | `x-checklist-editor` |
+| `cabinet-page.js` | cabinets/show (values from `window.pmoCabinetPage`) |
+| `bell.js`, `status-report.js` | the layout's bell, `x-status-report` |
+| `project-info.js` | projects/show "ข้อมูลโครงการ" |
+| `notice-rules.js`, `push-device.js` | Settings > แจ้งเตือน Checklist, Settings > การแจ้งเตือน |
+| `embed-bridge.js` | `x-embed-layout` pages (`body[data-embed]`) inside Planning's รอบส่ง window |
+| `ceo-report.js` | the CEO report's print page: its own Vite entry, since that page loads no `app.js` |
 
-Smaller pages may still carry a short inline `<script>`, such as the layout, settings and the CEO report.
+A page passes server values as `@js(...)` in its `x-data` call or as one `window.pmo…` object; the code itself is never inline. The one inline script left is the layout's sidebar state in `<head>` (it must run before the first paint).
 
 ## Conventions
 
-- Prefer putting logic in `app/Services` over controllers. The new-project page's FAT / delivery go through `NewProjectAppointments`; the Planning page's CSV export is `DepartmentExportController`, at its old `my-department.export` address.
+- Prefer putting logic in `app/Services` over controllers. When splitting a class, check afterwards that its methods are unchanged (reflection) and that every class a trait names is imported. The new-project page's FAT / delivery go through `NewProjectAppointments`; the Planning page's CSV export is `DepartmentExportController`, at its old `my-department.export` address.
 - A trait in a `Concerns` folder is in a different namespace from the class that uses it, so import every class it names. A missing import fails only when that code runs; the browser smoke's server-error check catches it.
 - Project fields such as owner / sales person are plain text columns (`project_owner`, `sales_person`), not user FKs. Extra per-department project fields are `DepartmentField` / `ProjectFieldValue`. Planning boards, statuses and labels are `Board` / `BoardStatus` / `BoardLabel`.
 - Exports are CSV via `App\Support\Csv`.

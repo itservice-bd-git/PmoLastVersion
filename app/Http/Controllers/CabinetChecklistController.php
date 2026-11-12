@@ -11,6 +11,7 @@ use App\Services\SharedChecklist;
 use App\Services\SubtaskAssignmentService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class CabinetChecklistController extends Controller
 {
@@ -28,7 +29,7 @@ class CabinetChecklistController extends Controller
      */
     public function store(Request $request, CabinetSubtask $cabinetSubtask, ProgressService $progressService)
     {
-        abort_unless($cabinetSubtask->isChecklistEditableBy($request->user()), 403, 'คุณไม่มีสิทธิ์เพิ่ม Checklist ของงานนี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)');
+        Gate::authorize('addChecklist', $cabinetSubtask);
 
         $request->validate([
             'names' => ['required', 'string'],
@@ -67,7 +68,7 @@ class CabinetChecklistController extends Controller
      */
     public function copyChecklists(Request $request, CabinetSubtask $cabinetSubtask, ProgressService $progressService)
     {
-        abort_unless($cabinetSubtask->isChecklistEditableBy($request->user()), 403, 'คุณไม่มีสิทธิ์เพิ่ม Checklist ของงานนี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)');
+        Gate::authorize('addChecklist', $cabinetSubtask);
 
         $data = $request->validate([
             'source_subtask_id' => ['required', 'exists:cabinet_subtasks,id'],
@@ -179,7 +180,7 @@ class CabinetChecklistController extends Controller
      */
     public function updateRemark(Request $request, CabinetChecklist $checklist)
     {
-        abort_unless($checklist->subtask->isChecklistEditableBy($request->user()), 403, 'คุณไม่มีสิทธิ์แก้ไข Checklist นี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)');
+        Gate::authorize('editChecklist', $checklist->subtask);
 
         $data = $request->validate([
             'remark' => ['nullable', 'string', 'max:1000'],
@@ -198,7 +199,7 @@ class CabinetChecklistController extends Controller
 
     public function toggle(Request $request, CabinetChecklist $checklist, ProgressService $progressService, AutomationService $automation, SubtaskAssignmentService $assignments)
     {
-        abort_unless($checklist->subtask->canTickBy($request->user()), 403, 'คุณไม่มีสิทธิ์แก้ไข Checklist นี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)');
+        Gate::authorize('tickChecklist', $checklist->subtask);
 
         $data = $request->validate([
             'is_completed' => ['required', 'boolean'],
@@ -278,7 +279,7 @@ class CabinetChecklistController extends Controller
     {
         $subtask = $checklist->subtask;
 
-        abort_unless($subtask->isChecklistEditableBy(auth()->user()), 403, 'คุณไม่มีสิทธิ์ลบ Checklist นี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)');
+        Gate::authorize('deleteChecklist', $subtask);
 
         $checklist->delete();
 

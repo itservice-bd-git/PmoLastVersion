@@ -156,7 +156,18 @@ class CabinetChecklistTest extends TestCase
         \App\Models\AppSetting::put('tick_accepts', false);   // on (the default), the tick would accept the work instead
         $this->patchJson(route('checklists.toggle', $checklist), ['is_completed' => true])->assertForbidden();
 
+        // the refusal says why, in Thai (CabinetSubtaskPolicy)
+        $this->patchJson(route('checklists.toggle', $checklist), ['is_completed' => true])->assertForbidden()
+            ->assertJson(['message' => 'คุณไม่มีสิทธิ์แก้ไข Checklist นี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)']);
+        $this->patchJson(route('checklists.update-remark', $checklist), ['remark' => 'nope'])->assertForbidden()
+            ->assertJson(['message' => 'คุณไม่มีสิทธิ์แก้ไข Checklist นี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)']);
+        $this->deleteJson(route('checklists.destroy', $checklist))->assertForbidden()
+            ->assertJson(['message' => 'คุณไม่มีสิทธิ์ลบ Checklist นี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)']);
+        $this->postJson(route('checklists.store', $this->subtask), ['names' => 'x'])->assertForbidden()
+            ->assertJson(['message' => 'คุณไม่มีสิทธิ์เพิ่ม Checklist ของงานนี้ (ต้องเป็นแผนกที่รับงานแล้วเท่านั้น)']);
+
         $this->assertFalse($checklist->fresh()->is_completed);
+        $this->assertSame(1, $this->subtask->checklists()->count());
     }
 
     // ---- Admin/PM bypass the department match entirely - same precedent as

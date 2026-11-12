@@ -89,11 +89,13 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::post('notifications/{id}/ack', [NotificationController::class, 'ack'])->name('notifications.ack');   // "รับทราบ"
     Route::post('notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
 
-    Route::get('trash', [TrashController::class, 'index'])->name('trash.index');
-    Route::post('trash/projects/{id}/restore', [TrashController::class, 'restoreProject'])->name('trash.projects.restore');
-    Route::post('trash/cabinets/{id}/restore', [TrashController::class, 'restoreCabinet'])->name('trash.cabinets.restore');
-    Route::post('trash/tasks/{id}/restore', [TrashController::class, 'restoreTask'])->name('trash.tasks.restore');
-    Route::post('trash/subtasks/{id}/restore', [TrashController::class, 'restoreSubtask'])->name('trash.subtasks.restore');
+    Route::middleware('can:manage-trash')->group(function () {   // Gate in AppServiceProvider (User::canManageTrash)
+        Route::get('trash', [TrashController::class, 'index'])->name('trash.index');
+        Route::post('trash/projects/{id}/restore', [TrashController::class, 'restoreProject'])->name('trash.projects.restore');
+        Route::post('trash/cabinets/{id}/restore', [TrashController::class, 'restoreCabinet'])->name('trash.cabinets.restore');
+        Route::post('trash/tasks/{id}/restore', [TrashController::class, 'restoreTask'])->name('trash.tasks.restore');
+        Route::post('trash/subtasks/{id}/restore', [TrashController::class, 'restoreSubtask'])->name('trash.subtasks.restore');
+    });
 
     Route::get('assignments', [AssignmentController::class, 'index'])->middleware('perm:page.assignments')->name('assignments.index');
 

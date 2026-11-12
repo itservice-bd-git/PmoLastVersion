@@ -7,7 +7,6 @@ use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
 use App\Models\Project;
 use App\Services\ProgressService;
-use Illuminate\Http\Request;
 
 /**
  * Recoverable deletes: a deleted Project/Cabinet/Task/Sub Task (with everything under it) sits
@@ -15,10 +14,8 @@ use Illuminate\Http\Request;
  */
 class TrashController extends Controller
 {
-    public function index(Request $request)
+    public function index()
     {
-        abort_unless($request->user()->canManageTrash(), 403, 'เฉพาะผู้ดูแลระบบ (Admin) หรือ Project Manager');
-
         return view('trash.index', [
             'projects' => Project::onlyTrashed()->withCount('cabinets')->latest('deleted_at')->get(),
             // A cabinet deleted together with its project comes back with the project -
@@ -30,10 +27,8 @@ class TrashController extends Controller
         ]);
     }
 
-    public function restoreProject(Request $request, int $id)
+    public function restoreProject(int $id)
     {
-        abort_unless($request->user()->canManageTrash(), 403);
-
         $project = Project::onlyTrashed()->findOrFail($id);
 
         // Numbers are only unique among live rows now - don't resurrect a clash.
@@ -46,10 +41,8 @@ class TrashController extends Controller
         return redirect()->route('projects.show', $project)->with('success', 'กู้คืนโครงการเรียบร้อยแล้ว');
     }
 
-    public function restoreCabinet(Request $request, int $id)
+    public function restoreCabinet(int $id)
     {
-        abort_unless($request->user()->canManageTrash(), 403);
-
         $cabinet = Cabinet::onlyTrashed()->whereHas('project')->findOrFail($id);
 
         if (Cabinet::where('mo_no', $cabinet->mo_no)->exists()) {
@@ -61,10 +54,8 @@ class TrashController extends Controller
         return redirect()->route('cabinets.show', $cabinet)->with('success', 'กู้คืนตู้ไฟฟ้าเรียบร้อยแล้ว');
     }
 
-    public function restoreTask(Request $request, int $id, ProgressService $progress)
+    public function restoreTask(int $id, ProgressService $progress)
     {
-        abort_unless($request->user()->canManageTrash(), 403);
-
         $task = CabinetTask::onlyTrashed()->whereHas('cabinet')->findOrFail($id);
         $task->restore();   // brings back the Sub Tasks / Checklists that went with it
         $progress->recalculateCabinet($task->cabinet);
@@ -72,10 +63,8 @@ class TrashController extends Controller
         return redirect()->route('cabinets.show', $task->cabinet_id)->with('success', "กู้คืน Task \"{$task->name}\" เรียบร้อยแล้ว");
     }
 
-    public function restoreSubtask(Request $request, int $id, ProgressService $progress)
+    public function restoreSubtask(int $id, ProgressService $progress)
     {
-        abort_unless($request->user()->canManageTrash(), 403);
-
         $subtask = CabinetSubtask::onlyTrashed()->whereHas('cabinetTask')->findOrFail($id);
         $subtask->restore();
         $progress->recalculateTask($subtask->cabinetTask);

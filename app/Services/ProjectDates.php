@@ -4,9 +4,6 @@ namespace App\Services;
 
 use App\Models\ActivityLog;
 use App\Models\Cabinet;
-use App\Models\CabinetSubtask;
-use App\Models\Department;
-use App\Models\EventDateChange;
 use App\Models\Project;
 use App\Models\ProjectDelivery;
 use App\Models\ProjectFat;
@@ -33,6 +30,9 @@ use Illuminate\Validation\ValidationException;
  */
 class ProjectDates
 {
+    use Concerns\MovesLinkedDates;
+    use Concerns\DescribesDateChanges;
+
     public function __construct(private NotificationService $notifications) {}
 
     /**
@@ -192,240 +192,9 @@ class ProjectDates
         }
     }
 
-    /**
-     * The FAT and delivery rounds a project's date can take along: a FAT round not held yet (no result), a delivery round
-     * not on the road yet - whatever their day, so one whose day has passed waits with the project too (state says เลยกำหนด).
-     *
-     * @return \Illuminate\Support\Collection<int, array{type: string, id: int, label: string, when: string, state: string, date: string, pending: bool}>
-     */
-    public static function linkedEvents(Project $project): \Illuminate\Support\Collection
-    {
-        $today = today();
-        $fats = ProjectFat::where('project_id', $project->id)->where('status', ProjectFat::SCHEDULED)->orderBy('round')->get()
-            ->map(fn (ProjectFat $f) => ['type' => EventDates::FAT, 'id' => $f->id, 'label' => 'FAT รอบ '.$f->round, 'when' => $f->when(),
-                'state' => $f->date_pending_at ? Project::PENDING_LABEL : $f->statusLabel().($f->fat_date->lte($today) ? ' · เลยกำหนด' : ''), 'date' => $f->fat_date->format('Y-m-d'), 'pending' => (bool) $f->date_pending_at, 'billed' => false]);
-        $deliveries = ProjectDelivery::where('project_id', $project->id)
-            ->whereIn('status', [ProjectDelivery::DRAFT, ProjectDelivery::WAITING, ProjectDelivery::REJECTED, ProjectDelivery::SCHEDULED])->orderBy('round')->get()
-            ->map(fn (ProjectDelivery $d) => ['type' => EventDates::DELIVERY, 'id' => $d->id, 'label' => 'ส่งมอบ รอบ '.$d->round, 'when' => $d->when(),
-                'state' => $d->date_pending_at ? Project::PENDING_LABEL : ProjectDelivery::statusName($d->status).($d->firstDay()->lte($today) ? ' · เลยกำหนด' : ''), 'date' => $d->firstDay()->format('Y-m-d'), 'pending' => (bool) $d->date_pending_at,
-                'billed' => (bool) $d->billed_at]);
-
-        return $fats->concat($deliveries)->values();
-    }
-
-    /**
-     * Applies the rounds' choices: keep / shift (the project's days) / date (a day of their own) / pending (wait too). Only
-     * a round linkedEvents() offers moves; a moved round no longer waits, and its move is kept in its own history.
-     *
-     * @param  array<int, array{type?: string, id?: int|string, action?: string, date?: ?string}>  $choices
-     * @return array<int, array{event: ProjectFat|ProjectDelivery, text: string, pending: bool, before: string}>
-     */
-    private function moveEvents(Project $project, User $actor, array $choices, int $shift, ?ProjectDateReason $reason, ?string $note, bool $waitOnly = false): array
-    {
-        $offered = self::linkedEvents($project)->keyBy(fn ($e) => $e['type'].':'.$e['id']);
-        $moves = [];
-        foreach ($choices as $c) {
-            $key = ($c['type'] ?? '').':'.($c['id'] ?? '');
-            $action = $c['action'] ?? 'keep';
-            if (! $offered->has($key) || $action === 'keep' || ($waitOnly && $action !== 'pending')) {
-                continue;
-            }
-            $e = $c['type'] === EventDates::FAT ? ProjectFat::find($c['id']) : ProjectDelivery::find($c['id']);
-            $before = EventDates::snapshot($e);
-            $when = $e->when();
-            if ($action === 'pending') {
-                $was = $e instanceof ProjectDelivery ? $e->status : null;
-                if (! $e->date_pending_at) {
-                    $e::withoutEvents(fn () => $e->forceFill(['date_pending_at' => now()])->save());
-                }
-                if ($e instanceof ProjectDelivery && $was !== ProjectDelivery::DRAFT) {
-                    $this->takeBack($e, $actor);
-                }
-                $moves[] = ['event' => $e, 'text' => $offered[$key]['label'].' รอด้วย'.($was && $was !== ProjectDelivery::DRAFT ? ' (ดึงกลับเป็นร่าง)' : ''), 'pending' => true, 'before' => $when, 'was' => $was];
-
-                continue;
-            }
-            [$startField, $endField] = $e instanceof ProjectFat ? ['fat_date', 'fat_end_date'] : ['delivery_date', 'delivery_end_date'];
-            $days = match ($action) {
-                'shift' => $shift,
-                'date' => ! empty($c['date']) ? (int) $e->{$startField}->diffInDays(Carbon::parse($c['date']), false) : 0,
-                default => 0,
-            };
-            if ($days === 0 && ! $e->date_pending_at) {
-                continue;
-            }
-            $e::withoutEvents(fn () => $e->forceFill([
-                $startField => $e->{$startField}->copy()->addDays($days)->format('Y-m-d'),
-                $endField => $e->{$endField}?->copy()->addDays($days)->format('Y-m-d'),
-                'date_pending_at' => null,
-            ])->save());
-            app(EventDates::class)->record($e, $before, $actor, ['move_kind' => EventDateChange::POSTPONE, 'move_reason_id' => $reason?->id,
-                'move_note' => 'เลื่อนพร้อมวันโครงการ'.($note ? ' — '.$note : '')]);
-            $moves[] = ['event' => $e->refresh(), 'text' => $offered[$key]['label'].' '.$when.' → '.$e->when(), 'pending' => false, 'before' => $when];
-        }
-
-        return $moves;
-    }
-
-    /**
-     * A delivery round sent to the delivery department, taken back while its project waits for sales: a draft again, as
-     * before PM sent it - its vehicles and people, its packing (and the pack ticks of the cabinets' checklist) and its
-     * refusal cleared. PM sends it again with its new day, the usual way (ProjectDeliveryController).
-     */
-    private function takeBack(ProjectDelivery $d, User $actor): void
-    {
-        $cabinets = array_map('intval', $d->cabinet_ids ?? []);
-        $packed = (bool) $d->packed;
-        $d->vehicles()->delete();
-        ProjectDelivery::withoutEvents(fn () => $d->forceFill([
-            'status' => ProjectDelivery::DRAFT, 'packed' => null, 'scheduled_by' => null, 'scheduled_at' => null,
-            'rejected_by' => null, 'rejected_at' => null, 'rejected_reason' => null, 'rejected_note' => null,
-        ])->save());
-        if ($packed && $cabinets) {
-            app(DeliveryChecklist::class)->mark($cabinets, DeliveryChecklist::PACK, false, $actor);
-        }
-    }
-
-    private function movesText(array $moves): string
-    {
-        return $moves ? ' · '.implode(' · ', array_column($moves, 'text')) : '';
-    }
-
-    /** The delivery department hears of the rounds sent to it that moved or now wait (a draft is not theirs yet). */
-    private function tellDelivery(array $moves, User $actor): void
-    {
-        foreach ($moves as $m) {
-            $d = $m['event'];
-            if (! $d instanceof ProjectDelivery) {
-                continue;
-            }
-            if ($m['pending']) {   // taken back: no longer theirs until PM sends it again
-                if (($m['was'] ?? ProjectDelivery::DRAFT) !== ProjectDelivery::DRAFT) {
-                    $this->notifications->deliveryForDepartment($d, $actor, 'ดึงรอบนี้กลับ · '.Project::PENDING_LABEL, todo: false);
-                }
-
-                continue;
-            }
-            if ($d->status === ProjectDelivery::DRAFT) {
-                continue;
-            }
-            $scheduled = $d->status === ProjectDelivery::SCHEDULED;
-            $this->notifications->deliveryForDepartment($d, $actor, $scheduled ? 'PM เลื่อนวันส่ง · ตรวจรถ / คนอีกครั้ง' : 'PM เลื่อนวันส่ง', todo: $scheduled);
-        }
-    }
-
-    /**
-     * What the page shows: rounds, days moved since the first due date, that first due date, and every change (newest
-     * first) with its round number.
-     *
-     * @return array{rounds: int, days: int, firstDue: ?Carbon, changes: \Illuminate\Support\Collection}
-     */
-    public function summary(Project|Cabinet $subject): array
-    {
-        $changes = $subject->dateChanges()->with('changedBy:id,name', 'reason:id,color')->get();
-        $round = 0;
-        $changes->each(function (ProjectDateChange $c) use (&$round) {
-            $c->round = $c->kind === ProjectDateChange::POSTPONE ? ++$round : null;
-        });
-        $firstDue = $changes->first(fn ($c) => $c->old_due_date)?->old_due_date ?? $subject->due_date;
-
-        return [
-            'rounds' => $round,
-            'days' => $firstDue && $subject->due_date ? (int) $firstDue->diffInDays($subject->due_date, false) : 0,
-            'firstDue' => $firstDue,
-            'changes' => $changes->reverse()->values(),
-        ];
-    }
-
-    /**
-     * Planning's "เลื่อน n" chip: the same count as summary() from the subject's changes (oldest first), with each round's
-     * reason, newest first. Null until it was postponed at least once.
-     */
-    public static function brief(\Illuminate\Support\Collection $changes, ?Carbon $due, string $url): ?array
-    {
-        $rounds = $changes->where('kind', ProjectDateChange::POSTPONE)->values();
-        if ($rounds->isEmpty()) {
-            return null;
-        }
-        $firstDue = $changes->first(fn ($c) => $c->old_due_date)?->old_due_date ?? $due;
-
-        return [
-            'rounds' => $rounds->count(),
-            'days' => $firstDue && $due ? (int) $firstDue->diffInDays($due, false) : 0,
-            'firstDue' => $firstDue?->format('Y-m-d'),
-            'url' => $url,
-            'list' => $rounds->map(fn (ProjectDateChange $c, int $i) => [
-                'n' => $i + 1, 'reason' => (string) $c->reason_name, 'note' => (string) $c->note,
-                'from' => $c->old_due_date?->format('Y-m-d'), 'to' => $c->new_due_date?->format('Y-m-d'), 'days' => $c->dueDays(),
-            ])->reverse()->values()->all(),
-        ];
-    }
-
-    /** Planning's "เลื่อนทั้งโครงการ" (n days, no reason asked there yet): kept as a round of the project / a cabinet too, so the count stays true. */
-    public function shifted(Project|Cabinet $subject, User $actor, ?Carbon $oldStart, ?Carbon $oldDue, int $days): void
-    {
-        if (! $oldDue && ! $oldStart) {
-            return;
-        }
-        ProjectDateChange::create([
-            'project_id' => $this->projectOf($subject)->id, 'cabinet_id' => $subject instanceof Cabinet ? $subject->id : null,
-            'kind' => ProjectDateChange::POSTPONE,
-            'old_start_date' => $oldStart, 'new_start_date' => $oldStart?->copy()->addDays($days),
-            'old_due_date' => $oldDue, 'new_due_date' => $oldDue?->copy()->addDays($days),
-            'reason_name' => 'ไม่ระบุ (เลื่อนทั้งโครงการจาก Planning)', 'changed_by' => $actor->id,
-        ]);
-    }
-
-    /**
-     * The departments with work in the project, or in the cabinet (a Sub Task sent to them, as WorkScope: work not yet sent
-     * is not theirs to see): who hears of a postponement besides the project's own people
-     * (NotificationService::projectRescheduled), named on the form's "แจ้ง" box.
-     *
-     * @return \Illuminate\Support\Collection<int, Department>
-     */
-    public static function departments(Project|Cabinet $subject): \Illuminate\Support\Collection
-    {
-        $ids = CabinetSubtask::whereNotNull('department_id')->whereIn('assignment_status', WorkScope::ACTIVE_STATUSES)
-            ->whereHas('cabinetTask.cabinet', fn ($q) => $subject instanceof Cabinet ? $q->whereKey($subject->id) : $q->where('project_id', $subject->id))
-            ->distinct()->pluck('department_id');
-
-        return Department::whereIn('id', $ids)->orderBy('name')->get(['id', 'name']);
-    }
-
     private function projectOf(Project|Cabinet $subject): Project
     {
         return $subject instanceof Project ? $subject : $subject->project;
     }
 
-    private function describe(ProjectDateChange $c, Project|Cabinet $subject, int $rounds): string
-    {
-        $due = $subject instanceof Cabinet ? 'กำหนดเสร็จ' : 'วันครบกำหนด';
-        $parts = [];
-        if ($c->old_due_date?->format('Y-m-d') !== $c->new_due_date?->format('Y-m-d')) {
-            $days = $c->dueDays();
-            $parts[] = $due.' '.($c->old_due_date?->thaiDate() ?? '-').' → '.($c->new_due_date?->thaiDate() ?? '-').($days ? ' ('.($days > 0 ? '+' : '').$days.' วัน)' : '');
-        }
-        if ($c->old_start_date?->format('Y-m-d') !== $c->new_start_date?->format('Y-m-d')) {
-            $parts[] = 'วันเริ่ม '.($c->old_start_date?->thaiDate() ?? '-').' → '.($c->new_start_date?->thaiDate() ?? '-');
-        }
-        $what = $subject instanceof Cabinet ? 'เลื่อนวันตู้ '.($subject->mo_no ?: $subject->cabinet_name) : 'เลื่อนวันโครงการ';
-        $head = $c->kind === ProjectDateChange::POSTPONE ? $what.' ครั้งที่ '.$rounds
-            : ($subject instanceof Cabinet ? 'แก้ไขวันที่ตู้ '.($subject->mo_no ?: $subject->cabinet_name).' ที่ลงผิด' : 'แก้ไขวันที่ลงผิด').' (ไม่นับเป็นการเลื่อน)';
-
-        return $head.': '.implode(' · ', $parts).($c->reason_name ? ' · สาเหตุ: '.$c->reason_name : '').($c->note ? ' — '.$c->note : '');
-    }
-
-    private function diff(ProjectDateChange $c): array
-    {
-        $out = [];
-        foreach (['start_date' => 'วันเริ่ม', 'due_date' => 'วันครบกำหนด'] as $f => $label) {
-            $old = $c->{'old_'.$f}?->thaiDate();
-            $new = $c->{'new_'.$f}?->thaiDate();
-            if ($old !== $new) {
-                $out[$f] = ['label' => $label, 'old' => $old ?? '-', 'new' => $new ?? '-'];
-            }
-        }
-
-        return $out;
-    }
 }

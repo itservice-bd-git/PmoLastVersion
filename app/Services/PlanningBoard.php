@@ -2,9 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\ActivityLog;
 use App\Models\BoardLabel;
-use App\Models\BoardStatus;
 use App\Models\Cabinet;
 use App\Models\DepartmentField;
 use App\Models\ProjectDepartmentStatus;
@@ -38,6 +36,8 @@ use Illuminate\Support\Collection;
 class PlanningBoard
 {
     use Concerns\BoardProjectShape;
+    use Concerns\BoardStamp;
+    use Concerns\BoardPalette;
 
     public const BOARD_ID = 'pmo';
 
@@ -49,18 +49,6 @@ class PlanningBoard
     ];
 
     private const PALETTE = ['#a855f7', '#3b82f6', '#f59e0b', '#10b981', '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16', '#6366f1'];
-
-    /**
-     * Each active department's colour as Planning shows it (Settings > แผนก, else a stable palette colour by position),
-     * so other pages can use the same dots.
-     *
-     * @return array<int, string> department id => #hex
-     */
-    public static function departmentColors(): array
-    {
-        return once(fn () => Department::where('is_active', true)->orderBy('id')->get(['id', 'color'])->values()   // once per request: rows render it many times
-            ->mapWithKeys(fn (Department $d, int $i) => [$d->id => $d->color ?: self::PALETTE[$i % count(self::PALETTE)]])->all());
-    }
 
     /** The profile the page runs as: read-only, and "no department" (= sees every department) for PMO roles. */
     public function profile(User $user): array
@@ -231,61 +219,6 @@ class PlanningBoard
     /** How often a poll rebuilds the board anyway, whatever the stamp says (seconds) - the safety net for a change it cannot see. */
     public const STAMP_MAX_AGE = 120;
 
-    /**
-     * A cheap fingerprint of everything the board is built from - ONE query of counts / latest updated_at / sums, plus the
-     * "board version" that every model save bumps (see touch()). The 15-second poll compares it with the page's copy and
-     * answers 304 without building anything when nothing changed; building is ~30 queries and most of the CPU, which a
-     * shared host (CloudLinux limits) feels when several tabs poll. Also changes with the day (late work) and every
-     * STAMP_MAX_AGE seconds.
-     */
-    public function stamp(User $user, int|string|null $board, ?\Carbon\Carbon $today = null): string
-    {
-        $parts = collect(self::STAMP_TABLES)->map(fn (string $sum, string $table) => str_contains($sum, '*')   // the pivots have no timestamps
-            ? "SELECT COUNT(*) AS n, NULL AS u, SUM({$sum}) AS s FROM {$table}"
-            : "SELECT COUNT(*) AS n, MAX(updated_at) AS u, SUM({$sum}) AS s FROM {$table}");
-        $rows = \Illuminate\Support\Facades\DB::select($parts->implode(' UNION ALL '));
-
-        return md5(json_encode([
-            $rows, \Illuminate\Support\Facades\Cache::get('planning:version', 0),
-            $user->id, $board, ($today ?? today())->toDateString(), intdiv(now()->getTimestamp(), self::STAMP_MAX_AGE),
-        ]));
-    }
-
-    /** Something was saved / deleted: bump the board version once, when the request ends (cheap; a request saves many models). */
-    public static function touch(): void
-    {
-        $app = app();
-        if ($app->bound('planning.touched')) {
-            return;
-        }
-        $app->instance('planning.touched', true);
-        $app->terminating(function () use ($app) {
-            // terminating callbacks stay registered (they run again on a later terminate() in tests / long-running workers)
-            if (! $app->bound('planning.touched')) {
-                return;
-            }
-            $app->forgetInstance('planning.touched');
-            \Illuminate\Support\Facades\Cache::forever('planning:version', \Illuminate\Support\Str::random(12));
-        });
-    }
-
-    /**
-     * A date column as 'Y-m-d' straight from the row - the board reads thousands of these, and every read of a cast date
-     * makes a new Carbon (most of the build time). Same value as ->format('Y-m-d'): Laravel does not shift dates on read.
-     */
-    private static function ymd(\Illuminate\Database\Eloquent\Model $m, string $key): ?string
-    {
-        $v = $m->getAttributes()[$key] ?? null;
-
-        return $v === null || $v === '' ? null : substr((string) $v, 0, 10);
-    }
-
-    /** Whether a 'Y-m-d' due date is before $today - exactly as Carbon's lt() (a due date is that day at 00:00). */
-    private static function before(string $due, \Carbon\Carbon $today): bool
-    {
-        return $due.' 00:00:00.000000' < $today->format('Y-m-d H:i:s.u');
-    }
-
     /** @var array<string, int> "t<template id>" / "n<name>" => the department that piece of work usually goes to */
     private array $usual = [];
 
@@ -382,50 +315,4 @@ class PlanningBoard
         return $ids->merge($tagged)->filter()->unique()->values()->map(fn ($id) => (int) $id)->all();
     }
 
-    public static function deptKey(int $id): string
-    {
-        return 'd_'.$id;
-    }
-
-    /** PMO project status => colour, the same set Planning shows for a project with no status picked by hand. */
-    public static function statusColor(?string $status): string
-    {
-        return collect(self::pmoStatuses())->firstWhere('id', 'pmo_'.$status)['color'] ?? '#94a3b8';
-    }
-
-    /** Every status the page offers, in the order set in Settings > สถานะงาน (the five built-in ones plus any added by hand). */
-    public static function statuses(): array
-    {
-        return BoardStatus::orderBy('sort')->orderBy('id')->get()
-            ->map(fn (BoardStatus $s) => ['id' => $s->pageId(), 'name' => $s->name, 'color' => $s->color, 'isDone' => $s->is_done])->all();
-    }
-
-    /**
-     * PMO's own project statuses, in the same shape as statuses(): what a project shows while Admin / PM has not picked a status
-     * for it (ids "pmo_<status>"). Completed and cancelled count as finished.
-     */
-    public static function pmoStatuses(): array
-    {
-        $colors = [Project::STATUS_DRAFT => '#94a3b8', Project::STATUS_PLANNING => '#8b5cf6', Project::STATUS_IN_PROGRESS => '#3b82f6',
-            Project::STATUS_ON_HOLD => '#f59e0b', Project::STATUS_COMPLETED => '#10b981', Project::STATUS_CANCELLED => '#64748b'];
-
-        return collect(Project::$statuses)->map(fn (string $name, string $key) => [
-            'id' => 'pmo_'.$key, 'name' => $name, 'color' => $colors[$key] ?? '#94a3b8', 'pmo' => true,
-            'isDone' => in_array($key, [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED], true),
-        ])->values()->all();
-    }
-
-    /** A department field in the shape the page reads: select fields carry their options grouped (a blank group name = no heading). */
-    private static function fieldShape(DepartmentField $f): array
-    {
-        $shape = ['id' => 'f'.$f->id, 'name' => $f->name, 'showOnChip' => (bool) $f->show_on_chip];
-        if ($f->type !== 'select') {
-            return $shape + ['type' => $f->type, 'groups' => []];
-        }
-
-        return $shape + ['groups' => $f->options->groupBy(fn ($o) => $o->group_name ?? '')->map(fn (Collection $os, string $g) => [
-            'id' => 'g'.md5($f->id.$g), 'name' => $g,
-            'options' => $os->map(fn ($o) => ['id' => 'o'.$o->id, 'label' => $o->label])->values()->all(),
-        ])->values()->all()];
-    }
 }

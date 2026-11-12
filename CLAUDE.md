@@ -105,4 +105,5 @@ The old single-file SPA (`resources/planning/index.html`, `public/planning-asset
 - Project fields such as owner / sales person are plain text columns (`project_owner`, `sales_person`), not user FKs. Extra per-department project fields are `DepartmentField` / `ProjectFieldValue`; Planning boards, statuses and labels are `Board` / `BoardStatus` / `BoardLabel`.
 - The public `/request` intake form was removed (2026-10). The `project_requests` table and `ProjectRequest` model are kept only for the old data; nothing in the app reads or writes them.
 - Exports are CSV via `App\Support\Csv`.
+- A round's card buttons on งานจัดส่ง are `<x-round-button>` (`main`, `icon`). Do not build HTML in PHP strings in views; make a component instead.
 - Admin-only settings routes use the `admin` middleware alias (`EnsureAdmin`); the `gzip` alias compresses the planning responses.

@@ -16,7 +16,6 @@
     $check = '<svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>';
     $keep = fn (string $text, string $sep = ' · ') => collect(explode($sep, $text))->map(fn ($part) => '<span class="whitespace-nowrap">'.e($part).'</span>')->implode(e($sep));
     $phone = fn (string $text) => preg_replace('/(\+?\d[\d\- ]{5,}\d)/', '<span class="whitespace-nowrap">$1</span>', e($text));
-    $cabIcon = '<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4"/></svg>';
 @endphp
 {{-- embed (Planning's รอบส่ง window, ?project=&embed=1): no menu around it --}}
 <x-dynamic-component :component="$embed ? 'embed-layout' : 'app-layout'">
@@ -283,14 +282,6 @@
                         $cabLeads = $row['status'] === 'scheduled' && (($packable && ! $row['allPacked']) || $toBill);
                         $cabTitles = collect($row['cabinets'])->map(fn ($c) => $c['model'] ?: $c['name']);
                         // ข้อความส่งงาน: the LINE message for the crew (the panel below)
-                        // the card's buttons: the main one full width on top, then the others all the same width, always in this order -
-                        // รายการตู้, ข้อความส่งงาน, แก้…, ไม่รับงาน (two to a row on a phone, one column on a computer)
-                        $cMain = $main.' col-span-2 w-full justify-center md:col-span-1';
-                        $cBtn = $btn.' w-full min-w-0 gap-1.5';
-                        $ic = fn (string $d) => '<svg class="h-4 w-4 shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">'.$d.'</svg>';
-                        $editIcon = $ic('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>');
-                        $briefButton = '<button type="button" @click="openBrief('.e(\Illuminate\Support\Js::from($row)).')" class="'.$cBtn.'">'.$ic('<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>').'<span class="truncate">ข้อความส่งงาน</span></button>';
-                        $cabButton = fn (bool $lead) => '<button type="button" @click="openCabs('.e(\Illuminate\Support\Js::from($row)).')" class="'.($lead ? $cMain.' gap-1.5' : $cBtn).'">'.($lead ? $cabIcon : str_replace('class="h-4 w-4"', 'class="h-4 w-4 shrink-0 text-slate-500"', $cabIcon)).'<span class="truncate">'.e($cabLabel).'</span></button>';
                     @endphp
                     {{-- what goes: the cabinets' names (every detail in the panel), and how far it is --}}
                     <div class="min-w-0">
@@ -367,41 +358,41 @@
                     {{-- one main button, always first: what is next for this round; then the others, same width, same order --}}
                     <div class="order-3 grid grid-cols-2 content-start gap-2 md:order-none md:w-48 md:grid-cols-1">
                         @if ($row['pending'])
-                            {!! $cabButton(false) !!}
+                            <x-round-button icon="cabinets" x-on:click="openCabs({{ \Illuminate\Support\Js::from($row) }})">{{ $cabLabel }}</x-round-button>
                         @elseif ($row['status'] === 'waiting')
                             @if ($row['method'] === 'pickup')
-                                <button type="button" class="{{ $cMain }}" @click="quick(@js($row['urls']['assign']))">รับงาน</button>
+                                <x-round-button main x-on:click="quick({{ \Illuminate\Support\Js::from($row['urls']['assign']) }})">รับงาน</x-round-button>
                             @else
-                                <button type="button" class="{{ $cMain }}" @click="openAssign(@js($row))">จัดรถ / คน</button>
+                                <x-round-button main x-on:click="openAssign({{ \Illuminate\Support\Js::from($row) }})">จัดรถ / คน</x-round-button>
                             @endif
-                            {!! $cabButton(false) !!}
-                            <button type="button" class="{{ $cBtn }}" @click="openReject(@js($row))">{!! $ic('<circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/>') !!}<span class="truncate">ไม่รับงาน</span></button>
+                            <x-round-button icon="cabinets" x-on:click="openCabs({{ \Illuminate\Support\Js::from($row) }})">{{ $cabLabel }}</x-round-button>
+                            <x-round-button icon="refuse" x-on:click="openReject({{ \Illuminate\Support\Js::from($row) }})">ไม่รับงาน</x-round-button>
                         @elseif ($row['status'] === 'scheduled')
                             @if ($cabLeads)
-                                {!! $cabButton(true) !!}
+                                <x-round-button main icon="cabinets" x-on:click="openCabs({{ \Illuminate\Support\Js::from($row) }})">{{ $cabLabel }}</x-round-button>
                             @elseif ($row['billed'])
-                                <button type="button" class="{{ $cMain }}" @click="quick(@js($row['urls']['depart']))">{{ \App\Models\ProjectDelivery::statusName('departed') }}</button>
-                                {!! $cabButton(false) !!}
+                                <x-round-button main x-on:click="quick({{ \Illuminate\Support\Js::from($row['urls']['depart']) }})">{{ \App\Models\ProjectDelivery::statusName('departed') }}</x-round-button>
+                                <x-round-button icon="cabinets" x-on:click="openCabs({{ \Illuminate\Support\Js::from($row) }})">{{ $cabLabel }}</x-round-button>
                             @else
-                                {!! $cabButton(false) !!}
+                                <x-round-button icon="cabinets" x-on:click="openCabs({{ \Illuminate\Support\Js::from($row) }})">{{ $cabLabel }}</x-round-button>
                             @endif
-                            @if ($row['brief']){!! $briefButton !!}@endif
+                            @if ($row['brief'])<x-round-button icon="message" x-on:click="openBrief({{ \Illuminate\Support\Js::from($row) }})">ข้อความส่งงาน</x-round-button>@endif
                             @if ($row['method'] !== 'pickup')
-                                <button type="button" class="{{ $cBtn }}" @click="openAssign(@js($row))">{!! $editIcon !!}<span class="truncate">แก้รถ / คน</span></button>
+                                <x-round-button icon="edit" x-on:click="openAssign({{ \Illuminate\Support\Js::from($row) }})">แก้รถ / คน</x-round-button>
                             @endif
                         @elseif ($row['status'] === 'departed')
-                            <button type="button" class="{{ $cMain }}" @click="openDeliver(@js($row))">{{ \App\Models\ProjectDelivery::statusName('delivered') }}</button>
-                            {!! $cabButton(false) !!}
-                            @if ($row['brief']){!! $briefButton !!}@endif
+                            <x-round-button main x-on:click="openDeliver({{ \Illuminate\Support\Js::from($row) }})">{{ \App\Models\ProjectDelivery::statusName('delivered') }}</x-round-button>
+                            <x-round-button icon="cabinets" x-on:click="openCabs({{ \Illuminate\Support\Js::from($row) }})">{{ $cabLabel }}</x-round-button>
+                            @if ($row['brief'])<x-round-button icon="message" x-on:click="openBrief({{ \Illuminate\Support\Js::from($row) }})">ข้อความส่งงาน</x-round-button>@endif
                         @elseif ($row['status'] === 'delivered')
                             @if ($row['review'])
-                                <button type="button" class="{{ $cMain }}" @click="askReview(@js($row))">ตรวจแล้ว · แจ้ง PM</button>
+                                <x-round-button main x-on:click="askReview({{ \Illuminate\Support\Js::from($row) }})">ตรวจแล้ว · แจ้ง PM</x-round-button>
                             @endif
-                            {!! $cabButton(false) !!}
-                            <button type="button" class="{{ $cBtn }}" @click="openDeliver(@js($row))">{!! $editIcon !!}<span class="truncate">แก้ข้อมูลส่งถึง</span></button>
+                            <x-round-button icon="cabinets" x-on:click="openCabs({{ \Illuminate\Support\Js::from($row) }})">{{ $cabLabel }}</x-round-button>
+                            <x-round-button icon="edit" x-on:click="openDeliver({{ \Illuminate\Support\Js::from($row) }})">แก้ข้อมูลส่งถึง</x-round-button>
                         @else
                             <span class="col-span-2 text-sm text-slate-500 md:col-span-1">รอ PM เลือกวันใหม่แล้วส่งมาอีกครั้ง</span>
-                            {!! $cabButton(false) !!}
+                            <x-round-button icon="cabinets" x-on:click="openCabs({{ \Illuminate\Support\Js::from($row) }})">{{ $cabLabel }}</x-round-button>
                         @endif
                     </div>
                     @if ($row['rejected'])

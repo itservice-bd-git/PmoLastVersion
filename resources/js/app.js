@@ -8,6 +8,7 @@ import registerActivityTree from './activity-tree';
 import registerAssignment from './assignment';
 import registerWorkSummary from './work-summary';
 import registerTemplateEditor from './template-editor';
+import registerCabinetPage from './cabinet-page';
 import { registerWorkDays } from './work-days';
 import pmoProjectDates from './project-dates';
 import watchSession from './session-expiry';
@@ -37,6 +38,7 @@ registerActivityTree();                             // x-activity-tree
 registerAssignment();                               // cabinet / project / dispatch: handing work to departments
 registerWorkSummary();                              // reports/today
 registerTemplateEditor();                           // cabinet-templates/show
+registerCabinetPage();                              // cabinets/show
 registerWorkDays();                                // "จำนวนวัน" beside a Sub Task's start / due dates (work-days.js)
 watchSession();                                    // logged out (left open too long): back to log in, then to this page - before Alpine starts, so its first calls are watched too
 Alpine.start();

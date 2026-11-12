@@ -42,7 +42,20 @@ await session(b, 'probe-adm@example.test', { viewport: { width: 1440, height: 10
     const pid = await p.evaluate(async () => (await (await fetch('/planning/data')).json()).root.boards.pmo.tasks[0]?.id?.slice(1));
     if (pid) await open(p, 'admin', '/projects/' + pid);
     const cab = await p.evaluate(() => document.querySelector('a[href*="/cabinets/"]')?.getAttribute('href'));
-    if (cab) await open(p, 'admin', new URL(cab, base).pathname);
+    if (cab) {
+        await open(p, 'admin', new URL(cab, base).pathname);
+        await step(p, 'cabinet page script (cabinet-page.js)', async () => {
+            const ok = await p.evaluate(() => !!window.pmoCabinetPage && typeof window.linkedSubtask === 'function');
+            if (!ok) throw new Error('pmoCabinetPage / linkedSubtask missing');
+        });
+        const menu = p.locator('[data-status-menu-toggle]').first();
+        if (await menu.count()) await step(p, 'cabinet status menu opens', async () => {
+            await menu.evaluate((el) => el.closest('details') && (el.closest('details').open = true));
+            await menu.click();
+            if (await p.locator('[data-status-menu-panel]:not(.hidden)').count() !== 1) throw new Error('menu did not open');
+            await p.keyboard.press('Escape');
+        });
+    }
     const tpl = await p.goto(base + '/cabinet-templates').then(() => p.evaluate(() => document.querySelector('a[href*="/cabinet-templates/"]:not([href$="create"])')?.getAttribute('href')));
     if (tpl) await open(p, 'admin', new URL(tpl, base).pathname);
 

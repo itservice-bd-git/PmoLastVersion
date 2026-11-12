@@ -81,7 +81,7 @@ Production has **no shell, no `npm`, and no `artisan`**: schema changes go throu
   - Each module returns a plain object. In a method, `this` is the whole component, so a module calls another module's methods freely.
   - `index.js` merges the modules with `Object.defineProperties`, which keeps getters (`cur`, `clTask`, `clCab`). Never merge with spread, and keep member names unique: on a duplicate, the later module wins.
   - Put new code in the module of its area. Add a module, and add it to `PARTS`, when a new area outgrows its neighbour.
-- **Data:** `PlanningBoard` builds the JSON (`planning.data`).
+- **Data:** `PlanningBoard` builds the JSON (`planning.data`). The shape of one project (task, cabinets, FAT, rounds, comments) is in `Concerns\BoardProjectShape`.
   - Every edit is one operation through `planning.sync` (`PlanningSync`). It is applied by the same services and rules as the rest of the app, and refused operations come back with a Thai reason.
   - The page never writes data itself.
   - `PlanningSync` keeps `apply()`/`applyOne()` (the dispatch, one transaction per operation) and the shared helpers. The operations live in its traits in `app/Services/Concerns`: `SyncProjects`, `SyncStages`, `SyncCabinets`, `SyncChecklist`, `SyncComments`. A new operation goes in the trait of its area, plus a `match` arm in `applyOne()`.
@@ -100,6 +100,7 @@ The old single-file SPA (`resources/planning/index.html`, `public/planning-asset
 
 ## Other structure
 
+- The new-project page's FAT / delivery are checked and saved by `NewProjectAppointments` (called from `ProjectController::store`).
 - `MyDepartmentController` is thin; query/scope/serialising logic lives in `DepartmentSchedule` and `ProjectModal`. Prefer putting logic in `app/Services` over controllers.
 - Project fields such as owner / sales person are plain text columns (`project_owner`, `sales_person`), not user FKs. Extra per-department project fields are `DepartmentField` / `ProjectFieldValue`; Planning boards, statuses and labels are `Board` / `BoardStatus` / `BoardLabel`.
 - The public `/request` intake form was removed (2026-10). The `project_requests` table and `ProjectRequest` model are kept only for the old data; nothing in the app reads or writes them.

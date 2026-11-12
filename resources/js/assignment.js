@@ -1,10 +1,7 @@
-{{--
-    Department assignment workflow (async, no page refresh) - shared by any page
-    that renders cabinets.partials._assignment rows: the Cabinet detail page and
-    the Dispatch list. Event listeners are delegated on `document`, so this only
-    needs to be included once per page regardless of how many rows it renders.
---}}
-<script>
+// The department assignment workflow without a page reload (cabinets.partials._assignment rows: the cabinet page, the
+// project page, the dispatch list). Listeners are delegated on document, so they do nothing on pages without such rows.
+// The functions are on window because the pages call them by name (x-data="pmoStepDispatch(...)", applyAssignment()).
+export default function registerAssignment() {
     async function assignmentRequest(url, method, body) {
         const res = await fetch(url, {
             method,
@@ -138,4 +135,10 @@
             window.showToast(err.message, 'error');
         }
     });
-</script>
+
+    window.assignmentRequest = assignmentRequest;
+    window.applyAssignment = applyAssignment;
+    window.bulkDispatch = bulkDispatch;
+    window.pmoStepDispatch = pmoStepDispatch;
+    window.pmoRemind = pmoRemind;
+}

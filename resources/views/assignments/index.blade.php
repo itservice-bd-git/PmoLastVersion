@@ -93,6 +93,5 @@
     </div>
 
     @push('scripts')
-    @include('cabinets.partials._assignment-scripts')
     @endpush
 </x-app-layout>

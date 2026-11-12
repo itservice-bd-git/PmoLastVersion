@@ -561,7 +561,6 @@
     @push('scripts')
     {{-- เริ่มงาน / เสร็จงาน are in the status badge's menu on this page, so the row keeps only รับงาน / ไม่รับงาน --}}
     <style>[data-status-menu] .assignment-step-button { display: none; }</style>
-    @include('cabinets.partials._assignment-scripts')
     <script>
         // every list kept current without a reload: asked every 15 s while the tab is shown, and right after a change here
         // (a list shared with another Sub Task follows at once). Only a stamp comes back when nothing moved.

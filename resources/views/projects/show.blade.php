@@ -282,7 +282,6 @@
     @endforeach
 
     @push('scripts')
-        @include('cabinets.partials._assignment-scripts')
         <script>
             /** "ข้อมูลโครงการ": the cabinet table's search / filters / pages, and which alert popover is open (one at a time). */
             function pmoProjectInfo(rows) {

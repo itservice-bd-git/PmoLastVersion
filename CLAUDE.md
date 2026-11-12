@@ -47,6 +47,9 @@ Production has **no shell, no `npm`, and no `artisan`**: schema changes go throu
 - `GuardsClosedProject` + `ProjectLock`: a project with status `completed`/`cancelled` is read-only, enforced at model events (create/update/delete) via `ProjectLockedException` (HTTP 423 / flash error). Code that uses `saveQuietly()` or mass updates bypasses model events and must call `ProjectLock::assertOpen()` itself. Comments and reopening stay allowed.
 - `CascadesSoftDeletes`: deleting a project/cabinet/task/subtask soft-deletes the subtree with the **same** `deleted_at` via mass updates (no per-row log spam); restore brings back only rows carrying that timestamp. `project_no` / `mo_no` are non-unique indexes so deleted numbers can be reused.
 - Notifications: `NotificationService` + `PmoNotice` (database channel); per-user preferences in `NotificationPreference`, global settings in `AppSetting`.
+  - `NotificationService` is the only entry point. It keeps who hears what (the people helpers), `batch()`, and `send()`, through which every notice passes (preferences, collapsing, de-duplication, web push).
+  - The kinds of notice live in its traits in `app/Services/Concerns`: `WorkNotices`, `ProjectNotices`, `NoticeReceipts` (seen / รับทราบ), `DeliveryNotices`, `Reminders`.
+  - Add a new notice to the trait of its kind. Never call `send()` from outside.
 
 ## Planning page
 

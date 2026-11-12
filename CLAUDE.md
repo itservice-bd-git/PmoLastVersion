@@ -108,6 +108,8 @@ The old single-file SPA (`resources/planning/index.html`, `public/planning-asset
 - Project fields such as owner / sales person are plain text columns (`project_owner`, `sales_person`), not user FKs. Extra per-department project fields are `DepartmentField` / `ProjectFieldValue`; Planning boards, statuses and labels are `Board` / `BoardStatus` / `BoardLabel`.
 - The public `/request` intake form was removed (2026-10). The `project_requests` table and `ProjectRequest` model are kept only for the old data; nothing in the app reads or writes them.
 - Validation: a form with an add / edit pair shares one Form Request in `app/Http/Requests` (e.g. `Settings\UserRequest`; the route's model tells edit from add). One-off checks stay inline `$request->validate()` with their Thai messages.
+- `ProjectDelivery`: how a round is said and shown (state names and colours, vehicles / people / cabinets as text, its days, the nav link) is in `Models\Concerns\PresentsDelivery`. Its rules stay on the model.
+- A trait in a `Concerns` folder is in a different namespace from the class it belongs to: import every class it names. A missing import only fails when that code runs. The browser smoke and its server-error check catch it.
 - Exports are CSV via `App\Support\Csv`.
 - งานจัดส่ง (`deliveries/index`) is one Alpine component, `deliveriesPage` in `resources/js/deliveries.js`. The view passes it what only the server knows. Page scripts live in `resources/js`, not inline in Blade.
 - A round's card buttons on งานจัดส่ง are `<x-round-button>` (`main`, `icon`). Do not build HTML in PHP strings in views; make a component instead.

@@ -22,6 +22,7 @@ async function session(b, email, opts, who, steps) {
     const c = await b.newContext(opts); const p = await c.newPage();
     p.on('pageerror', (e) => errors.push(`${who} ${p.url()} pageerror: ${e.message}`));
     p.on('console', (m) => { if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errors.push(`${who} ${p.url()} console: ${m.text()}`); });
+    p.on('response', (r) => { if (r.status() >= 500) errors.push(`${who} ${r.request().method()} ${r.url()}: HTTP ${r.status()}`); });   // a server error behind any request, not only the page's own
     p.on('dialog', (d) => d.dismiss());
     await p.goto(base + '/login'); await p.fill('input[name=email]', email); await p.fill('input[name=password]', 'probe-pass-1');
     await Promise.all([p.waitForNavigation(), p.click('button[type=submit]')]);
@@ -62,6 +63,13 @@ await session(b, 'probe-adm@example.test', { viewport: { width: 1440, height: 10
 });
 await session(b, 'probe-ship@example.test', { ...devices['iPhone 13'] }, 'ship-phone', async (p) => {
     for (const u of ['/deliveries', '/deliveries?tab=delivered', '/notifications', '/planning/board']) await open(p, 'ship', u);
+    for (const [tab, label] of [['waiting', 'จัดรถ / คน'], ['scheduled', 'รายการตู้'], ['scheduled', 'ข้อความส่งงาน'], ['departed', 'ส่งถึงแล้ว'], ['delivered', 'แก้ข้อมูลส่งถึง']])
+        await step(p, `ship deliveries ${tab}: ${label}`, async () => {
+            await p.goto(base + '/deliveries?tab=' + tab, { waitUntil: 'networkidle' });
+            const btn = p.locator('#dl-rows article button', { hasText: label }).first();
+            if (await btn.count()) { await btn.click(); await p.waitForTimeout(600); await p.keyboard.press('Escape'); }
+        });
+    await open(p, 'ship', '/planning/board');
     await step(p, 'ship calendar tabs', async () => { for (const i of [1, 2, 0]) await p.locator('[role=group][aria-label="แสดงในปฏิทิน"] button').nth(i).click(); });
     await step(p, 'ship day notes window', async () => { await p.locator('button[aria-label^="หมายเหตุของแผนก"]').first().click(); await p.keyboard.press('Escape'); });
     await step(p, 'ship รอบส่ง drawer', async () => {

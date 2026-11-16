@@ -24,6 +24,13 @@ export default function registerAssignment() {
             if (box.hasAttribute('data-no-step-bar')) box.querySelector('[data-step-bar]')?.remove();   // the cabinet page shows no 4-step bar
         }
 
+        // the cabinet page's status-menu button shows the work's one status
+        const status = document.getElementById('work-status-' + data.assignment.id);
+        if (status && data.assignment.work_status_label) {
+            status.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ' + data.assignment.work_status_class;
+            status.textContent = data.assignment.work_status_label;
+        }
+
         // Keep the Cabinet page's Edit modal department field in step with the row, if present on this page.
         const modalSelect = document.querySelector('[data-modal-department="' + data.assignment.id + '"]');
         if (modalSelect) {

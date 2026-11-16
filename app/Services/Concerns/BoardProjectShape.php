@@ -224,7 +224,8 @@ trait BoardProjectShape
             // the oldest piece of work still waiting to be accepted (the "รอรับงาน" list: how long it has waited)
             'waitingSince' => ($w = $rows->where('assignment_status', CabinetSubtask::ASSIGNMENT_ASSIGNED)->map(fn ($s) => $s->getAttributes()['assigned_at'] ?? null)->filter()->min()) !== null ? substr((string) $w, 0, 10) : null,
             'canStart' => $mine && $n(CabinetSubtask::ASSIGNMENT_ACCEPTED) > 0,
-            'canComplete' => $mine && $n(CabinetSubtask::ASSIGNMENT_IN_PROGRESS) > 0,
+            // ปิดงาน: only work without a checklist (with one, ticking it all finishes it - SubtaskAssignmentService::followChecklist)
+            'canComplete' => $mine && $rows->contains(fn ($s) => $s->assignment_status === CabinetSubtask::ASSIGNMENT_IN_PROGRESS && $s->checklists->isEmpty()),
         ];
     }
 

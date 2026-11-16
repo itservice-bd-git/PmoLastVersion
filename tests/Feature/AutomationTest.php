@@ -51,6 +51,7 @@ class AutomationTest extends TestCase
         $s = CabinetSubtask::forceCreate([
             'cabinet_task_id' => $this->task->id, 'name' => 'S', 'department_id' => $d->id,
             'assignment_status' => $status, 'due_date' => $due, 'status' => 'not_started', 'progress' => 0,
+            'accepted_at' => in_array($status, ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'], true) ? now() : null,
         ]);
         for ($i = 1; $i <= $checks; $i++) {
             CabinetChecklist::forceCreate(['cabinet_subtask_id' => $s->id, 'name' => "c$i", 'is_completed' => false, 'sequence' => $i]);
@@ -69,15 +70,17 @@ class AutomationTest extends TestCase
         return $this->actingAs($u)->patchJson(route('checklists.toggle', $c), ['is_completed' => $on]);
     }
 
-    public function test_all_done_rule_completes_the_subtask_even_from_accepted(): void
+    public function test_the_checklist_starts_and_completes_the_subtask_from_accepted(): void
     {
-        $this->rule('checklist_all_done', 'complete', $this->qc);
         $s = $this->subtask($this->qc, 'ACCEPTED');
         $user = $this->user($this->qc);
         [$a, $b] = $s->checklists;
 
-        $this->tick($user, $a)->assertOk()->assertJson(['assignment' => null]);
-        $this->assertSame('ACCEPTED', $s->fresh()->assignment_status);
+        // the first tick starts it, and the page gets its one status with the % (no rule needed)
+        $this->tick($user, $a)->assertOk()
+            ->assertJsonPath('assignment.assignment_status', 'IN_PROGRESS')
+            ->assertJsonPath('subtask.work_status_label', 'กำลังดำเนินงาน · 50%');
+        $this->assertSame('IN_PROGRESS', $s->fresh()->assignment_status);
 
         $res = $this->tick($user, $b)->assertOk();
         $this->assertSame('COMPLETED', $s->fresh()->assignment_status);
@@ -95,39 +98,39 @@ class AutomationTest extends TestCase
         $this->assertSame('IN_PROGRESS', $s->fresh()->assignment_status);
     }
 
-    public function test_no_effect_when_rule_inactive_other_department_or_no_rule(): void
+    public function test_the_checklist_completes_the_work_whatever_the_rules(): void
     {
         $s = $this->subtask($this->qc);
         $u = $this->user($this->qc);
 
         $this->tick($u, $s->checklists[0]);
         $this->tick($u, $s->checklists[1]);                                                       // no rules at all
-        $this->assertSame('ACCEPTED', $s->fresh()->assignment_status);
+        $this->assertSame('COMPLETED', $s->fresh()->assignment_status);
 
         $this->rule('checklist_all_done', 'complete', $this->qc, active: false);
         $this->rule('checklist_all_done', 'complete', $this->delivery);                          // other department
         $other = $this->subtask($this->qc);
         $this->tick($u, $other->checklists[0]);
         $this->tick($u, $other->checklists[1]);
-        $this->assertSame('ACCEPTED', $other->fresh()->assignment_status);
+        $this->assertSame('COMPLETED', $other->fresh()->assignment_status);
     }
 
-    public function test_unticking_done_work_reopens_it_and_a_pm_outside_the_department_cannot_trigger_a_move(): void
+    public function test_unticking_done_work_reopens_it_and_a_pm_outside_the_department_completes_it_by_ticking(): void
     {
-        $this->rule('checklist_all_done', 'complete');
         $s = $this->subtask($this->qc);
         $dept = $this->user($this->qc);
         [$a, $b] = $s->checklists;
 
-        // a PM may tick (checklist editable) but is not in the department -> the rule is skipped, tick still saved
+        // a PM may tick (checklist editable) though not in the department: the checklist decides, so it is done
         $pm = $this->user($this->delivery, 'project_manager');
         $this->tick($pm, $a)->assertOk();
         $this->tick($pm, $b)->assertOk();
-        $this->assertSame('ACCEPTED', $s->fresh()->assignment_status);
-        $this->assertTrue($a->fresh()->is_completed);
+        $this->assertSame('COMPLETED', $s->fresh()->assignment_status);
+        $this->assertSame($pm->id, $s->fresh()->completed_by);
 
-        // the department user unticks and reticks: completes
+        // the department user unticks and reticks: done again
         $this->tick($dept, $a, false);
+        $this->assertSame('IN_PROGRESS', $s->fresh()->assignment_status);
         $this->tick($dept, $a, true);
         $this->assertSame('COMPLETED', $s->fresh()->assignment_status);
 

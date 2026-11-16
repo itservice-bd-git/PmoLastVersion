@@ -124,9 +124,21 @@ await session(b, 'probe-adm@example.test', { viewport: { width: 1440, height: 10
         const tick = sub.locator('label, li, div').filter({ hasText: 'รายการทดสอบ e2e' }).locator('input[type=checkbox]:not([aria-label^="เลือก"])').last();
         await tick.check();
         await p.waitForFunction((id) => (document.getElementById('progress-value-subtask-' + id)?.textContent || '').trim() === '100%', ctx.subtask, { timeout: 8000 });
+        // the checklist decides: all ticked = the Sub Task's one status turns เสร็จงานแล้ว at once, no reload
+        const status = (id) => p.evaluate((i) => (document.getElementById('work-status-' + i)?.textContent || '').trim(), id);
+        await p.waitForFunction((id) => (document.getElementById('work-status-' + id)?.textContent || '').trim() === 'เสร็จงานแล้ว', ctx.subtask, { timeout: 8000 })
+            .catch(async () => { throw new Error('status did not follow the tick: ' + await status(ctx.subtask)); });
         await p.reload({ waitUntil: 'networkidle' });
         const after = await p.evaluate((id) => (document.getElementById('progress-value-subtask-' + id)?.textContent || '').trim(), ctx.subtask);
         if (after !== '100%') throw new Error('tick not saved: ' + after);
+        if (await status(ctx.subtask) !== 'เสร็จงานแล้ว') throw new Error('status not saved: ' + await status(ctx.subtask));
+        // unticking takes it back a step, live too
+        await p.locator('#subtask-' + ctx.subtask).evaluate((el) => { el.open = true; });
+        await p.locator('#subtask-' + ctx.subtask).locator('label, li, div').filter({ hasText: 'รายการทดสอบ e2e' }).locator('input[type=checkbox]:not([aria-label^="เลือก"])').last().uncheck();
+        await p.waitForFunction((id) => !['', 'เสร็จงานแล้ว'].includes((document.getElementById('work-status-' + id)?.textContent || '').trim()), ctx.subtask, { timeout: 8000 })
+            .catch(async () => { throw new Error('status did not follow the untick: ' + await status(ctx.subtask)); });
+        await p.locator('#subtask-' + ctx.subtask).locator('label, li, div').filter({ hasText: 'รายการทดสอบ e2e' }).locator('input[type=checkbox]:not([aria-label^="เลือก"])').last().check();
+        await p.waitForFunction((id) => (document.getElementById('work-status-' + id)?.textContent || '').trim() === 'เสร็จงานแล้ว', ctx.subtask, { timeout: 8000 });
     });
     await step(p, 'delete the project, then restore it from the trash (can:manage-trash)', async () => {
         await go(p, `${base}/projects/${ctx.project}`);

@@ -112,7 +112,7 @@ class SettingsHubTest extends TestCase
 
     public function test_notifications_follow_each_persons_choices(): void
     {
-        $s = $this->subtask($this->busbar, 'ASSIGNED');
+        $s = $this->subtask($this->busbar, 'ASSIGNED', checks: 0);   // work without a checklist goes by the buttons
         $worker = $this->user($this->busbar);
         $this->project->update(['project_manager_id' => ($pm = $this->user($this->wiring, 'project_manager'))->id]);
         $svc = app(SubtaskAssignmentService::class);
@@ -154,26 +154,25 @@ class SettingsHubTest extends TestCase
     public function test_admin_saves_the_rules(): void
     {
         $this->actingAs($this->user(null, 'admin'))->put(route('settings.rules.update'), [
-            'block_done_needs_checklist' => 1, 'automation_locked_statuses' => ['on_hold'],
+            'block_project_done_needs_work' => 1, 'automation_locked_statuses' => ['on_hold'],
         ])->assertRedirect();
 
-        $this->assertTrue(AppSetting::get('block_done_needs_checklist'));
+        $this->assertTrue(AppSetting::get('block_project_done_needs_work'));
         $this->assertFalse(AppSetting::get('cross_mention'));
         $this->assertSame(['on_hold'], AppSetting::get('automation_locked_statuses'));
         $this->actingAs($this->user(null, 'admin'))->put(route('settings.rules.update'), ['automation_locked_statuses' => ['bogus']])->assertSessionHasErrors();
     }
 
-    public function test_a_sub_task_cannot_be_completed_with_open_checklist_items_when_the_rule_is_on(): void
+    public function test_a_sub_task_is_never_completed_by_the_button_with_open_checklist_items(): void
     {
         $worker = $this->user($this->busbar);
-        $s = $this->subtask($this->busbar, 'IN_PROGRESS');
+        $s = $this->subtask($this->busbar, 'IN_PROGRESS', checks: 0);
         $svc = app(SubtaskAssignmentService::class);
 
-        $svc->complete($s->fresh(), $worker);   // rule off: fine
+        $svc->complete($s->fresh(), $worker);   // no checklist: the button decides
         $this->assertSame('COMPLETED', $s->fresh()->assignment_status);
 
-        AppSetting::put('block_done_needs_checklist', true);
-        $s2 = $this->subtask($this->busbar, 'IN_PROGRESS');
+        $s2 = $this->subtask($this->busbar, 'IN_PROGRESS');   // the setting no longer matters: always refused
         try {
             $svc->complete($s2->fresh(), $worker);
             $this->fail('should be refused');

@@ -173,9 +173,10 @@ class PlanningSyncTest extends TestCase
 
     public function test_workflow_buttons_accept_start_complete_for_the_department_only(): void
     {
-        $a = $this->subtask($this->busbar, 'ASSIGNED');
-        $b = $this->subtask($this->busbar, 'ASSIGNED');
-        $other = $this->subtask($this->wiring, 'ASSIGNED');
+        // work without a checklist goes by the buttons (with one, the checklist decides - see the next test)
+        $a = $this->subtask($this->busbar, 'ASSIGNED', checks: 0);
+        $b = $this->subtask($this->busbar, 'ASSIGNED', checks: 0);
+        $other = $this->subtask($this->wiring, 'ASSIGNED', checks: 0);
         $member = $this->user($this->busbar);
         $op = fn (string $step) => ['type' => 'stage_step', 'taskId' => 'p'.$this->project->id, 'deptId' => $this->dept($this->busbar), 'step' => $step];
 
@@ -198,6 +199,19 @@ class PlanningSyncTest extends TestCase
         $this->assertFalse($this->apply($member, ['step' => 'explode'] + $op('start'))['ok']);
     }
 
+    public function test_planning_closes_only_work_without_a_checklist_as_the_cabinet_page_does(): void
+    {
+        $listed = $this->subtask($this->busbar, 'IN_PROGRESS');
+        $plain = $this->subtask($this->busbar, 'IN_PROGRESS', checks: 0);
+        $op = ['type' => 'stage_step', 'taskId' => 'p'.$this->project->id, 'deptId' => $this->dept($this->busbar), 'step' => 'complete'];
+
+        $r = $this->apply($this->user($this->busbar), $op);
+        $this->assertTrue($r['ok']);
+        $this->assertStringContainsString('1 รายการ', $r['message']);
+        $this->assertSame(['IN_PROGRESS', 'COMPLETED'], [$this->stateOf($listed), $this->stateOf($plain)]);
+        $this->assertFalse($this->apply($this->user($this->busbar), $op)['ok'], 'nothing left that a button may close');
+    }
+
     public function test_ticking_a_stage_done_finishes_the_whole_department_or_nothing(): void
     {
         $a = $this->subtask($this->busbar, 'ASSIGNED');
@@ -208,6 +222,13 @@ class PlanningSyncTest extends TestCase
         $this->assertFalse($this->apply($this->user($this->wiring, 'project_manager'), $op)['ok']);
         $this->assertSame(['ASSIGNED', 'IN_PROGRESS'], [$this->stateOf($a), $this->stateOf($b)]);
 
+        // the department itself, but the checklists are not all ticked: the checklist decides, so nothing is closed
+        $r = $this->apply($this->user($this->busbar), $op);
+        $this->assertFalse($r['ok']);
+        $this->assertStringContainsString('เช็คลิสต์', $r['message']);
+        $this->assertSame(['ASSIGNED', 'IN_PROGRESS'], [$this->stateOf($a), $this->stateOf($b)]);
+
+        CabinetChecklist::whereIn('cabinet_subtask_id', [$a->id, $b->id])->update(['is_completed' => true]);
         $r = $this->apply($this->user($this->busbar), $op);
         $this->assertTrue($r['ok']);
         $this->assertSame(['COMPLETED', 'COMPLETED'], [$this->stateOf($a), $this->stateOf($b)]);
@@ -518,7 +539,10 @@ class PlanningSyncTest extends TestCase
         $this->assertSame([1, 0, 1, 0], [$mine['waiting'], $mine['accepted'], $mine['working'], $mine['done']]);
         $this->assertTrue($mine['canAccept']);
         $this->assertFalse($mine['canStart']);
-        $this->assertTrue($mine['canComplete']);
+        $this->assertFalse($mine['canComplete'], 'work in progress with a checklist is finished by ticking it, not by ปิดงาน');
+
+        $this->subtask($this->busbar, 'IN_PROGRESS', checks: 0);   // work without a checklist: the button is offered
+        $this->assertTrue($stage($this->user($this->busbar))['canComplete']);
 
         $pmElsewhere = $stage($this->user($this->wiring, 'project_manager'));
         $this->assertFalse($pmElsewhere['canAccept'] || $pmElsewhere['canStart'] || $pmElsewhere['canComplete'], 'the workflow belongs to the department\'s own members');

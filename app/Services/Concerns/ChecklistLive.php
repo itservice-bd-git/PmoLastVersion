@@ -36,7 +36,7 @@ trait ChecklistLive
         $handoff = app(HandoffService::class);
         $lists = [];
         $progress = [];
-        $row = fn ($m, array $c) => ['id' => $m->id, 'progress' => $m->progress, 'status' => $m->status, 'completed_checklists' => $c['completed'], 'total_checklists' => $c['total']];
+        $row = fn ($m, array $c) => self::progressRow($m, $c);
         foreach ($cabinet->tasks as $task) {
             $task->setRelation('cabinet', $cabinet);
             foreach ($task->subtasks as $s) {
@@ -50,15 +50,22 @@ trait ChecklistLive
         return ['lists' => $lists, 'progress' => $progress];
     }
 
+    /** One bar's numbers; a Sub Task's also carry its one status (the checklist moves it), for its badge. */
+    public static function progressRow($m, array $c): array
+    {
+        return ['id' => $m->id, 'progress' => $m->progress, 'status' => $m->status, 'completed_checklists' => $c['completed'], 'total_checklists' => $c['total']]
+            + ($m instanceof CabinetSubtask ? ['work_status_label' => $m->work_status_label, 'work_status_class' => $m->work_status_class] : []);
+    }
+
     /** The bars the cabinet page shows (same shape as the tick endpoint's answer). */
     public function progressOf(CabinetSubtask $s): array
     {
         $task = $s->cabinetTask->fresh('subtasks.checklists');
         $cabinet = $task->cabinet->fresh('tasks.subtasks.checklists');
-        $row = fn ($m, array $c) => ['id' => $m->id, 'progress' => $m->progress, 'status' => $m->status, 'completed_checklists' => $c['completed'], 'total_checklists' => $c['total']];
+        $row = fn ($m, array $c) => self::progressRow($m, $c);
 
         return [
-            'subtask' => $row($s, ['completed' => $s->checklists()->where('is_completed', true)->count(), 'total' => $s->checklists()->count()]),
+            'subtask' => $row($s->fresh() ?? $s, ['completed' => $s->checklists()->where('is_completed', true)->count(), 'total' => $s->checklists()->count()]),
             'task' => $row($task, $task->checklist_counts),
             'cabinet' => $row($cabinet, $cabinet->checklist_counts),
         ];

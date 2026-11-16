@@ -24,6 +24,41 @@ trait SubtaskAssignmentRules
     }
 
     /**
+     * The one status shown for the work: its step (the checklist moves it - SubtaskAssignmentService::followChecklist),
+     * พักงาน while on hold, and how far the checklist is while part done.
+     */
+    public function getWorkStatusLabelAttribute(): string
+    {
+        if ($this->isHeld()) {
+            return 'พักงาน';
+        }
+        $part = $this->assignment_status !== self::ASSIGNMENT_COMPLETED && $this->progress > 0 && $this->progress < 100;
+
+        return $this->assignment_status_label.($part ? ' · '.(int) $this->progress.'%' : '');
+    }
+
+    public function getWorkStatusClassAttribute(): string
+    {
+        if ($this->isHeld()) {
+            return 'bg-amber-100 text-amber-800';
+        }
+
+        return [
+            self::ASSIGNMENT_UNASSIGNED => 'bg-slate-100 text-slate-600',
+            self::ASSIGNMENT_ASSIGNED => 'bg-amber-100 text-amber-700',
+            self::ASSIGNMENT_ACCEPTED => 'bg-indigo-100 text-indigo-700',
+            self::ASSIGNMENT_IN_PROGRESS => 'bg-blue-100 text-blue-700',
+            self::ASSIGNMENT_COMPLETED => 'bg-emerald-100 text-emerald-700',
+        ][$this->assignment_status] ?? 'bg-slate-100 text-slate-600';
+    }
+
+    /** On hold and not done: shown as พักงาน */
+    private function isHeld(): bool
+    {
+        return $this->assignment_status !== self::ASSIGNMENT_COMPLETED && $this->status === self::STATUS_ON_HOLD;
+    }
+
+    /**
      * May tick its items: whoever may edit the list, and (Settings > กฎการทำงาน "ติ๊กแล้วรับงานให้") the department's own
      * members while the work still waits for them - the tick accepts it (SubtaskAssignmentService::acceptByTick).
      */

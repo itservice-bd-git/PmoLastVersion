@@ -394,9 +394,9 @@ class SubtaskAssignmentTest extends TestCase
         $this->actingAs($member)->get(route('cabinets.show', $this->cabinet))->assertOk();   // the box is tickable for them
 
         $this->actingAs($member)->patchJson(route('checklists.toggle', $items[0]), ['is_completed' => true])->assertOk()
-            ->assertJsonPath('assignment.assignment_status', CabinetSubtask::ASSIGNMENT_ACCEPTED)
-            ->assertJsonPath('html', fn ($h) => str_contains((string) $h, 'รับงานแล้ว'));
-        $this->assertSame([CabinetSubtask::ASSIGNMENT_ACCEPTED, $member->id], [$subtask->fresh()->assignment_status, $subtask->fresh()->accepted_by]);
+            ->assertJsonPath('assignment.assignment_status', CabinetSubtask::ASSIGNMENT_IN_PROGRESS)   // accepted, and the tick started it
+            ->assertJsonPath('html', fn ($h) => str_contains((string) $h, 'กำลังดำเนินงาน'));
+        $this->assertSame([CabinetSubtask::ASSIGNMENT_IN_PROGRESS, $member->id], [$subtask->fresh()->assignment_status, $subtask->fresh()->accepted_by]);
         $this->assertTrue($items[0]->fresh()->is_completed);
         $this->assertStringContainsString('จากการติ๊ก Checklist', ActivityLog::where('action', 'accepted')->sole()->description);
 
@@ -410,6 +410,8 @@ class SubtaskAssignmentTest extends TestCase
         $res = app(PlanningSync::class)->apply($member, [$op])[0];
         $this->assertTrue($res['ok']);
         $this->assertStringContainsString('รับงาน', (string) $res['message']);
-        $this->assertSame(CabinetSubtask::ASSIGNMENT_ACCEPTED, $other->fresh()->assignment_status);
+        // its only item: accepted by the tick, and the whole list ticked means done
+        $this->assertSame(CabinetSubtask::ASSIGNMENT_COMPLETED, $other->fresh()->assignment_status);
+        $this->assertNotNull($other->fresh()->accepted_at);
     }
 }

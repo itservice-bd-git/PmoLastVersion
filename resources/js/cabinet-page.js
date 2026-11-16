@@ -126,10 +126,11 @@ export default function registerCabinetPage() {
         ['subtask', 'task', 'cabinet'].forEach((k) => {
             if (!d[k]) return;
             updateProgress(k + '-' + d[k].id, d[k].progress);
-            updateStatusBadge(k + '-' + d[k].id, d[k].status);
+            if (k === 'subtask') updateWorkStatus(d[k]);   // a Sub Task shows its one status (the checklist moves it)
+            else updateStatusBadge(k + '-' + d[k].id, d[k].status);
             updateChecklistCount(k + '-' + d[k].id, d[k].completed_checklists, d[k].total_checklists);
         });
-        if (d.assignment && typeof applyAssignment === 'function') applyAssignment(d);   // Automation moved the work
+        if (d.assignment && typeof applyAssignment === 'function') applyAssignment(d);   // its buttons too, after a tick
     });
 
     function updateProgress(id, value) {
@@ -185,6 +186,13 @@ export default function registerCabinetPage() {
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeStatusMenus(); });
     addEventListener('scroll', () => closeStatusMenus(), { passive: true });
+
+    function updateWorkStatus(s) {
+        const badge = document.getElementById('work-status-' + s.id);
+        if (!badge || !s.work_status_label) return;
+        badge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ' + s.work_status_class;
+        badge.textContent = s.work_status_label;
+    }
 
     function updateStatusBadge(id, status) {
         const badge = document.getElementById('status-badge-' + id);

@@ -2,13 +2,6 @@
     $actions = app(\App\Services\SubtaskAssignmentService::class)->actionsFor($subtask, auth()->user());
     $locked = $subtask->is_department_locked;
     $canEditDepartment = auth()->user()?->canDispatchWork() ?? false;
-    $badge = [
-        'UNASSIGNED' => 'bg-slate-100 text-slate-600',
-        'ASSIGNED' => 'bg-amber-100 text-amber-700',
-        'ACCEPTED' => 'bg-indigo-100 text-indigo-700',
-        'IN_PROGRESS' => 'bg-blue-100 text-blue-700',
-        'COMPLETED' => 'bg-emerald-100 text-emerald-700',
-    ][$subtask->assignment_status] ?? 'bg-slate-100 text-slate-600';
     $trail = collect([
         $subtask->accepted_at ? 'รับงานโดย '.($subtask->acceptedBy?->name ?? '-').' '.$subtask->accepted_at->thaiDateTime() : null,
         $subtask->started_at ? 'เริ่มงานโดย '.($subtask->startedBy?->name ?? '-').' '.$subtask->started_at->thaiDateTime() : null,
@@ -24,8 +17,9 @@
     @endfor
 </span>
 @endif
-<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap {{ $badge }}" data-assignment-status
-      @if ($trail) title="{{ $trail }}" @endif>{{ $subtask->assignment_status_label }}</span>
+{{-- the work's one status (the checklist moves it); on the cabinet page it is shown in the status-menu button instead --}}
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap {{ $subtask->work_status_class }}" data-assignment-status
+      @if ($trail) title="{{ $trail }}" @endif>{{ $subtask->work_status_label }}</span>
 @if ($subtask->assignment_status === 'UNASSIGNED' && $subtask->rejected_at)
     {{-- sent back ("ไม่รับงาน"): who and why, until it is handed out again --}}
     <span class="inline-flex max-w-xs items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700"
@@ -83,6 +77,8 @@
 @php
     // the cabinet page's status menu (opened from the Sub Task's status badge): every step, the next one clickable
     $at = ['UNASSIGNED' => 0, 'ASSIGNED' => 1, 'ACCEPTED' => 2, 'IN_PROGRESS' => 3, 'COMPLETED' => 4][$subtask->assignment_status] ?? 0;
+    // work with a checklist is done by ticking it all (SubtaskAssignmentService::followChecklist), not by a button
+    $hasList = $subtask->relationLoaded('checklists') ? $subtask->checklists->isNotEmpty() : $subtask->checklists()->exists();
     $only = 'เฉพาะแผนก '.($subtask->department?->name ?? '-');
     $menu = [
         ['รับงาน', 'cabinet-subtasks.accept', 2, $actions['can_accept'], $subtask->accepted_at ? 'โดย '.($subtask->acceptedBy?->name ?? '-').' '.$subtask->accepted_at->thaiDateTime() : null,
@@ -90,11 +86,11 @@
         ['เริ่มงาน', 'cabinet-subtasks.start', 3, $actions['can_start'], $subtask->started_at ? 'โดย '.($subtask->startedBy?->name ?? '-').' '.$subtask->started_at->thaiDateTime() : null,
             $at < 2 ? 'ต้องรับงานก่อน' : $only, null],
         ['เสร็จงาน', 'cabinet-subtasks.complete', 4, $actions['can_complete'], $subtask->completed_at ? 'โดย '.($subtask->completedBy?->name ?? '-').' '.$subtask->completed_at->thaiDateTime() : null,
-            $at < 3 ? 'ต้องเริ่มงานก่อน' : $only, null],
+            $hasList ? 'เสร็จเมื่อติ๊ก Checklist ครบ' : ($at < 3 ? 'ต้องเริ่มงานก่อน' : $only), null],
     ];
 @endphp
 <div class="absolute left-0 top-full z-30 mt-1 hidden w-64 rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-lg" data-status-menu-panel role="menu" aria-label="อัปเดตสถานะงาน">
-    <p class="px-2 pb-1 pt-0.5 text-[11px] font-semibold text-slate-500">สถานะงาน · {{ $subtask->assignment_status_label }}</p>
+    <p class="px-2 pb-1 pt-0.5 text-[11px] font-semibold text-slate-500">สถานะงาน · {{ $subtask->work_status_label }}</p>
     @foreach ($menu as [$label, $route, $reach, $can, $by, $why, $confirm])
         @if ($at >= $reach)
             <div class="flex items-start gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700" role="menuitem" aria-disabled="true">

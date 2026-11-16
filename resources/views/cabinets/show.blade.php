@@ -283,7 +283,8 @@
                                                 {{-- the status badge opens the work-status menu (in _assignment: data-status-menu-panel); เริ่มงาน / เสร็จงาน live there instead of as buttons --}}
                                                 <button type="button" class="inline-flex items-center gap-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                                         data-status-menu-toggle aria-haspopup="menu" aria-expanded="false" title="อัปเดตสถานะงาน">
-                                                    <x-status-badge :status="$subtask->status" id="subtask-{{ $subtask->id }}" />
+                                                    {{-- the work's one status (SubtaskAssignmentRules::work_status_*), kept live by applyAssignment (assignment.js) --}}
+                                                    <span id="work-status-{{ $subtask->id }}" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap {{ $subtask->work_status_class }}">{{ $subtask->work_status_label }}</span>
                                                     <span class="text-xs text-slate-500" aria-hidden="true">▾</span>
                                                 </button>
                                                 {{-- a click here must not fold the Sub Task, but must still reach the page's handler (รับงาน / เริ่มงาน, _assignment-scripts): prevent, never stop --}}
@@ -559,8 +560,9 @@
     @include('projects.partials._dates', ['subject' => $cabinet])
 
     @push('scripts')
-    {{-- เริ่มงาน / เสร็จงาน are in the status badge's menu on this page, so the row keeps only รับงาน / ไม่รับงาน --}}
-    <style>[data-status-menu] .assignment-step-button { display: none; }</style>
+    {{-- เริ่มงาน / เสร็จงาน are in the status badge's menu on this page, so the row keeps only รับงาน / ไม่รับงาน;
+         the status itself is the menu's button, so the row's own copy of it is not shown twice --}}
+    <style>[data-status-menu] .assignment-step-button, [data-status-menu] [data-assignment-status] { display: none; }</style>
     {{-- the page's values for resources/js/cabinet-page.js --}}
     <script>window.pmoCabinetPage = @js([
         'liveUrl' => route('cabinets.checklists-live', $cabinet),

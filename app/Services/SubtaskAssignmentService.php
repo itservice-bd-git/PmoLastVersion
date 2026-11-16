@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Exceptions\AssignmentException;
 use App\Models\ActivityLog;
-use App\Models\AppSetting;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
 use App\Models\Project;
@@ -97,9 +96,9 @@ class SubtaskAssignmentService
 
     public function complete(CabinetSubtask $subtask, User $actor): CabinetSubtask
     {
-        // Settings > กฎการทำงาน: "งานกดเสร็จไม่ได้ ถ้าเช็คลิสต์ยังไม่ครบ" (only once the work really has a checklist)
-        if (AppSetting::get('block_done_needs_checklist') && $subtask->checklists()->where('is_completed', false)->exists()) {
-            throw new AssignmentException('ปิดงานไม่ได้ — เช็คลิสต์ยังติ๊กไม่ครบ (ตั้งค่าไว้ที่ ตั้งค่า › กฎการทำงาน)');
+        // the checklist decides (followChecklist): work with items left unticked is not done, whatever the button says
+        if ($subtask->checklists()->where('is_completed', false)->exists()) {
+            throw new AssignmentException('ปิดงานไม่ได้ — เช็คลิสต์ยังติ๊กไม่ครบ (งานจะเสร็จเองเมื่อติ๊กครบทุกข้อ)');
         }
 
         return $this->transition($subtask, $actor, CabinetSubtask::ASSIGNMENT_IN_PROGRESS, CabinetSubtask::ASSIGNMENT_COMPLETED, 'completed', 'completed_by', 'completed_at',
@@ -156,33 +155,73 @@ class SubtaskAssignmentService
     }
 
     /**
-     * Work marked เสร็จงาน whose checklist is no longer all ticked (an item unticked or added afterwards): back to
-     * กำลังดำเนินงาน, so the status always matches the list. It follows an edit the caller was already allowed to make,
-     * so there is no actor check here; ticking everything again completes it again (Settings > Automation).
+     * The checklist decides the work's status (ProgressService::recalculateSubtask, after every tick / untick / item added
+     * or removed), so the two never disagree:
+     *  - every item ticked: เสร็จงานแล้ว, whatever step it was at (handed out or not, accepted or not)
+     *  - some ticked while รับงานแล้ว: กำลังดำเนินงาน
+     *  - เสร็จงานแล้ว but no longer all ticked: back to the step it really is at - ยังไม่จ่ายงาน without a department,
+     *    รอรับงาน if never accepted, else กำลังดำเนินงาน
+     * It follows an edit the caller was already allowed to make (canTickBy), so there is no actor check here.
+     * Work without a checklist is left to the buttons.
+     *
+     * @return bool true when the status changed
      */
-    public function reopenIfUnfinished(CabinetSubtask $subtask, ?User $actor): bool
+    public function followChecklist(CabinetSubtask $subtask, ?User $actor): bool
     {
-        if ($subtask->assignment_status !== CabinetSubtask::ASSIGNMENT_COMPLETED) {
-            return false;
-        }
-
         return DB::transaction(function () use ($subtask, $actor) {
             $locked = CabinetSubtask::whereKey($subtask->id)->lockForUpdate()->first();
             $total = $locked?->checklists()->count() ?? 0;
-            $done = $total ? $locked->checklists()->where('is_completed', true)->count() : 0;
-            if (! $locked || $locked->assignment_status !== CabinetSubtask::ASSIGNMENT_COMPLETED || $total === 0 || $done === $total) {
+            if ($total === 0) {
+                return false;
+            }
+            $done = $locked->checklists()->where('is_completed', true)->count();
+            $from = $locked->assignment_status;
+
+            [$to, $fill, $action, $words] = match (true) {
+                $done === $total && $from !== CabinetSubtask::ASSIGNMENT_COMPLETED => [
+                    CabinetSubtask::ASSIGNMENT_COMPLETED,
+                    ['completed_by' => $actor?->id, 'completed_at' => now()],
+                    'completed', "เสร็จงาน — Checklist ครบ ({$done}/{$total})",
+                ],
+                $done > 0 && $done < $total && $from === CabinetSubtask::ASSIGNMENT_ACCEPTED => [
+                    CabinetSubtask::ASSIGNMENT_IN_PROGRESS,
+                    ['started_by' => $actor?->id, 'started_at' => now()],
+                    'started', "เริ่มงาน — ติ๊ก Checklist แล้ว ({$done}/{$total})",
+                ],
+                $done < $total && $from === CabinetSubtask::ASSIGNMENT_COMPLETED => [
+                    $this->stepReached($locked),
+                    ['completed_by' => null, 'completed_at' => null],
+                    'reopened', null,
+                ],
+                default => [null, [], null, null],
+            };
+            if ($to === null) {
                 return false;
             }
 
-            $locked->forceFill(['assignment_status' => CabinetSubtask::ASSIGNMENT_IN_PROGRESS, 'completed_by' => null, 'completed_at' => null])->saveQuietly();
+            $locked->forceFill(['assignment_status' => $to] + $fill)->saveQuietly();
             $locked->load('department', 'cabinetTask.cabinet');
-            ActivityLog::record($locked->cabinetTask->cabinet->project_id, $actor?->id, $locked, 'reopened',
-                "งาน {$this->label($locked)} กลับเป็นกำลังดำเนินงาน — Checklist ไม่ครบแล้ว ({$done}/{$total})");
+            $words ??= 'กลับเป็น'.CabinetSubtask::$assignmentStatuses[$to]." — Checklist ไม่ครบแล้ว ({$done}/{$total})";
+            ActivityLog::record($locked->cabinetTask->cabinet->project_id, $actor?->id, $locked, $action, "งาน {$this->label($locked)} {$words}");
+            if ($actor && $locked->department_id && $action !== 'reopened') {
+                $this->notifications->progressed($locked, $actor, $action);
+                $this->startProject($locked, $actor);
+            }
             PlanningBoard::touch();
             $this->syncInstance($subtask, $locked);
 
             return true;
         });
+    }
+
+    /** Where work no longer done really is: never handed out, handed out but never accepted, or being worked on. */
+    private function stepReached(CabinetSubtask $subtask): string
+    {
+        return match (true) {
+            $subtask->department_id === null => CabinetSubtask::ASSIGNMENT_UNASSIGNED,
+            $subtask->accepted_at === null => CabinetSubtask::ASSIGNMENT_ASSIGNED,
+            default => CabinetSubtask::ASSIGNMENT_IN_PROGRESS,
+        };
     }
 
     /** The first department taking work: a project still Draft / Planning becomes In Progress (logged; closing stays the PM's call). */

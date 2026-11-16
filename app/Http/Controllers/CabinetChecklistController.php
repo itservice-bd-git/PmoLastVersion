@@ -147,6 +147,8 @@ class CabinetChecklistController extends Controller
                     'status' => $target->status,
                     'completed_checklists' => $target->checklists->where('is_completed', true)->count(),
                     'total_checklists' => $target->checklists->count(),
+                    'work_status_label' => $target->work_status_label,
+                    'work_status_class' => $target->work_status_class,
                 ],
                 'task' => [
                     'id' => $task->id,
@@ -243,9 +245,11 @@ class CabinetChecklistController extends Controller
             $cabinetCounts = $cabinet->fresh('tasks.subtasks.checklists')->checklist_counts;
 
             return response()->json([
-                // present only when a rule moved the Sub Task's workflow status, so the UI can re-render its buttons/badge
-                'assignment' => $statusChanged ? $assignments->payload($subtask, $request->user()) : null,
-                'html' => $statusChanged ? view('cabinets.partials._assignment', ['subtask' => $subtask, 'departments' => Department::orderBy('name')->get()])->render() : null,
+                // always: the Sub Task's one status carries the checklist % (work_status_label), so its badge / buttons re-render
+                // on every tick; 'status_changed' says whether the step itself moved
+                'assignment' => $assignments->payload($subtask, $request->user()),
+                'html' => view('cabinets.partials._assignment', ['subtask' => $subtask, 'departments' => Department::orderBy('name')->get()])->render(),
+                'status_changed' => $statusChanged,
                 'checklist' => [
                     'id' => $checklist->id,
                     'is_completed' => $checklist->is_completed,
@@ -258,6 +262,8 @@ class CabinetChecklistController extends Controller
                     'status' => $subtask->status,
                     'completed_checklists' => $subtaskCounts['completed'],
                     'total_checklists' => $subtaskCounts['total'],
+                    'work_status_label' => $subtask->work_status_label,
+                    'work_status_class' => $subtask->work_status_class,
                 ],
                 'task' => [
                     'id' => $task->id,

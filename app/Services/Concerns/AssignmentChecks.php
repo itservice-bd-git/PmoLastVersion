@@ -23,8 +23,18 @@ trait AssignmentChecks
             'can_accept' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_ASSIGNED,
             'can_reject' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_ASSIGNED,   // "ไม่รับงาน" with a reason
             'can_start' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_ACCEPTED,
-            'can_complete' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_IN_PROGRESS,
+            // work with a checklist is done by ticking it all (followChecklist), so no button that could disagree with the list
+            'can_complete' => $inDepartment && $subtask->assignment_status === CabinetSubtask::ASSIGNMENT_IN_PROGRESS && ! $this->hasChecklist($subtask),
         ];
+    }
+
+    private function hasChecklist(CabinetSubtask $subtask): bool
+    {
+        return match (true) {
+            $subtask->relationLoaded('checklists') => $subtask->checklists->isNotEmpty(),
+            isset($subtask->checklists_count) => $subtask->checklists_count > 0,   // งานแผนก's rows come with the count
+            default => $subtask->checklists()->exists(),
+        };
     }
 
     /**
@@ -40,6 +50,8 @@ trait AssignmentChecks
             'department_name' => $subtask->department?->name,
             'assignment_status' => $subtask->assignment_status,
             'assignment_status_label' => $subtask->assignment_status_label,
+            'work_status_label' => $subtask->work_status_label,
+            'work_status_class' => $subtask->work_status_class,
             'is_department_locked' => $subtask->is_department_locked,
             'accepted_by_name' => $subtask->acceptedBy?->name,
             'accepted_at' => $subtask->accepted_at?->thaiDateTime(),

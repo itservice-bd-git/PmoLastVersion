@@ -11,10 +11,11 @@
 
             <x-card title="บล็อกการกดเสร็จ" subtitle="ใช้กับทุกหน้า (Planning, หน้าโครงการ, หน้าตู้)">
                 <div class="space-y-3">
-                    <label class="flex items-start gap-3 text-sm">
-                        <input type="checkbox" name="block_done_needs_checklist" value="1" @checked($values['block_done_needs_checklist']) class="mt-0.5 rounded border-slate-300 text-blue-600">
-                        <span><span class="font-semibold text-slate-800">ปิดงานของแผนกไม่ได้ ถ้าเช็คลิสต์ยังไม่ครบ</span><br><span class="text-xs text-slate-500">ปุ่ม "เสร็จงาน" จะถูกปฏิเสธจนกว่าจะติ๊กครบทุกรายการ (รวมที่ระบบ Automation กดให้)</span></span>
-                    </label>
+                    {{-- always on now: the checklist decides a Sub Task's status (SubtaskAssignmentService::followChecklist) --}}
+                    <p class="flex items-start gap-3 text-sm">
+                        <span class="mt-0.5 text-emerald-600" aria-hidden="true">✓</span>
+                        <span><span class="font-semibold text-slate-800">งานที่มีเช็คลิสต์ เสร็จเมื่อติ๊กครบทุกข้อ</span><br><span class="text-xs text-slate-500">เปิดใช้เสมอ: ติ๊กครบแล้วงานเป็น "เสร็จงานแล้ว" ทันที ยกเลิกติ๊กแล้วกลับไปขั้นเดิม และกด "เสร็จงาน" ไม่ได้ถ้ายังติ๊กไม่ครบ</span></span>
+                    </p>
                     <label class="flex items-start gap-3 text-sm">
                         <input type="checkbox" name="block_project_done_needs_work" value="1" @checked($values['block_project_done_needs_work']) class="mt-0.5 rounded border-slate-300 text-blue-600">
                         <span><span class="font-semibold text-slate-800">ปิดโครงการ (Completed) ไม่ได้ ถ้ายังมีงานของแผนกที่ไม่เสร็จ</span><br><span class="text-xs text-slate-500">นับงานที่จ่ายให้แผนกแล้วแต่ยังไม่ปิด</span></span>

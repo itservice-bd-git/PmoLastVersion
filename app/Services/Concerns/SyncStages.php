@@ -112,7 +112,10 @@ trait SyncStages
             throw new PlanningRejected('ใส่เหตุผลที่ไม่รับงาน');
         }
         $project = $this->projectFor($user, $op['taskId'] ?? null);
-        $eligible = $this->deptSubtasks($project, $user, $op['deptId'] ?? null)->where('assignment_status', self::STEP_FROM[$step])->values();
+        $eligible = $this->deptSubtasks($project, $user, $op['deptId'] ?? null)->where('assignment_status', self::STEP_FROM[$step])
+            // ปิดงาน: only work without a checklist - with one, ticking it all is what finishes it (followChecklist)
+            ->when($step === 'complete', fn ($rows) => $rows->filter(fn ($s) => ! $s->checklists()->exists()))
+            ->values();
         if ($eligible->isEmpty()) {
             throw new PlanningRejected('ไม่มีงานที่ทำรายการนี้ได้ในขณะนี้');
         }

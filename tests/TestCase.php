@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Models\AppSetting;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
@@ -11,6 +12,6 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
 
         // AppSetting remembers its rows for the request; a test process is many "requests" over refreshed databases
-        \App\Models\AppSetting::flush();
+        AppSetting::flush();
     }
 }

@@ -9,13 +9,13 @@ use App\Models\NotificationPreference;
 use App\Models\Project;
 use App\Models\User;
 use App\Notifications\PmoNotice;
+use App\Services\Concerns\DeliveryNotices;
+use App\Services\Concerns\NoticeReceipts;
+use App\Services\Concerns\ProjectNotices;
+use App\Services\Concerns\Reminders;
+use App\Services\Concerns\WorkNotices;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Collection;
-use App\Services\Concerns\WorkNotices;
-use App\Services\Concerns\ProjectNotices;
-use App\Services\Concerns\NoticeReceipts;
-use App\Services\Concerns\DeliveryNotices;
-use App\Services\Concerns\Reminders;
 
 /**
  * Who hears about what:
@@ -30,7 +30,7 @@ use App\Services\Concerns\Reminders;
  */
 class NotificationService
 {
-    use WorkNotices, ProjectNotices, NoticeReceipts, DeliveryNotices, Reminders;
+    use DeliveryNotices, NoticeReceipts, ProjectNotices, Reminders, WorkNotices;
 
     /** Work handed out while batch() runs: one notice per department and project at the end, not one per sub task. */
     private static ?array $batch = null;   // static: every NotificationService instance in this request shares it
@@ -56,6 +56,7 @@ class NotificationService
         foreach (collect($queued)->groupBy(fn ($q) => $q[0]->department_id.'|'.$q[0]->cabinetTask->cabinet->project_id.'|'.(int) $q[2]) as $group) {
             if ($group->count() === 1) {
                 $this->assigned(...$group->first());
+
                 continue;
             }
             [$first, $actor, $moved] = $group->first();
@@ -83,7 +84,7 @@ class NotificationService
     private function followers(CabinetSubtask $subtask, User $actor): Collection
     {
         $project = $subtask->cabinetTask->cabinet->project;
-        $dispatcher = \App\Models\ActivityLog::where('loggable_type', CabinetSubtask::class)->where('loggable_id', $subtask->id)
+        $dispatcher = ActivityLog::where('loggable_type', CabinetSubtask::class)->where('loggable_id', $subtask->id)
             ->whereIn('action', ['assigned', 'department_changed'])->latest('id')->value('user_id');
         $people = $this->peopleInCharge($project, $actor)
             ->merge(User::where('id', $dispatcher)->where('is_active', true)->where('id', '!=', $actor->id)->get())->unique('id');
@@ -95,7 +96,7 @@ class NotificationService
     private function projectFollowers(Project $project, ?User $except = null): Collection
     {
         return $project->followers()->where('users.is_active', true)->when($except, fn ($q) => $q->where('users.id', '!=', $except->id))->get()
-            ->filter(fn (User $u) => \App\Services\WorkScope::canSeeProject($project, $u))->values();
+            ->filter(fn (User $u) => WorkScope::canSeeProject($project, $u))->values();
     }
 
     /** The project's PM and its people in charge (Planning), active, not $except. */
@@ -169,6 +170,7 @@ class NotificationService
             if ($notice->group && $this->collapse($user, $notice)) {
                 $delivered->push($user);
                 $count++;
+
                 continue;
             }
 

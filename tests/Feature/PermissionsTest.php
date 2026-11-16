@@ -2,16 +2,21 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\AssignmentException;
 use App\Models\ActivityLog;
 use App\Models\AppSetting;
 use App\Models\Cabinet;
+use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
 use App\Models\Department;
+use App\Models\DepartmentField;
 use App\Models\Project;
+use App\Models\ProjectFieldValue;
 use App\Models\User;
 use App\Services\PlanningBoard;
 use App\Services\PlanningSync;
+use App\Services\SubtaskAssignmentService;
 use App\Support\Access;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -187,8 +192,8 @@ class PermissionsTest extends TestCase
 
     public function test_other_departments_extra_fields_follow_the_table(): void
     {
-        $field = \App\Models\DepartmentField::create(['department_id' => $this->wiring->id, 'name' => 'สายไฟ', 'type' => 'text', 'sort' => 1]);
-        \App\Models\ProjectFieldValue::create(['project_id' => $this->theirs->id, 'department_field_id' => $field->id, 'value' => 'THW 4 sq.mm']);
+        $field = DepartmentField::create(['department_id' => $this->wiring->id, 'name' => 'สายไฟ', 'type' => 'text', 'sort' => 1]);
+        ProjectFieldValue::create(['project_id' => $this->theirs->id, 'department_field_id' => $field->id, 'value' => 'THW 4 sq.mm']);
         $this->busbar->update(['sees_all' => true]);   // to see Wiring's part of the project at all
         $this->allow($this->busbar, ['data.other_fields' => true]);
         $sales = $this->user('member', $this->busbar);
@@ -253,7 +258,7 @@ class PermissionsTest extends TestCase
     {
         $this->allow($this->busbar, ['edit.work' => false]);
         $sub = CabinetSubtask::whereHas('cabinetTask.cabinet', fn ($q) => $q->where('project_id', $this->ours->id))->first();
-        $item = \App\Models\CabinetChecklist::forceCreate(['cabinet_subtask_id' => $sub->id, 'name' => 'ตรวจ', 'is_completed' => false, 'sequence' => 1]);
+        $item = CabinetChecklist::forceCreate(['cabinet_subtask_id' => $sub->id, 'name' => 'ตรวจ', 'is_completed' => false, 'sequence' => 1]);
         $this->assertTrue($this->member->isViewOnly());
         $this->assertFalse($this->admin->isViewOnly(), 'Admin / PM always work');
 
@@ -263,7 +268,7 @@ class PermissionsTest extends TestCase
 
         // nothing to press, and the server refuses whatever is sent anyway
         $this->assertFalse($sub->isChecklistEditableBy($this->member));
-        $this->assertSame([false, false, false, false], array_values(app(\App\Services\SubtaskAssignmentService::class)->actionsFor($sub, $this->member)));
+        $this->assertSame([false, false, false, false], array_values(app(SubtaskAssignmentService::class)->actionsFor($sub, $this->member)));
         $this->actingAs($this->member)->patchJson(route('checklists.toggle', $item), ['is_completed' => true])->assertForbidden();
         $this->actingAs($this->member)->postJson(route('planning.sync'), ['ops' => [['type' => 'checklist', 'taskId' => 'p'.$this->ours->id, 'itemId' => 'k'.$item->id, 'done' => true]]])
             ->assertForbidden()->assertJsonPath('results.0.ok', false);
@@ -275,8 +280,8 @@ class PermissionsTest extends TestCase
         $this->actingAs($this->member)->postJson(route('notifications.seen'))->assertOk();
 
         // no work can be handed to it
-        $this->expectException(\App\Exceptions\AssignmentException::class);
-        app(\App\Services\SubtaskAssignmentService::class)->changeDepartment(
+        $this->expectException(AssignmentException::class);
+        app(SubtaskAssignmentService::class)->changeDepartment(
             CabinetSubtask::whereHas('cabinetTask.cabinet', fn ($q) => $q->where('project_id', $this->theirs->id))->first(), $this->busbar->id, $this->admin);
     }
 }

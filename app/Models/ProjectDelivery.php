@@ -6,6 +6,7 @@ use App\Models\Concerns\GuardsClosedProject;
 use App\Support\EventStatuses;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * การจัดส่ง: one round of a project's delivery (App\Services\DeliveryFlow). PM may keep it as a draft (ร่าง, e.g. from
@@ -17,7 +18,6 @@ use Illuminate\Support\Carbon;
 class ProjectDelivery extends Model
 {
     use Concerns\PresentsDelivery;
-
     use GuardsClosedProject;
 
     public const DRAFT = 'draft';
@@ -84,7 +84,7 @@ class ProjectDelivery extends Model
         return $this->belongsTo(User::class, 'rejected_by');
     }
 
-    public static function filesOf(iterable $ids): \Illuminate\Support\Collection
+    public static function filesOf(iterable $ids): Collection
     {
         $ids = collect($ids)->map(fn ($id) => (int) $id)->filter()->unique()->values();
         if ($ids->isEmpty()) {

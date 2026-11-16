@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -23,7 +24,7 @@ class EnsurePermission
     }
 
     /** Where someone lands when the dashboard is not for them: the first page they may open. */
-    public static function home(\App\Models\User $user): string
+    public static function home(User $user): string
     {
         foreach (['page.planning' => 'planning.board', 'page.projects' => 'projects.index', 'page.cabinets' => 'cabinets.index'] as $perm => $route) {
             if ($user->allows($perm)) {

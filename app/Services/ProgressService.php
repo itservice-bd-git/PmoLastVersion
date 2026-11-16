@@ -23,7 +23,7 @@ class ProgressService
         $total = $checklist->subtask->checklists()->count();
         $doneBefore = $checklist->subtask->checklists()->where('is_completed', true)->count();
 
-                $checklist->is_completed = $completed;
+        $checklist->is_completed = $completed;
         $checklist->completed_by = $completed ? $user?->id : null;
         $checklist->completed_at = $completed ? now() : null;
         $checklist->save();

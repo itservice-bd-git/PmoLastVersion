@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\ActivityLog;
 use App\Models\AppSetting;
+use App\Models\Cabinet;
 use App\Models\Department;
 use App\Models\EventDateChange;
 use App\Models\Project;
@@ -220,7 +221,7 @@ class DatePendingTest extends TestCase
         $this->wait(['reason_id' => '', 'note' => ''])->assertSessionHasErrors(['reason_id' => 'เลือกสาเหตุ', 'note' => 'ใส่รายละเอียด']);
         $this->assertFalse($this->project->fresh()->isDuePending());
 
-        $cabinet = \App\Models\Cabinet::forceCreate(['project_id' => $this->project->id, 'mo_no' => 'MO-1', 'cabinet_name' => 'MDB', 'status' => 'not_started', 'due_date' => '2026-11-05']);
+        $cabinet = Cabinet::forceCreate(['project_id' => $this->project->id, 'mo_no' => 'MO-1', 'cabinet_name' => 'MDB', 'status' => 'not_started', 'due_date' => '2026-11-05']);
         $this->actingAs($this->pm)->post(route('cabinets.dates.store', $cabinet), ['kind' => 'pending', 'reason_id' => $this->reason()->id, 'note' => 'x'])
             ->assertSessionHasErrors('kind');
 

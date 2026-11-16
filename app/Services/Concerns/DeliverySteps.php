@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\ProjectDelivery;
 use App\Models\User;
 use App\Services\DeliveryChecklist;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -180,7 +181,7 @@ trait DeliverySteps
      * round's id (ProjectDelivery::filesOf): seen in the Comment tab and on the round; each save adds, none is replaced.
      *
      * @param  array{delivered_date: string, delivered_time?: ?string, issue?: ?string, cabinet_ids: list<int>}  $data
-     * @param  array<int, \Illuminate\Http\UploadedFile>  $files
+     * @param  array<int, UploadedFile>  $files
      * @param  string|null  $via  how it came in, said in the history (the driver's link: ผ่านลิงก์คนขับ - $actor is the one who sent it)
      * @param  bool  $review  รอตรวจ (the driver's link): delivered, but PM is told only once the delivery department has looked
      *                        at it (review(), or its own ส่งถึงแล้ว / แก้ข้อมูลส่งถึง saved over it)

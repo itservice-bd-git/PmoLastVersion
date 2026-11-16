@@ -2,22 +2,15 @@
 
 namespace App\Services\Concerns;
 
-use App\Models\ActivityLog;
+use App\Models\AppSetting;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
-use App\Models\NotificationPreference;
 use App\Models\Project;
-use App\Models\User;
 use App\Notifications\PmoNotice;
 use App\Services\ChecklistNoticeRules;
-use App\Services\DeliveryFlow;
 use App\Services\HandoffService;
 use App\Services\PlanningBoard;
-use App\Services\PlanningSync;
-use App\Services\ProjectFollowers;
-use App\Services\StatusReport;
-use App\Services\WebPushService;
-use Illuminate\Notifications\DatabaseNotification;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -130,9 +123,9 @@ trait Reminders
      * project) and so do the people in charge of the project - every Admin / PM when nobody is - one notice per project
      * naming the departments. Once a day.
      */
-    private function waitingReminders(\Carbon\Carbon $today): int
+    private function waitingReminders(Carbon $today): int
     {
-        $days = (int) \App\Models\AppSetting::get('waiting_reminder_days');
+        $days = (int) AppSetting::get('waiting_reminder_days');
         if ($days <= 0) {
             return 0;
         }

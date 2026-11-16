@@ -8,18 +8,43 @@ use App\Http\Controllers\CabinetSubtaskController;
 use App\Http\Controllers\CabinetTaskController;
 use App\Http\Controllers\CabinetTemplateController;
 use App\Http\Controllers\CabinetTemplateItemController;
+use App\Http\Controllers\ChecklistBulkController;
+use App\Http\Controllers\ChecklistEditorController;
+use App\Http\Controllers\DailyWorkController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\PlanningController;
-use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\DayNoteController;
+use App\Http\Controllers\DeliveryController;
+use App\Http\Controllers\DepartmentExportController;
+use App\Http\Controllers\DriverLinkController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PlanningController;
+use App\Http\Controllers\ProductionReportController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
-use App\Http\Controllers\TrashController;
+use App\Http\Controllers\ProjectDateController;
+use App\Http\Controllers\ProjectDeliveryController;
+use App\Http\Controllers\ProjectFatController;
 use App\Http\Controllers\ProjectTaskController;
-use App\Http\Controllers\StatusReportController;
+use App\Http\Controllers\PushController;
 use App\Http\Controllers\Settings\AutomationController;
+use App\Http\Controllers\Settings\BoardController;
+use App\Http\Controllers\Settings\ChecklistNoticeRuleController;
+use App\Http\Controllers\Settings\ChecklistStatusController;
 use App\Http\Controllers\Settings\DepartmentController;
+use App\Http\Controllers\Settings\FieldController;
 use App\Http\Controllers\Settings\JobTypeController;
+use App\Http\Controllers\Settings\PermissionController;
+use App\Http\Controllers\Settings\ProjectDateReasonController;
+use App\Http\Controllers\Settings\SettingsController;
+use App\Http\Controllers\Settings\StatusController;
+use App\Http\Controllers\Settings\StatusRuleController;
 use App\Http\Controllers\Settings\UserController;
+use App\Http\Controllers\Settings\VehicleController;
+use App\Http\Controllers\StatusReportController;
+use App\Http\Controllers\TemplatePairController;
+use App\Http\Controllers\TemplateToolsController;
+use App\Http\Controllers\TrashController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -29,20 +54,20 @@ Route::get('/', function () {
 // ลิงก์คนขับ (DriverLinkController): no login - the signed link names the round and who shared it; it works while the round
 // is ออกจากโรงงาน
 Route::middleware(['signed:relative', 'throttle:20,1'])->group(function () {
-    Route::get('drive/{delivery}', [\App\Http\Controllers\DriverLinkController::class, 'show'])->name('driver.show');
-    Route::post('drive/{delivery}', [\App\Http\Controllers\DriverLinkController::class, 'store'])->name('driver.store');
+    Route::get('drive/{delivery}', [DriverLinkController::class, 'show'])->name('driver.show');
+    Route::post('drive/{delivery}', [DriverLinkController::class, 'store'])->name('driver.store');
 });
 
 // Real per-user login is required for everything below. A project (or anything in one) opens only for people who see it;
 // 'perm:…' = Settings > สิทธิ์การใช้งาน (App\Support\Access).
 Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('perm:page.dashboard')->name('dashboard');
-    Route::get('reports/production', [\App\Http\Controllers\ProductionReportController::class, 'index'])->middleware('perm:page.dashboard')->name('reports.production');   // รายงานการผลิต
+    Route::get('reports/production', [ProductionReportController::class, 'index'])->middleware('perm:page.dashboard')->name('reports.production');   // รายงานการผลิต
     Route::get('reports/ceo', [DashboardController::class, 'report'])->middleware('perm:page.dashboard')->name('reports.ceo');
     Route::middleware('perm:page.today')->group(function () {   // สรุปงาน: the page and the JSON it polls every few seconds
-        Route::get('reports/today', [\App\Http\Controllers\DailyWorkController::class, 'index'])->name('reports.today');
-        Route::get('reports/today/data', [\App\Http\Controllers\DailyWorkController::class, 'data'])->middleware('throttle:120,1')->name('reports.today.data');
-        Route::post('reports/today/acknowledge', [\App\Http\Controllers\DailyWorkController::class, 'acknowledge'])->middleware('throttle:120,1')->name('reports.today.acknowledge');
+        Route::get('reports/today', [DailyWorkController::class, 'index'])->name('reports.today');
+        Route::get('reports/today/data', [DailyWorkController::class, 'data'])->middleware('throttle:120,1')->name('reports.today.data');
+        Route::post('reports/today/acknowledge', [DailyWorkController::class, 'acknowledge'])->middleware('throttle:120,1')->name('reports.today.acknowledge');
     });
 
     Route::get('projects/export', [ProjectController::class, 'export'])->middleware('perm:page.export')->name('projects.export');
@@ -58,26 +83,26 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     });
 
     // "งานแผนกของฉัน" and Planning are ONE page now: the Planning board. The old URL (bookmarks, old notices) lands there.
-    Route::get('my-department', fn (\Illuminate\Http\Request $r) => redirect()->route('planning.board', $r->only('project')))->name('my-department.index');
+    Route::get('my-department', fn (Request $r) => redirect()->route('planning.board', $r->only('project')))->name('my-department.index');
     // Trial: the original Avatar Planning page running on PMO data (read-only) - see PlanningController.
     Route::middleware(['gzip', 'perm:page.planning'])->group(function () {
-        Route::get('planning', fn (\Illuminate\Http\Request $r) => redirect()->route('planning.board', $r->only('project')))->name('planning.index');
+        Route::get('planning', fn (Request $r) => redirect()->route('planning.board', $r->only('project')))->name('planning.index');
         // the original single-file page, kept only as a hidden fallback (not linked anywhere)
         // the old single-file Planning SPA was removed (2026-11): its address goes to the page that replaced it
-        Route::get('planning/classic', fn (\Illuminate\Http\Request $r) => redirect()->route('planning.board', $r->only('project')))->name('planning.spa');
+        Route::get('planning/classic', fn (Request $r) => redirect()->route('planning.board', $r->only('project')))->name('planning.spa');
         Route::get('planning/board', [PlanningController::class, 'board'])->name('planning.board');
         Route::get('planning/data', [PlanningController::class, 'data'])->name('planning.data');
         Route::get('planning/cabinets/{cabinet}', [PlanningController::class, 'cabinet'])->name('planning.cabinet');
         Route::get('planning/work-order', [PlanningController::class, 'workOrder'])->name('planning.work-order');
         Route::post('planning/comment', [PlanningController::class, 'comment'])->middleware(['throttle:60,1', 'perm:data.comments'])->name('planning.comment');
         // หมายเหตุรายวัน: a department's notes for a day (DayNoteController)
-        Route::get('planning/day-notes', [\App\Http\Controllers\DayNoteController::class, 'index'])->name('planning.day-notes.index');
-        Route::post('planning/day-notes', [\App\Http\Controllers\DayNoteController::class, 'store'])->middleware('throttle:60,1')->name('planning.day-notes.store');
-        Route::patch('planning/day-notes/{note}', [\App\Http\Controllers\DayNoteController::class, 'update'])->middleware('throttle:60,1')->name('planning.day-notes.update');
-        Route::delete('planning/day-notes/{note}', [\App\Http\Controllers\DayNoteController::class, 'destroy'])->middleware('throttle:60,1')->name('planning.day-notes.destroy');
+        Route::get('planning/day-notes', [DayNoteController::class, 'index'])->name('planning.day-notes.index');
+        Route::post('planning/day-notes', [DayNoteController::class, 'store'])->middleware('throttle:60,1')->name('planning.day-notes.store');
+        Route::patch('planning/day-notes/{note}', [DayNoteController::class, 'update'])->middleware('throttle:60,1')->name('planning.day-notes.update');
+        Route::delete('planning/day-notes/{note}', [DayNoteController::class, 'destroy'])->middleware('throttle:60,1')->name('planning.day-notes.destroy');
         Route::post('planning/sync', [PlanningController::class, 'sync'])->middleware('throttle:240,1')->name('planning.sync');
     });
-    Route::get('my-department/export', \App\Http\Controllers\DepartmentExportController::class)->middleware('perm:page.export')->name('my-department.export');
+    Route::get('my-department/export', DepartmentExportController::class)->middleware('perm:page.export')->name('my-department.export');
 
     Route::get('status-report', [StatusReportController::class, 'show'])->name('status-report.show');
     Route::post('status-report/acknowledge', [StatusReportController::class, 'acknowledge'])->name('status-report.acknowledge');
@@ -109,22 +134,22 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
 
     // วัน FAT (Admin / PM, checked in the controller): a round per appointment, the latest shows on Planning
     // เลื่อน / แก้วันโครงการ (with a reason; counted rounds): App\Services\ProjectDates
-    Route::get('projects/{project}/dates', [\App\Http\Controllers\ProjectDateController::class, 'form'])->middleware('pmo')->name('projects.dates.form');   // Planning's project window
-    Route::post('projects/{project}/dates', [\App\Http\Controllers\ProjectDateController::class, 'store'])->middleware('pmo')->name('projects.dates.store');
-    Route::post('projects/{project}/dates/pending', [\App\Http\Controllers\ProjectDateController::class, 'pending'])->middleware('pmo')->name('projects.dates.pending');   // รอฝ่ายขายแจ้งกำหนดส่ง: ยกเลิกการรอ
-    Route::post('cabinets/{cabinet}/dates', [\App\Http\Controllers\ProjectDateController::class, 'storeCabinet'])->middleware('pmo')->name('cabinets.dates.store');
-    Route::get('projects/{project}/fat', [\App\Http\Controllers\ProjectFatController::class, 'form'])->name('projects.fats.form');   // Planning's project window
-    Route::post('projects/{project}/fats', [\App\Http\Controllers\ProjectFatController::class, 'store'])->name('projects.fats.store');
-    Route::put('project-fats/{fat}', [\App\Http\Controllers\ProjectFatController::class, 'update'])->name('project-fats.update');
-    Route::delete('project-fats/{fat}', [\App\Http\Controllers\ProjectFatController::class, 'destroy'])->name('project-fats.destroy');
+    Route::get('projects/{project}/dates', [ProjectDateController::class, 'form'])->middleware('pmo')->name('projects.dates.form');   // Planning's project window
+    Route::post('projects/{project}/dates', [ProjectDateController::class, 'store'])->middleware('pmo')->name('projects.dates.store');
+    Route::post('projects/{project}/dates/pending', [ProjectDateController::class, 'pending'])->middleware('pmo')->name('projects.dates.pending');   // รอฝ่ายขายแจ้งกำหนดส่ง: ยกเลิกการรอ
+    Route::post('cabinets/{cabinet}/dates', [ProjectDateController::class, 'storeCabinet'])->middleware('pmo')->name('cabinets.dates.store');
+    Route::get('projects/{project}/fat', [ProjectFatController::class, 'form'])->name('projects.fats.form');   // Planning's project window
+    Route::post('projects/{project}/fats', [ProjectFatController::class, 'store'])->name('projects.fats.store');
+    Route::put('project-fats/{fat}', [ProjectFatController::class, 'update'])->name('project-fats.update');
+    Route::delete('project-fats/{fat}', [ProjectFatController::class, 'destroy'])->name('project-fats.destroy');
     // การจัดส่ง (Admin / PM, checked in the controller): PM sends a round to the delivery department; Planning opens the same window
-    Route::get('projects/{project}/delivery', [\App\Http\Controllers\ProjectDeliveryController::class, 'form'])->name('projects.deliveries.form');
-    Route::post('projects/{project}/deliveries', [\App\Http\Controllers\ProjectDeliveryController::class, 'store'])->name('projects.deliveries.store');
-    Route::put('project-deliveries/{delivery}', [\App\Http\Controllers\ProjectDeliveryController::class, 'update'])->name('project-deliveries.update');
-    Route::delete('project-deliveries/{delivery}', [\App\Http\Controllers\ProjectDeliveryController::class, 'destroy'])->name('project-deliveries.destroy');
+    Route::get('projects/{project}/delivery', [ProjectDeliveryController::class, 'form'])->name('projects.deliveries.form');
+    Route::post('projects/{project}/deliveries', [ProjectDeliveryController::class, 'store'])->name('projects.deliveries.store');
+    Route::put('project-deliveries/{delivery}', [ProjectDeliveryController::class, 'update'])->name('project-deliveries.update');
+    Route::delete('project-deliveries/{delivery}', [ProjectDeliveryController::class, 'destroy'])->name('project-deliveries.destroy');
     // งานจัดส่ง: the delivery department's page and its steps (App\Services\DeliveryFlow); รถขนส่ง is theirs to keep too
     Route::middleware('perm:edit.delivery')->group(function () {
-        $deliveries = \App\Http\Controllers\DeliveryController::class;
+        $deliveries = DeliveryController::class;
         Route::get('deliveries', [$deliveries, 'index'])->name('deliveries.index');
         Route::post('deliveries/{delivery}/assign', [$deliveries, 'assign'])->name('deliveries.assign');
         Route::post('deliveries/{delivery}/pack', [$deliveries, 'pack'])->name('deliveries.pack');
@@ -134,7 +159,7 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
         Route::post('deliveries/{delivery}/deliver', [$deliveries, 'deliver'])->name('deliveries.deliver');
         Route::post('deliveries/{delivery}/review', [$deliveries, 'review'])->name('deliveries.review');
         Route::post('deliveries/{delivery}/back', [$deliveries, 'back'])->name('deliveries.back');
-        $vehicles = \App\Http\Controllers\Settings\VehicleController::class;
+        $vehicles = VehicleController::class;
         Route::get('settings/vehicles', [$vehicles, 'index'])->name('settings.vehicles.index');
         Route::post('settings/vehicles', [$vehicles, 'store'])->name('settings.vehicles.store');
         Route::put('settings/vehicles/reasons', [$vehicles, 'reasons'])->name('settings.vehicles.reasons');
@@ -151,7 +176,7 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::post('projects/{project}/cabinets', [CabinetController::class, 'store'])->middleware('pmo')->name('cabinets.store');
     Route::post('cabinets/{cabinet}/copy', [CabinetController::class, 'copy'])->middleware('pmo')->name('cabinets.copy');
     Route::get('cabinets/{cabinet}', [CabinetController::class, 'show'])->name('cabinets.show');
-    Route::get('cabinets/{cabinet}/checklists-live', [\App\Http\Controllers\ChecklistEditorController::class, 'live'])->name('cabinets.checklists-live');   // the cabinet page without reloads
+    Route::get('cabinets/{cabinet}/checklists-live', [ChecklistEditorController::class, 'live'])->name('cabinets.checklists-live');   // the cabinet page without reloads
     Route::get('cabinets/{cabinet}/edit', [CabinetController::class, 'edit'])->middleware('pmo')->name('cabinets.edit');
     Route::put('cabinets/{cabinet}', [CabinetController::class, 'update'])->middleware('pmo')->name('cabinets.update');
     Route::delete('cabinets/{cabinet}', [CabinetController::class, 'destroy'])->middleware('pmo')->name('cabinets.destroy');
@@ -161,7 +186,7 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::post('cabinets/{cabinet}/tasks', [CabinetTaskController::class, 'store'])->middleware('pmo')->name('cabinet-tasks.store');
     Route::post('cabinet-tasks/{cabinetTask}/subtasks', [CabinetSubtaskController::class, 'store'])->middleware('pmo')->name('cabinet-subtasks.store');
     Route::put('cabinet-tasks/{cabinetTask}', [CabinetTaskController::class, 'update'])->middleware('pmo')->name('cabinet-tasks.update');
-    Route::put('cabinet-subtasks/{cabinetSubtask}/pairs', [\App\Http\Controllers\TemplatePairController::class, 'updateCabinet'])->name('cabinet-subtasks.pairs');   // "แก้คู่เทียบ" of one cabinet (Admin / PM)
+    Route::put('cabinet-subtasks/{cabinetSubtask}/pairs', [TemplatePairController::class, 'updateCabinet'])->name('cabinet-subtasks.pairs');   // "แก้คู่เทียบ" of one cabinet (Admin / PM)
     Route::post('cabinet-subtasks/remind', [CabinetSubtaskController::class, 'remind'])->name('cabinet-subtasks.remind');   // "ทวงถาม" work still รอรับ
     Route::post('cabinet-subtasks/bulk-department', [CabinetSubtaskController::class, 'bulkDepartment'])->name('cabinet-subtasks.bulk-department');   // many at once (cabinet page ticks / a whole step)
     Route::put('cabinet-subtasks/{cabinetSubtask}', [CabinetSubtaskController::class, 'update'])->middleware('pmo')->name('cabinet-subtasks.update');
@@ -177,14 +202,14 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::post('cabinet-subtasks/{cabinetSubtask}/copy-checklists', [CabinetChecklistController::class, 'copyChecklists'])->name('checklists.copy');
     Route::patch('checklists/{checklist}/toggle', [CabinetChecklistController::class, 'toggle'])->name('checklists.toggle');
     // the one checklist editor (cabinet page + template page): read the list / its move-copy choices, apply one operation
-    Route::get('projects/{project}/checklist-bulk', [\App\Http\Controllers\ChecklistBulkController::class, 'options'])->middleware('pmo')->name('projects.checklist-bulk.options');
-    Route::post('projects/{project}/checklist-bulk', [\App\Http\Controllers\ChecklistBulkController::class, 'run'])->middleware('pmo')->name('projects.checklist-bulk.run');
-    Route::get('checklist-editor/{kind}/{id}', [\App\Http\Controllers\ChecklistEditorController::class, 'show'])->whereNumber('id')->name('checklist-editor.show');
-    Route::post('checklist-editor/{kind}/{id}', [\App\Http\Controllers\ChecklistEditorController::class, 'apply'])->whereNumber('id')->name('checklist-editor.apply');
+    Route::get('projects/{project}/checklist-bulk', [ChecklistBulkController::class, 'options'])->middleware('pmo')->name('projects.checklist-bulk.options');
+    Route::post('projects/{project}/checklist-bulk', [ChecklistBulkController::class, 'run'])->middleware('pmo')->name('projects.checklist-bulk.run');
+    Route::get('checklist-editor/{kind}/{id}', [ChecklistEditorController::class, 'show'])->whereNumber('id')->name('checklist-editor.show');
+    Route::post('checklist-editor/{kind}/{id}', [ChecklistEditorController::class, 'apply'])->whereNumber('id')->name('checklist-editor.apply');
     Route::patch('checklists/{checklist}/remark', [CabinetChecklistController::class, 'updateRemark'])->name('checklists.update-remark');
     Route::delete('checklists/{checklist}', [CabinetChecklistController::class, 'destroy'])->name('checklists.destroy');
 
-    Route::middleware('perm:edit.templates')->controller(\App\Http\Controllers\TemplateToolsController::class)->group(function () {   // template tools
+    Route::middleware('perm:edit.templates')->controller(TemplateToolsController::class)->group(function () {   // template tools
         Route::post('cabinet-templates/import', 'import')->name('cabinet-templates.import');
         Route::get('cabinet-templates/{cabinetTemplate}/export', 'export')->name('cabinet-templates.export');
         Route::post('cabinet-templates/{cabinetTemplate}/duplicate', 'duplicateTemplate')->name('cabinet-templates.duplicate');
@@ -196,52 +221,52 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::resource('cabinet-templates', CabinetTemplateController::class)->middlewareFor(['create', 'store', 'edit', 'update', 'destroy'], 'perm:edit.templates')
         ->middlewareFor(['index', 'show'], 'perm:page.templates');
     Route::middleware('perm:edit.templates')->group(function () {   // the template's tasks / sub tasks / checklists
-    Route::post('cabinet-templates/{cabinetTemplate}/task-templates', [CabinetTemplateItemController::class, 'storeTask'])->name('task-templates.store');
-    Route::patch('task-templates/reorder', [CabinetTemplateItemController::class, 'reorderTasks'])->name('task-templates.reorder');
-    Route::put('task-templates/{taskTemplate}', [CabinetTemplateItemController::class, 'updateTask'])->name('task-templates.update');
-    Route::delete('task-templates/{taskTemplate}', [CabinetTemplateItemController::class, 'destroyTask'])->name('task-templates.destroy');
-    Route::post('task-templates/{taskTemplate}/subtask-templates', [CabinetTemplateItemController::class, 'storeSubtask'])->name('subtask-templates.store');
-    Route::patch('subtask-templates/reorder', [CabinetTemplateItemController::class, 'reorderSubtasks'])->name('subtask-templates.reorder');
-    Route::put('subtask-templates/{subtaskTemplate}', [CabinetTemplateItemController::class, 'updateSubtask'])->name('subtask-templates.update');
-    Route::delete('subtask-templates/{subtaskTemplate}', [CabinetTemplateItemController::class, 'destroySubtask'])->name('subtask-templates.destroy');
-    Route::put('subtask-templates/{subtaskTemplate}/pairs', [\App\Http\Controllers\TemplatePairController::class, 'update'])->name('subtask-templates.pairs');   // "เทียบกับ…"
-    Route::post('cabinet-templates/{cabinetTemplate}/pairs/apply', [\App\Http\Controllers\TemplatePairController::class, 'apply'])->name('cabinet-templates.pairs.apply');
-    Route::post('subtask-templates/{subtaskTemplate}/checklist-templates', [CabinetTemplateItemController::class, 'storeChecklist'])->name('checklist-templates.store');
-    Route::patch('checklist-templates/reorder', [CabinetTemplateItemController::class, 'reorderChecklists'])->name('checklist-templates.reorder');
-    Route::put('checklist-templates/{checklistTemplate}', [CabinetTemplateItemController::class, 'updateChecklist'])->name('checklist-templates.update');
-    Route::delete('checklist-templates/{checklistTemplate}', [CabinetTemplateItemController::class, 'destroyChecklist'])->name('checklist-templates.destroy');
+        Route::post('cabinet-templates/{cabinetTemplate}/task-templates', [CabinetTemplateItemController::class, 'storeTask'])->name('task-templates.store');
+        Route::patch('task-templates/reorder', [CabinetTemplateItemController::class, 'reorderTasks'])->name('task-templates.reorder');
+        Route::put('task-templates/{taskTemplate}', [CabinetTemplateItemController::class, 'updateTask'])->name('task-templates.update');
+        Route::delete('task-templates/{taskTemplate}', [CabinetTemplateItemController::class, 'destroyTask'])->name('task-templates.destroy');
+        Route::post('task-templates/{taskTemplate}/subtask-templates', [CabinetTemplateItemController::class, 'storeSubtask'])->name('subtask-templates.store');
+        Route::patch('subtask-templates/reorder', [CabinetTemplateItemController::class, 'reorderSubtasks'])->name('subtask-templates.reorder');
+        Route::put('subtask-templates/{subtaskTemplate}', [CabinetTemplateItemController::class, 'updateSubtask'])->name('subtask-templates.update');
+        Route::delete('subtask-templates/{subtaskTemplate}', [CabinetTemplateItemController::class, 'destroySubtask'])->name('subtask-templates.destroy');
+        Route::put('subtask-templates/{subtaskTemplate}/pairs', [TemplatePairController::class, 'update'])->name('subtask-templates.pairs');   // "เทียบกับ…"
+        Route::post('cabinet-templates/{cabinetTemplate}/pairs/apply', [TemplatePairController::class, 'apply'])->name('cabinet-templates.pairs.apply');
+        Route::post('subtask-templates/{subtaskTemplate}/checklist-templates', [CabinetTemplateItemController::class, 'storeChecklist'])->name('checklist-templates.store');
+        Route::patch('checklist-templates/reorder', [CabinetTemplateItemController::class, 'reorderChecklists'])->name('checklist-templates.reorder');
+        Route::put('checklist-templates/{checklistTemplate}', [CabinetTemplateItemController::class, 'updateChecklist'])->name('checklist-templates.update');
+        Route::delete('checklist-templates/{checklistTemplate}', [CabinetTemplateItemController::class, 'destroyChecklist'])->name('checklist-templates.destroy');
     });
 
     // Settings hub: every tab is admin-only except "การแจ้งเตือน" (your own).
-    Route::get('settings', [\App\Http\Controllers\Settings\SettingsController::class, 'index'])->name('settings.index');
-    Route::get('settings/notifications', [\App\Http\Controllers\Settings\SettingsController::class, 'editNotifications'])->name('settings.notifications.edit');
-    Route::put('settings/notifications', [\App\Http\Controllers\Settings\SettingsController::class, 'updateNotifications'])->name('settings.notifications.update');
-    Route::get('settings/rules', [\App\Http\Controllers\Settings\SettingsController::class, 'editRules'])->middleware('admin')->name('settings.rules.edit');
-    Route::put('settings/rules', [\App\Http\Controllers\Settings\SettingsController::class, 'updateRules'])->middleware('admin')->name('settings.rules.update');
+    Route::get('settings', [SettingsController::class, 'index'])->name('settings.index');
+    Route::get('settings/notifications', [SettingsController::class, 'editNotifications'])->name('settings.notifications.edit');
+    Route::put('settings/notifications', [SettingsController::class, 'updateNotifications'])->name('settings.notifications.update');
+    Route::get('settings/rules', [SettingsController::class, 'editRules'])->middleware('admin')->name('settings.rules.edit');
+    Route::put('settings/rules', [SettingsController::class, 'updateRules'])->middleware('admin')->name('settings.rules.update');
 
     Route::middleware('admin')->prefix('settings')->group(function () {
-        Route::get('statuses', [\App\Http\Controllers\Settings\StatusController::class, 'index'])->name('settings.statuses.edit');
-        Route::put('statuses', [\App\Http\Controllers\Settings\StatusController::class, 'update'])->name('settings.statuses.update');
-        Route::post('statuses', [\App\Http\Controllers\Settings\StatusController::class, 'store'])->name('settings.statuses.store');
-        Route::delete('statuses/{status}', [\App\Http\Controllers\Settings\StatusController::class, 'destroy'])->name('settings.statuses.destroy');
-        Route::patch('statuses/{status}/move', [\App\Http\Controllers\Settings\StatusController::class, 'move'])->name('settings.statuses.move');
-        Route::put('statuses/events', [\App\Http\Controllers\Settings\StatusController::class, 'updateEvents'])->name('settings.statuses.events');
-        $boards = \App\Http\Controllers\Settings\BoardController::class;
+        Route::get('statuses', [StatusController::class, 'index'])->name('settings.statuses.edit');
+        Route::put('statuses', [StatusController::class, 'update'])->name('settings.statuses.update');
+        Route::post('statuses', [StatusController::class, 'store'])->name('settings.statuses.store');
+        Route::delete('statuses/{status}', [StatusController::class, 'destroy'])->name('settings.statuses.destroy');
+        Route::patch('statuses/{status}/move', [StatusController::class, 'move'])->name('settings.statuses.move');
+        Route::put('statuses/events', [StatusController::class, 'updateEvents'])->name('settings.statuses.events');
+        $boards = BoardController::class;
         // สาเหตุการเลื่อน: the reasons a project's dates may be moved for (App\Services\ProjectDates)
-        $reasons = \App\Http\Controllers\Settings\ProjectDateReasonController::class;
+        $reasons = ProjectDateReasonController::class;
         Route::get('date-reasons', [$reasons, 'index'])->name('settings.date-reasons.index');
         Route::post('date-reasons', [$reasons, 'store'])->name('settings.date-reasons.store');
         Route::put('date-reasons/{reason}', [$reasons, 'update'])->name('settings.date-reasons.update');
         Route::delete('date-reasons/{reason}', [$reasons, 'destroy'])->name('settings.date-reasons.destroy');
         Route::patch('date-reasons/{reason}/move', [$reasons, 'move'])->name('settings.date-reasons.move');
         // สีสถานะ Checklist: coloured tags a checklist item can carry (App\Services\ChecklistStatuses)
-        Route::get('checklist-statuses', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'index'])->name('settings.checklist-statuses.index');
-        Route::post('checklist-statuses', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'store'])->name('settings.checklist-statuses.store');
-        Route::post('checklist-statuses/starter', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'starter'])->name('settings.checklist-statuses.starter');
-        Route::put('checklist-statuses/{status}', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'update'])->name('settings.checklist-statuses.update');
-        Route::delete('checklist-statuses/{status}', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'destroy'])->name('settings.checklist-statuses.destroy');
-        Route::patch('checklist-statuses/{status}/toggle', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'toggle'])->name('settings.checklist-statuses.toggle');
-        Route::patch('checklist-statuses/{status}/move', [\App\Http\Controllers\Settings\ChecklistStatusController::class, 'move'])->name('settings.checklist-statuses.move');
+        Route::get('checklist-statuses', [ChecklistStatusController::class, 'index'])->name('settings.checklist-statuses.index');
+        Route::post('checklist-statuses', [ChecklistStatusController::class, 'store'])->name('settings.checklist-statuses.store');
+        Route::post('checklist-statuses/starter', [ChecklistStatusController::class, 'starter'])->name('settings.checklist-statuses.starter');
+        Route::put('checklist-statuses/{status}', [ChecklistStatusController::class, 'update'])->name('settings.checklist-statuses.update');
+        Route::delete('checklist-statuses/{status}', [ChecklistStatusController::class, 'destroy'])->name('settings.checklist-statuses.destroy');
+        Route::patch('checklist-statuses/{status}/toggle', [ChecklistStatusController::class, 'toggle'])->name('settings.checklist-statuses.toggle');
+        Route::patch('checklist-statuses/{status}/move', [ChecklistStatusController::class, 'move'])->name('settings.checklist-statuses.move');
         Route::get('boards', [$boards, 'boards'])->name('settings.boards.index');
         Route::post('boards', [$boards, 'storeBoard'])->name('settings.boards.store');
         Route::put('boards/{board}', [$boards, 'updateBoard'])->name('settings.boards.update');
@@ -250,21 +275,21 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
         Route::post('labels', [$boards, 'storeLabel'])->name('settings.labels.store');
         Route::put('labels/{label}', [$boards, 'updateLabel'])->name('settings.labels.update');
         Route::delete('labels/{label}', [$boards, 'destroyLabel'])->name('settings.labels.destroy');
-        $rules = \App\Http\Controllers\Settings\StatusRuleController::class;
+        $rules = StatusRuleController::class;
         Route::get('status-rules', [$rules, 'index'])->name('settings.status-rules.index');
         Route::post('status-rules', [$rules, 'store'])->name('settings.status-rules.store');
         Route::patch('status-rules/{rule}', [$rules, 'toggle'])->name('settings.status-rules.toggle');
         Route::delete('status-rules/{rule}', [$rules, 'destroy'])->name('settings.status-rules.destroy');
         Route::put('status-rules-locked', [$rules, 'locked'])->name('settings.status-rules.locked');
-        Route::get('permissions', [\App\Http\Controllers\Settings\PermissionController::class, 'edit'])->name('settings.permissions.edit');
-        Route::put('permissions', [\App\Http\Controllers\Settings\PermissionController::class, 'update'])->name('settings.permissions.update');
-        Route::delete('permissions', [\App\Http\Controllers\Settings\PermissionController::class, 'reset'])->name('settings.permissions.reset');
-        Route::patch('fields/{field}/chip', [\App\Http\Controllers\Settings\FieldController::class, 'toggleChip'])->name('settings.fields.chip');
-        Route::get('fields', [\App\Http\Controllers\Settings\FieldController::class, 'index'])->name('settings.fields.index');
-        Route::post('fields', [\App\Http\Controllers\Settings\FieldController::class, 'storeField'])->name('settings.fields.store');
-        Route::delete('fields/{field}', [\App\Http\Controllers\Settings\FieldController::class, 'destroyField'])->name('settings.fields.destroy');
-        Route::post('fields/{field}/options', [\App\Http\Controllers\Settings\FieldController::class, 'storeOption'])->name('settings.fields.options.store');
-        Route::delete('field-options/{option}', [\App\Http\Controllers\Settings\FieldController::class, 'destroyOption'])->name('settings.field-options.destroy');
+        Route::get('permissions', [PermissionController::class, 'edit'])->name('settings.permissions.edit');
+        Route::put('permissions', [PermissionController::class, 'update'])->name('settings.permissions.update');
+        Route::delete('permissions', [PermissionController::class, 'reset'])->name('settings.permissions.reset');
+        Route::patch('fields/{field}/chip', [FieldController::class, 'toggleChip'])->name('settings.fields.chip');
+        Route::get('fields', [FieldController::class, 'index'])->name('settings.fields.index');
+        Route::post('fields', [FieldController::class, 'storeField'])->name('settings.fields.store');
+        Route::delete('fields/{field}', [FieldController::class, 'destroyField'])->name('settings.fields.destroy');
+        Route::post('fields/{field}/options', [FieldController::class, 'storeOption'])->name('settings.fields.options.store');
+        Route::delete('field-options/{option}', [FieldController::class, 'destroyOption'])->name('settings.field-options.destroy');
     });
 
     // Settings are admin-only: user management in particular can mint admin accounts and reset passwords.
@@ -273,7 +298,7 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     // Admin-only (checked inside the controller): workflow automation + date-limit rules.
     Route::get('settings/automation', [AutomationController::class, 'index'])->name('settings.automation.index');
     // Settings > แจ้งเตือน Checklist: who hears what when a paired checklist moves (App\Services\ChecklistNoticeRules)
-    Route::middleware('admin')->controller(\App\Http\Controllers\Settings\ChecklistNoticeRuleController::class)->group(function () {
+    Route::middleware('admin')->controller(ChecklistNoticeRuleController::class)->group(function () {
         Route::get('settings/notice-rules', 'index')->name('settings.notice-rules.index');
         Route::post('settings/notice-rules', 'store')->name('settings.notice-rules.store');
         Route::put('settings/notice-rules/{rule}', 'update')->name('settings.notice-rules.update');
@@ -291,9 +316,9 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::post('push/subscribe', [\App\Http\Controllers\PushController::class, 'subscribe'])->name('push.subscribe');
-    Route::delete('push/subscribe', [\App\Http\Controllers\PushController::class, 'unsubscribe'])->name('push.unsubscribe');
-    Route::post('push/test', [\App\Http\Controllers\PushController::class, 'test'])->middleware('throttle:6,1')->name('push.test');
+    Route::post('push/subscribe', [PushController::class, 'subscribe'])->name('push.subscribe');
+    Route::delete('push/subscribe', [PushController::class, 'unsubscribe'])->name('push.unsubscribe');
+    Route::post('push/test', [PushController::class, 'test'])->middleware('throttle:6,1')->name('push.test');
     Route::post('/profile/avatar', [ProfileController::class, 'updateAvatar'])->name('profile.avatar');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Cabinet;
 use App\Models\Department;
 use App\Models\Project;
 use Illuminate\Database\Eloquent\Builder;
@@ -74,8 +75,8 @@ final class ReportFilter
     public function projects(Builder $q): Builder
     {
         return $q->when($this->projects || $this->cabinetIds, fn ($q) => $q->where(fn ($q) => $q
-                ->whereIn('projects.id', $this->projects ?: [0])
-                ->orWhereHas('cabinets', fn ($c) => $c->whereIn('cabinets.id', $this->cabinetIds ?: [0]))))
+            ->whereIn('projects.id', $this->projects ?: [0])
+            ->orWhereHas('cabinets', fn ($c) => $c->whereIn('cabinets.id', $this->cabinetIds ?: [0]))))
             ->when($this->departments, fn ($q) => $q->whereHas('cabinets.tasks.subtasks', fn ($s) => $s->whereIn('department_id', $this->departments)))
             ->when($this->hasPeriod(), fn ($q) => $q->where(fn ($q) => $q
                 ->whereHas('cabinets', fn ($c) => $this->dueIn($c, 'cabinets.due_date'))
@@ -86,7 +87,7 @@ final class ReportFilter
     public function cabinets($q, ?Carbon $projectDue = null)
     {
         return $q->when($this->cabinetIds, fn ($q) => $q->where(fn ($q) => $q   // the cabinets chosen, or any of a whole SO chosen
-                ->whereIn('cabinets.id', $this->cabinetIds)->orWhereIn('cabinets.project_id', $this->projects ?: [0])))
+            ->whereIn('cabinets.id', $this->cabinetIds)->orWhereIn('cabinets.project_id', $this->projects ?: [0])))
             ->when($this->departments, fn ($q) => $q->whereHas('tasks.subtasks', fn ($s) => $s->whereIn('department_id', $this->departments)))
             ->when($this->hasPeriod(), fn ($q) => $q->where(fn ($q) => $this->dueIn($q, 'cabinets.due_date')
                 ->orWhere(fn ($q) => $q->whereNull('cabinets.due_date')->whereHas('project', fn ($p) => $this->dueIn($p, 'projects.due_date')))));
@@ -116,7 +117,7 @@ final class ReportFilter
             $parts[] = 'เฉพาะ '.($nos->count() > 4 ? $nos->take(4)->implode(', ').' และอีก '.($nos->count() - 4).' SO' : $nos->implode(', '));
         }
         if ($this->cabinetIds) {
-            $mos = \App\Models\Cabinet::whereIn('id', $this->cabinetIds)->orderBy('mo_no')->pluck('mo_no');
+            $mos = Cabinet::whereIn('id', $this->cabinetIds)->orderBy('mo_no')->pluck('mo_no');
             $parts[] = 'ตู้ '.($mos->count() > 4 ? $mos->take(4)->implode(', ').' และอีก '.($mos->count() - 4).' ตู้' : $mos->implode(', '));
         }
         if ($this->departments) {

@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\NotificationService;
 use App\Services\WorkScope;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /** ProjectDates: a change said in words (summary, brief, how far it shifted, which departments it touches). */
 trait DescribesDateChanges
@@ -19,7 +20,7 @@ trait DescribesDateChanges
      * What the page shows: rounds, days moved since the first due date, that first due date, and every change (newest
      * first) with its round number.
      *
-     * @return array{rounds: int, days: int, firstDue: ?Carbon, changes: \Illuminate\Support\Collection}
+     * @return array{rounds: int, days: int, firstDue: ?Carbon, changes: Collection}
      */
     public function summary(Project|Cabinet $subject): array
     {
@@ -42,7 +43,7 @@ trait DescribesDateChanges
      * Planning's "เลื่อน n" chip: the same count as summary() from the subject's changes (oldest first), with each round's
      * reason, newest first. Null until it was postponed at least once.
      */
-    public static function brief(\Illuminate\Support\Collection $changes, ?Carbon $due, string $url): ?array
+    public static function brief(Collection $changes, ?Carbon $due, string $url): ?array
     {
         $rounds = $changes->where('kind', ProjectDateChange::POSTPONE)->values();
         if ($rounds->isEmpty()) {
@@ -82,9 +83,9 @@ trait DescribesDateChanges
      * is not theirs to see): who hears of a postponement besides the project's own people
      * (NotificationService::projectRescheduled), named on the form's "แจ้ง" box.
      *
-     * @return \Illuminate\Support\Collection<int, Department>
+     * @return Collection<int, Department>
      */
-    public static function departments(Project|Cabinet $subject): \Illuminate\Support\Collection
+    public static function departments(Project|Cabinet $subject): Collection
     {
         $ids = CabinetSubtask::whereNotNull('department_id')->whereIn('assignment_status', WorkScope::ACTIVE_STATUSES)
             ->whereHas('cabinetTask.cabinet', fn ($q) => $subject instanceof Cabinet ? $q->whereKey($subject->id) : $q->where('project_id', $subject->id))

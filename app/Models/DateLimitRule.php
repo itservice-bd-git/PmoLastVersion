@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 class DateLimitRule extends Model
 {
@@ -51,7 +52,7 @@ class DateLimitRule extends Model
                 ->max('due_date');
 
             if ($anchorDue && $dueDate > substr((string) $anchorDue, 0, 10)) {
-                return 'กำหนดส่งต้องไม่เกินแผนก '.$rule->anchorDepartment->name.' ('.\Illuminate\Support\Carbon::parse($anchorDue)->thaiDate().')';
+                return 'กำหนดส่งต้องไม่เกินแผนก '.$rule->anchorDepartment->name.' ('.Carbon::parse($anchorDue)->thaiDate().')';
             }
         }
 

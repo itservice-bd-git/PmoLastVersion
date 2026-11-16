@@ -8,10 +8,12 @@ use App\Models\Cabinet;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetSubtaskTemplate;
+use App\Models\CabinetTask;
 use App\Models\CabinetTaskTemplate;
 use App\Models\CabinetTemplate;
 use App\Models\ChecklistTemplate;
 use App\Models\Department;
+use App\Models\Project;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
@@ -89,7 +91,7 @@ class TemplateTools
         $template->load('taskTemplates.subtaskTemplates.checklistTemplates');
         $bySubTpl = $template->taskTemplates->flatMap->subtaskTemplates->keyBy('id');
         $cabinets = Cabinet::where('cabinet_template_id', $template->id)->where('status', '!=', 'completed')
-            ->whereHas('project', fn ($q) => $q->whereNotIn('status', \App\Models\Project::LOCKED_STATUSES))
+            ->whereHas('project', fn ($q) => $q->whereNotIn('status', Project::LOCKED_STATUSES))
             ->with('project:id,project_no,status', 'tasks.subtasks')->orderBy('id')->get();
         $items = CabinetChecklist::withTrashed()->whereIn('cabinet_subtask_id', $cabinets->flatMap(fn ($c) => $c->tasks->flatMap->subtasks)->pluck('id'))
             ->get(['id', 'cabinet_subtask_id', 'checklist_template_id', 'name', 'sequence'])->groupBy('cabinet_subtask_id');
@@ -132,7 +134,7 @@ class TemplateTools
             $checkIds = ChecklistTemplate::whereIn('cabinet_subtask_template_id', $subIds)->pluck('id');
 
             $cabinets = Cabinet::withTrashed()->where('cabinet_template_id', $template->id)->update(['cabinet_template_id' => null]);
-            \App\Models\CabinetTask::withTrashed()->whereIn('cabinet_task_template_id', $taskIds)->update(['cabinet_task_template_id' => null]);
+            CabinetTask::withTrashed()->whereIn('cabinet_task_template_id', $taskIds)->update(['cabinet_task_template_id' => null]);
             CabinetSubtask::withTrashed()->whereIn('cabinet_subtask_template_id', $subIds)->update(['cabinet_subtask_template_id' => null]);
             CabinetChecklist::withTrashed()->whereIn('checklist_template_id', $checkIds)->update(['checklist_template_id' => null]);
 

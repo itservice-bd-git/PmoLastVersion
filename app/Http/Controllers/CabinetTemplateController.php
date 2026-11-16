@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\CabinetTemplate;
+use App\Models\Department;
+use App\Services\SubtaskPairs;
+use App\Services\TemplateTools;
 use Illuminate\Http\Request;
 
 class CabinetTemplateController extends Controller
@@ -43,8 +46,8 @@ class CabinetTemplateController extends Controller
 
         return view('cabinet-templates.show', [
             'template' => $cabinetTemplate,
-            'pairCabinets' => app(\App\Services\SubtaskPairs::class)->cabinetsOf($cabinetTemplate)->count(),
-            'departments' => \App\Models\Department::orderBy('name')->get(),
+            'pairCabinets' => app(SubtaskPairs::class)->cabinetsOf($cabinetTemplate)->count(),
+            'departments' => Department::orderBy('name')->get(),
         ]);
     }
 
@@ -75,7 +78,7 @@ class CabinetTemplateController extends Controller
     }
 
     /** The cabinets made from it keep their own tasks and checklists (they are copies) - see TemplateTools::deleteTemplate(). */
-    public function destroy(CabinetTemplate $cabinetTemplate, \App\Services\TemplateTools $tools)
+    public function destroy(CabinetTemplate $cabinetTemplate, TemplateTools $tools)
     {
         $name = $cabinetTemplate->name;
         $cabinets = $tools->deleteTemplate($cabinetTemplate);

@@ -9,6 +9,7 @@ use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
 use App\Models\Project;
 use App\Models\ProjectTask;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -301,7 +302,7 @@ class ActivityTreeBuilder
             $node['count'] = count($node['activities']) + array_sum(array_column($node['children'], 'count'));
             $node['latest'] = max(array_merge(array_column($node['activities'], 'ts'), array_column($node['children'], 'latest_ts')) ?: [0]);
             $node['latest_ts'] = $node['latest'];
-            $node['latest'] = $node['latest'] ? \Illuminate\Support\Carbon::createFromTimestamp($node['latest'], config('app.timezone'))->thaiDateTime() : null;
+            $node['latest'] = $node['latest'] ? Carbon::createFromTimestamp($node['latest'], config('app.timezone'))->thaiDateTime() : null;
 
             $out[] = $node;
         }
@@ -342,7 +343,7 @@ class ActivityTreeBuilder
         return [
             'key' => $key, 'type' => $type, 'label' => $label,
             'children' => $children ?? [], 'activities' => $activities,
-            'count' => $count, 'latest_ts' => $latest, 'latest' => $latest ? \Illuminate\Support\Carbon::createFromTimestamp($latest, config('app.timezone'))->thaiDateTime() : null,
+            'count' => $count, 'latest_ts' => $latest, 'latest' => $latest ? Carbon::createFromTimestamp($latest, config('app.timezone'))->thaiDateTime() : null,
         ];
     }
 

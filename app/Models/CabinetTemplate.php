@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class CabinetTemplate extends Model
 {
-    use HasFactory, HasAuditFields;
+    use HasAuditFields, HasFactory;
 
     protected $fillable = [
         'name',

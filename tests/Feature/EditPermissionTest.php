@@ -6,7 +6,6 @@ use App\Models\Cabinet;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
-use App\Models\CabinetTemplate;
 use App\Models\Department;
 use App\Models\DepartmentField;
 use App\Models\Project;

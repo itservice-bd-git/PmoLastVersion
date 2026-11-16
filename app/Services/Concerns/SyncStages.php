@@ -2,19 +2,11 @@
 
 namespace App\Services\Concerns;
 
-use App\Exceptions\AssignmentException;
 use App\Exceptions\PlanningRejected;
-use App\Exceptions\ProjectLockedException;
 use App\Models\ActivityLog;
-use App\Models\AppSetting;
-use App\Models\Board;
-use App\Models\BoardLabel;
 use App\Models\BoardStatus;
 use App\Models\Cabinet;
-use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
-use App\Models\CabinetTask;
-use App\Models\CabinetTemplate;
 use App\Models\DateLimitRule;
 use App\Models\Department;
 use App\Models\DepartmentField;
@@ -22,14 +14,8 @@ use App\Models\Project;
 use App\Models\ProjectDepartmentStatus;
 use App\Models\ProjectFieldValue;
 use App\Models\User;
-use App\Services\CabinetCopyService;
-use App\Services\HandoffService;
 use App\Services\ProjectLock;
-use App\Services\SharedChecklist;
 use App\Services\WorkScope;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 /**
  * PlanningSync · A department's work in a project (its "stage"): dates, due, done, workflow steps, fields, status, handing sub tasks out, adding / removing a department.
@@ -286,17 +272,17 @@ trait SyncStages
      *
      * @return int 1 when it was handed out
      */
-    private function dispatchTo(User $user, \App\Models\CabinetSubtask $subtask, mixed $value): int
+    private function dispatchTo(User $user, CabinetSubtask $subtask, mixed $value): int
     {
         [$dept, $start, $due] = is_array($value) ? [$value['dept'] ?? null, $value['start'] ?? null, $value['due'] ?? null] : [$value, null, null];
         if (! is_string($dept) || $dept === '') {
             return 0;
         }
-        $department = \App\Models\Department::where('is_active', true)->find($this->id($dept, 'd_')) ?? throw new PlanningRejected('ไม่พบแผนกนี้');
+        $department = Department::where('is_active', true)->find($this->id($dept, 'd_')) ?? throw new PlanningRejected('ไม่พบแผนกนี้');
         [$start, $due] = [$this->date($start), $this->date($due)];
         // no dates given: the department's range in this project (all its work there shares one start - end)
         if (! $start && ! $due) {
-            $range = \App\Models\CabinetSubtask::where('department_id', $department->id)->where('id', '!=', $subtask->id)
+            $range = CabinetSubtask::where('department_id', $department->id)->where('id', '!=', $subtask->id)
                 ->whereHas('cabinetTask.cabinet', fn ($q) => $q->where('project_id', $subtask->cabinetTask->cabinet->project_id))
                 ->selectRaw('min(start_date) s, max(due_date) d')->first();
             [$start, $due] = [$range?->s ? substr($range->s, 0, 10) : null, $range?->d ? substr($range->d, 0, 10) : null];
@@ -304,7 +290,7 @@ trait SyncStages
         if ($start && $due && $due < $start) {
             throw new PlanningRejected('วันส่งต้องไม่ก่อนวันเริ่ม ('.$subtask->name.')');
         }
-        if ($due && ($message = \App\Models\DateLimitRule::violationFor($subtask->cabinetTask->cabinet_id, $department->id, $due))) {
+        if ($due && ($message = DateLimitRule::violationFor($subtask->cabinetTask->cabinet_id, $department->id, $due))) {
             throw new PlanningRejected($message);
         }
 
@@ -325,12 +311,12 @@ trait SyncStages
         $this->requirePmo($user, 'แก้วันที่ / ผู้ทำ / หมายเหตุของงาน');
         $project = $this->projectFor($user, $op['taskId'] ?? null);
         ProjectLock::assertOpen($project->id);
-        $subtask = \App\Models\CabinetSubtask::with('cabinetTask')->whereHas('cabinetTask.cabinet', fn ($q) => $q->where('project_id', $project->id))
+        $subtask = CabinetSubtask::with('cabinetTask')->whereHas('cabinetTask.cabinet', fn ($q) => $q->where('project_id', $project->id))
             ->find($this->id($op['subtaskId'] ?? null, 's')) ?? throw new PlanningRejected('ไม่พบงานย่อยนี้');
         if (! $user->canDispatchWork() && ! $user->inDepartment($subtask->department_id)) {
             throw new PlanningRejected('แก้ได้เฉพาะงานของแผนกตัวเอง');
         }
-        if ($subtask->assignment_status === \App\Models\CabinetSubtask::ASSIGNMENT_COMPLETED && (array_key_exists('startDate', $op['fields'] ?? []) || array_key_exists('dueDate', $op['fields'] ?? []))) {
+        if ($subtask->assignment_status === CabinetSubtask::ASSIGNMENT_COMPLETED && (array_key_exists('startDate', $op['fields'] ?? []) || array_key_exists('dueDate', $op['fields'] ?? []))) {
             throw new PlanningRejected('งานที่เสร็จแล้วแก้วันไม่ได้');
         }
         $f = is_array($op['fields'] ?? null) ? $op['fields'] : [];
@@ -357,7 +343,7 @@ trait SyncStages
         if ($start && $due && $due < $start) {
             throw new PlanningRejected('วันส่งต้องไม่ก่อนวันเริ่ม');
         }
-        if (! empty($map['due_date']) && ($message = \App\Models\DateLimitRule::violationFor($subtask->cabinetTask->cabinet_id, $subtask->department_id, $map['due_date']))) {
+        if (! empty($map['due_date']) && ($message = DateLimitRule::violationFor($subtask->cabinetTask->cabinet_id, $subtask->department_id, $map['due_date']))) {
             throw new PlanningRejected($message);
         }
         $dueMoved = array_key_exists('due_date', $map) && $map['due_date'] !== $subtask->due_date?->format('Y-m-d');

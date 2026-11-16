@@ -64,7 +64,7 @@ class DailyWorkController extends Controller
         if ($firstDay->gt($lastDay)) {
             [$firstDay, $lastDay] = [$lastDay, $firstDay];
         }
-    
+
         if ($firstDay->diffInDays($lastDay) >= self::MAX_DAYS) {
             $firstDay = $lastDay->copy()->subDays(self::MAX_DAYS - 1);
         }

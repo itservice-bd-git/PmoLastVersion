@@ -2,21 +2,25 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\PlanningRejected;
 use App\Models\ActivityLog;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
+use App\Models\Department;
 use App\Services\AutomationService;
+use App\Services\DeliveryChecklist;
 use App\Services\ProgressService;
 use App\Services\SharedChecklist;
 use App\Services\SubtaskAssignmentService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 
 class CabinetChecklistController extends Controller
 {
     /** New items reach the Sub Tasks comparing with this one (SharedChecklist), whose progress follows. */
-    private function share(\Illuminate\Support\Collection $made, CabinetSubtask $subtask, ProgressService $progress): void
+    private function share(Collection $made, CabinetSubtask $subtask, ProgressService $progress): void
     {
         $shared = app(SharedChecklist::class);
         $shared->added($subtask, $made);
@@ -205,8 +209,8 @@ class CabinetChecklistController extends Controller
             'is_completed' => ['required', 'boolean'],
         ]);
         try {   // ห่อตู้ / แจ้งเปิดบิล / ส่งมอบ of a cabinet in a sent round: ticked from "งานจัดส่ง" only
-            app(\App\Services\DeliveryChecklist::class)->assertManual($checklist);
-        } catch (\App\Exceptions\PlanningRejected $e) {
+            app(DeliveryChecklist::class)->assertManual($checklist);
+        } catch (PlanningRejected $e) {
             abort(423, $e->getMessage());
         }
         $statusBefore = $checklist->subtask->assignment_status;
@@ -241,7 +245,7 @@ class CabinetChecklistController extends Controller
             return response()->json([
                 // present only when a rule moved the Sub Task's workflow status, so the UI can re-render its buttons/badge
                 'assignment' => $statusChanged ? $assignments->payload($subtask, $request->user()) : null,
-                'html' => $statusChanged ? view('cabinets.partials._assignment', ['subtask' => $subtask, 'departments' => \App\Models\Department::orderBy('name')->get()])->render() : null,
+                'html' => $statusChanged ? view('cabinets.partials._assignment', ['subtask' => $subtask, 'departments' => Department::orderBy('name')->get()])->render() : null,
                 'checklist' => [
                     'id' => $checklist->id,
                     'is_completed' => $checklist->is_completed,

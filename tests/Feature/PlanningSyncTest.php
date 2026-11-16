@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
+use App\Models\AppSetting;
 use App\Models\AutomationRule;
 use App\Models\Cabinet;
 use App\Models\CabinetChecklist;
@@ -90,7 +91,7 @@ class PlanningSyncTest extends TestCase
         $this->assertFalse($item->fresh()->is_completed);
 
         // not accepted yet (with "ติ๊กแล้วรับงานให้" off) / someone else's department / unknown id: refused, nothing changes
-        \App\Models\AppSetting::put('tick_accepts', false);
+        AppSetting::put('tick_accepts', false);
         $r = $this->apply($this->user($this->wiring), ['type' => 'checklist', 'itemId' => 'k'.$waiting->checklists[0]->id, 'done' => true]);
         $this->assertFalse($r['ok']);
         $this->assertStringContainsString('รับงาน', $r['message']);

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppSetting;
 use App\Models\Cabinet;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
@@ -153,7 +154,7 @@ class CabinetChecklistTest extends TestCase
         $this->actingAs($this->user($this->busbar));
 
         $this->post(route('checklists.store', $this->subtask), ['names' => 'Too early'])->assertForbidden();
-        \App\Models\AppSetting::put('tick_accepts', false);   // on (the default), the tick would accept the work instead
+        AppSetting::put('tick_accepts', false);   // on (the default), the tick would accept the work instead
         $this->patchJson(route('checklists.toggle', $checklist), ['is_completed' => true])->assertForbidden();
 
         // the refusal says why, in Thai (CabinetSubtaskPolicy)

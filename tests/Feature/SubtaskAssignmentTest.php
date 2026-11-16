@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
+use App\Models\AppSetting;
 use App\Models\Cabinet;
+use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetSubtaskTemplate;
 use App\Models\CabinetTask;
@@ -14,6 +16,8 @@ use App\Models\Project;
 use App\Models\User;
 use App\Services\CabinetCopyService;
 use App\Services\CabinetTemplateService;
+use App\Services\PlanningBoard;
+use App\Services\PlanningSync;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -340,14 +344,14 @@ class SubtaskAssignmentTest extends TestCase
         $a = $this->subtask($this->busbar);
         $b = $this->subtask($this->busbar, CabinetSubtask::ASSIGNMENT_ACCEPTED);   // already accepted: stays
         $member = $this->user($this->busbar);
-        $sync = app(\App\Services\PlanningSync::class);
+        $sync = app(PlanningSync::class);
         $op = ['type' => 'stage_step', 'taskId' => 'p'.$this->cabinet->project_id, 'deptId' => 'd_'.$this->busbar->id, 'step' => 'reject'];
 
         $this->assertFalse($sync->apply($member, [$op])[0]['ok'], 'a reason is required');
         $this->assertTrue($sync->apply($member, [$op + ['reason' => 'คิวเต็ม']])[0]['ok']);
         $this->assertSame([CabinetSubtask::ASSIGNMENT_UNASSIGNED, CabinetSubtask::ASSIGNMENT_ACCEPTED], [$a->fresh()->assignment_status, $b->fresh()->assignment_status]);
 
-        $board = app(\App\Services\PlanningBoard::class)->tasks($pm, null, today());
+        $board = app(PlanningBoard::class)->tasks($pm, null, today());
         $cab = collect($board[0]['subtasks'])->firstWhere('id', 'c'.$this->cabinet->id);
         $this->assertSame('Busbar ไม่รับงาน: คิวเต็ม', collect($cab['free'])->firstWhere('id', 's'.$a->id)['rejected']);
         $this->assertSame(1, $board[0]['warnings']['rejected']);
@@ -358,12 +362,12 @@ class SubtaskAssignmentTest extends TestCase
         [$a, $b, $c] = [$this->subtask($this->busbar), $this->subtask($this->busbar), $this->subtask($this->busbar)];
         $other = $this->subtask($this->wiring);
         $member = $this->user($this->busbar);
-        $sync = app(\App\Services\PlanningSync::class);
+        $sync = app(PlanningSync::class);
         $op = fn (string $step, array $subs, array $more = []) => ['type' => 'subtasks_step', 'taskId' => 'p'.$this->cabinet->project_id, 'step' => $step,
             'ids' => array_map(fn ($s) => 's'.$s->id, $subs)] + $more;
 
         // the board tells the picker what each piece of work is
-        $works = collect(app(\App\Services\PlanningBoard::class)->tasks($member, null, today())[0]['subtasks'][0]['works'])->keyBy('id');
+        $works = collect(app(PlanningBoard::class)->tasks($member, null, today())[0]['subtasks'][0]['works'])->keyBy('id');
         $this->assertSame(['due' => null, 'items' => 0], array_intersect_key($works['s'.$a->id], ['due' => 1, 'items' => 1]));
 
         $this->assertStringContainsString('รับงาน 1 งานแล้ว', $sync->apply($member, [$op('accept', [$a])])[0]['message']);
@@ -383,7 +387,7 @@ class SubtaskAssignmentTest extends TestCase
     public function test_ticking_an_item_of_work_still_waiting_accepts_it(): void
     {
         $subtask = $this->subtask($this->busbar);
-        $items = collect(['ตัด', 'พับ'])->map(fn ($n, $i) => \App\Models\CabinetChecklist::forceCreate(['cabinet_subtask_id' => $subtask->id, 'name' => $n, 'is_completed' => false, 'sequence' => $i + 1]));
+        $items = collect(['ตัด', 'พับ'])->map(fn ($n, $i) => CabinetChecklist::forceCreate(['cabinet_subtask_id' => $subtask->id, 'name' => $n, 'is_completed' => false, 'sequence' => $i + 1]));
         $member = $this->user($this->busbar, 'Somchai');
 
         $this->actingAs($this->user($this->wiring))->patchJson(route('checklists.toggle', $items[0]), ['is_completed' => true])->assertForbidden();
@@ -398,12 +402,12 @@ class SubtaskAssignmentTest extends TestCase
 
         // Planning too; and with the setting off a tick on waiting work is refused as before
         $other = $this->subtask($this->busbar);
-        $item = \App\Models\CabinetChecklist::forceCreate(['cabinet_subtask_id' => $other->id, 'name' => 'ตัด', 'is_completed' => false, 'sequence' => 1]);
-        \App\Models\AppSetting::put('tick_accepts', false);
+        $item = CabinetChecklist::forceCreate(['cabinet_subtask_id' => $other->id, 'name' => 'ตัด', 'is_completed' => false, 'sequence' => 1]);
+        AppSetting::put('tick_accepts', false);
         $op = ['type' => 'checklist', 'taskId' => 'p'.$this->cabinet->project_id, 'cabinetId' => 'c'.$this->cabinet->id, 'itemId' => 'k'.$item->id, 'done' => true];
-        $this->assertFalse(app(\App\Services\PlanningSync::class)->apply($member, [$op])[0]['ok']);
-        \App\Models\AppSetting::put('tick_accepts', true);
-        $res = app(\App\Services\PlanningSync::class)->apply($member, [$op])[0];
+        $this->assertFalse(app(PlanningSync::class)->apply($member, [$op])[0]['ok']);
+        AppSetting::put('tick_accepts', true);
+        $res = app(PlanningSync::class)->apply($member, [$op])[0];
         $this->assertTrue($res['ok']);
         $this->assertStringContainsString('รับงาน', (string) $res['message']);
         $this->assertSame(CabinetSubtask::ASSIGNMENT_ACCEPTED, $other->fresh()->assignment_status);

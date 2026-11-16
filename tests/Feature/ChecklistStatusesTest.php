@@ -11,8 +11,11 @@ use App\Models\ChecklistStatus;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\User;
+use App\Services\ChecklistStatuses;
+use App\Services\HandoffService;
 use App\Services\PlanningBoard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /** Settings > สีสถานะ Checklist: coloured tags on checklist items, several per item, a group's ones exclusive. */
@@ -149,7 +152,7 @@ class ChecklistStatusesTest extends TestCase
         $this->tag($this->wiring, [$this->wait->id])->assertOk();
         $copy->statuses()->attach($this->out->id);
 
-        $peers = app(\App\Services\ChecklistStatuses::class)->peersFor([$this->breaker->fresh(), $copy->fresh()]);
+        $peers = app(ChecklistStatuses::class)->peersFor([$this->breaker->fresh(), $copy->fresh()]);
         $this->assertSame([['id' => $this->out->id, 'dept' => 'โลหะ', 'sub' => 's'.$metalSub->id]], $peers[$this->breaker->id]);
         $this->assertSame([['id' => $this->wait->id, 'dept' => 'ไฟฟ้า', 'sub' => 's'.$this->el->id]], $peers[$copy->id]);
 
@@ -173,10 +176,10 @@ class ChecklistStatusesTest extends TestCase
         $a->statuses()->attach($this->wait->id);
         $c->statuses()->attach($this->out->id);
 
-        $peers = app(\App\Services\ChecklistStatuses::class)->peersFor([$b->fresh(), $d->fresh()]);
+        $peers = app(ChecklistStatuses::class)->peersFor([$b->fresh(), $d->fresh()]);
         $this->assertEqualsCanonicalizing([['id' => $this->wait->id, 'dept' => 'จัดซื้อ', 'sub' => 's'.$buy->id], ['id' => $this->out->id, 'dept' => 'Production', 'sub' => 's'.$prod->id]], $peers[$b->id]);
         $this->assertEqualsCanonicalizing([['id' => $this->wait->id, 'dept' => 'จัดซื้อ', 'sub' => 's'.$buy->id], ['id' => $this->out->id, 'dept' => 'Production', 'sub' => 's'.$prod->id]], $peers[$d->id]);
-        $this->assertSame([['id' => $this->wait->id, 'dept' => 'จัดซื้อ', 'sub' => 's'.$buy->id]], app(\App\Services\ChecklistStatuses::class)->peersFor([$c->fresh()])[$c->id]);
+        $this->assertSame([['id' => $this->wait->id, 'dept' => 'จัดซื้อ', 'sub' => 's'.$buy->id]], app(ChecklistStatuses::class)->peersFor([$c->fresh()])[$c->id]);
     }
 
     public function test_a_status_set_to_tick_ticks_the_item_and_taking_it_off_keeps_the_tick(): void
@@ -205,10 +208,10 @@ class ChecklistStatusesTest extends TestCase
     public function test_a_compared_list_carries_its_items_statuses(): void
     {
         $metalSub = CabinetSubtask::forceCreate(['cabinet_task_id' => $this->el->cabinet_task_id, 'name' => 'ประกอบตู้', 'department_id' => $this->metal->id, 'assignment_status' => 'ACCEPTED', 'status' => 'in_progress', 'progress' => 0]);
-        \Illuminate\Support\Facades\DB::table('cabinet_subtask_pairs')->insert(['cabinet_subtask_id' => $metalSub->id, 'source_subtask_id' => $this->el->id, 'view_only' => true, 'own_ticks' => false, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('cabinet_subtask_pairs')->insert(['cabinet_subtask_id' => $metalSub->id, 'source_subtask_id' => $this->el->id, 'view_only' => true, 'own_ticks' => false, 'created_at' => now(), 'updated_at' => now()]);
         $this->tag($this->wiring, [$this->out->id])->assertOk();
 
-        $watched = app(\App\Services\HandoffService::class)->linkedForSubtask($metalSub->fresh());
+        $watched = app(HandoffService::class)->linkedForSubtask($metalSub->fresh());
         $this->assertTrue($watched[0]['watch']);
         $this->assertSame([$this->out->id], collect($watched[0]['items'])->firstWhere('id', 'k'.$this->breaker->id)['tags']);
     }

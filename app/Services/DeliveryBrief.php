@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Cabinet;
 use App\Models\ProjectDelivery;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -16,7 +17,7 @@ use Illuminate\Support\Collection;
  */
 class DeliveryBrief
 {
-    /** @param  Collection<int, \App\Models\Cabinet>  $cabinets  keyed by id (mo_no, cabinet_name, cabinet_type, size, quantity) */
+    /** @param  Collection<int, Cabinet>  $cabinets  keyed by id (mo_no, cabinet_name, cabinet_type, size, quantity) */
     public static function text(ProjectDelivery $d, Collection $cabinets, ?string $link): string
     {
         $p = $d->project;

@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CabinetTask extends Model
 {
-    use HasFactory, LogsActivity, SoftDeletes, CascadesSoftDeletes, GuardsClosedProject;
+    use CascadesSoftDeletes, GuardsClosedProject, HasFactory, LogsActivity, SoftDeletes;
 
     const STATUS_NOT_STARTED = 'not_started';
 

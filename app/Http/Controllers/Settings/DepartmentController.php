@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\DepartmentRequest;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
-use Illuminate\Http\Request;
 
 class DepartmentController extends Controller
 {
@@ -16,7 +16,7 @@ class DepartmentController extends Controller
         ]);
     }
 
-    public function store(\App\Http\Requests\Settings\DepartmentRequest $request)
+    public function store(DepartmentRequest $request)
     {
         $data = $request->validated();
         $data['is_active'] = true;
@@ -27,7 +27,7 @@ class DepartmentController extends Controller
         return back()->with('success', 'เพิ่มแผนกเรียบร้อยแล้ว');
     }
 
-    public function update(\App\Http\Requests\Settings\DepartmentRequest $request, Department $department)
+    public function update(DepartmentRequest $request, Department $department)
     {
         $data = $request->validated();
         $data['handoff_date_label'] = trim((string) ($data['handoff_date_label'] ?? '')) ?: null;

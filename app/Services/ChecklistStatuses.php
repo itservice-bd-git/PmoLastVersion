@@ -63,7 +63,7 @@ class ChecklistStatuses
      *
      * @param  iterable<CabinetChecklist>  $items  (id, source_checklist_id, cabinet_subtask_id)
      * @return array<int, list<array{id: int, dept: string, sub: string}>> sub: the Sub Task ('s'.id), so a page that already
-     *                                                                   shows that list beside the item can leave it out
+     *                                                                     shows that list beside the item can leave it out
      */
     public function peersFor(iterable $items): array
     {

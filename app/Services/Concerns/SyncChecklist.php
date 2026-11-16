@@ -2,35 +2,19 @@
 
 namespace App\Services\Concerns;
 
-use App\Exceptions\AssignmentException;
 use App\Exceptions\PlanningRejected;
-use App\Exceptions\ProjectLockedException;
-use App\Models\ActivityLog;
-use App\Models\AppSetting;
-use App\Models\Board;
-use App\Models\BoardLabel;
-use App\Models\BoardStatus;
 use App\Models\Cabinet;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
-use App\Models\CabinetTask;
-use App\Models\CabinetTemplate;
-use App\Models\DateLimitRule;
 use App\Models\Department;
-use App\Models\DepartmentField;
 use App\Models\Project;
-use App\Models\ProjectDepartmentStatus;
-use App\Models\ProjectFieldValue;
 use App\Models\User;
+use App\Services\ChecklistStatuses;
 use App\Services\DeliveryChecklist;
-use App\Services\CabinetCopyService;
 use App\Services\HandoffService;
 use App\Services\ProjectLock;
 use App\Services\SharedChecklist;
 use App\Services\WorkScope;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 /**
  * PlanningSync · Checklist items: tick, add / delete (through SharedChecklist), rename, remark, tags, dates, order.
@@ -190,7 +174,7 @@ trait SyncChecklist
     /** Settings > สีสถานะ Checklist: one item's statuses, all at once. */
     private function checklistTags(User $user, array $op): ?string
     {
-        app(\App\Services\ChecklistStatuses::class)->set($this->editableItem($user, $op['itemId'] ?? null), (array) ($op['tags'] ?? []), $user);
+        app(ChecklistStatuses::class)->set($this->editableItem($user, $op['itemId'] ?? null), (array) ($op['tags'] ?? []), $user);
 
         return null;
     }

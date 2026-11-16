@@ -2,8 +2,23 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppSetting;
+use App\Models\Board;
+use App\Models\Cabinet;
+use App\Models\CabinetSubtask;
+use App\Models\CabinetTemplate;
+use App\Models\Department;
+use App\Models\JobType;
+use App\Models\Project;
+use App\Models\User;
+use App\Services\CommentAttachmentUploader;
+use App\Services\DeliveryFlow;
+use App\Services\DepartmentDashboard;
 use App\Services\PlanningBoard;
 use App\Services\PlanningSync;
+use App\Services\WorkScope;
+use App\Support\EventStatuses;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -26,12 +41,12 @@ class PlanningController extends Controller
      * One cabinet's record and every one of its sub tasks the user may see (the expanded cabinet row on the page): dates,
      * department, workflow state, the person doing it, remark. PMO roles also get the sub tasks nobody was given yet.
      */
-    public function cabinet(Request $request, \App\Models\Cabinet $cabinet)
+    public function cabinet(Request $request, Cabinet $cabinet)
     {
         $user = $request->user();
-        abort_unless(\App\Services\WorkScope::canSeeProject($cabinet->project, $user), 403, 'คุณไม่มีสิทธิ์ดูตู้นี้');
+        abort_unless(WorkScope::canSeeProject($cabinet->project, $user), 403, 'คุณไม่มีสิทธิ์ดูตู้นี้');
 
-        $subtasks = \App\Models\CabinetSubtask::query()
+        $subtasks = CabinetSubtask::query()
             ->whereHas('cabinetTask', fn ($q) => $q->where('cabinet_id', $cabinet->id))
             ->when(! $user->canSeeAllWork(), fn ($q) => $q->whereIn('department_id', $user->departmentIds()))
             ->when(! $user->canDispatchWork(), fn ($q) => $q->whereNotNull('department_id'))
@@ -65,25 +80,25 @@ class PlanningController extends Controller
         $user = $request->user();
         $data = $request->validate(['dept' => ['required', 'string'], 'date' => ['required', 'date_format:Y-m-d']]);
         abort_unless(preg_match('/^d_(\d+)$/', $data['dept'], $m), 422);
-        $department = \App\Models\Department::findOrFail((int) $m[1]);
-        $scope = \App\Services\DepartmentDashboard::scopeFor($user);
+        $department = Department::findOrFail((int) $m[1]);
+        $scope = DepartmentDashboard::scopeFor($user);
         abort_unless($scope === null || in_array($department->id, $scope, true), 403, 'คุณไม่มีสิทธิ์ดูงานของแผนกนี้');
 
-        $rows = \App\Models\CabinetSubtask::query()
+        $rows = CabinetSubtask::query()
             ->where('department_id', $department->id)
-            ->whereIn('assignment_status', [\App\Models\CabinetSubtask::ASSIGNMENT_ASSIGNED, \App\Models\CabinetSubtask::ASSIGNMENT_ACCEPTED, \App\Models\CabinetSubtask::ASSIGNMENT_IN_PROGRESS])
+            ->whereIn('assignment_status', [CabinetSubtask::ASSIGNMENT_ASSIGNED, CabinetSubtask::ASSIGNMENT_ACCEPTED, CabinetSubtask::ASSIGNMENT_IN_PROGRESS])
             ->whereDate('due_date', '<=', $data['date'])
             ->with('cabinetTask.cabinet.project', 'checklists')
             ->orderBy('due_date')->get()
             ->groupBy(fn ($s) => $s->cabinetTask->cabinet->project_id);
 
-        return view('planning.work-order', ['department' => $department, 'date' => \Carbon\Carbon::parse($data['date']), 'groups' => $rows, 'user' => $user]);
+        return view('planning.work-order', ['department' => $department, 'date' => Carbon::parse($data['date']), 'groups' => $rows, 'user' => $user]);
     }
 
     /** The extra board asked for in ?board=, or null for the main one (an unknown id is the main board too). */
-    private function boardOf(Request $request): ?\App\Models\Board
+    private function boardOf(Request $request): ?Board
     {
-        return ($id = $request->integer('board')) ? \App\Models\Board::find($id) : null;
+        return ($id = $request->integer('board')) ? Board::find($id) : null;
     }
 
     /** The native (Blade + Alpine) Planning page: no embedded SPA, the board is handed to one Alpine component. */
@@ -104,39 +119,39 @@ class PlanningController extends Controller
             'myDepts' => array_map(fn ($id) => PlanningBoard::deptKey($id), $user->departmentIds()),   // the departments whose work is mine
             'readOnly' => $user->isViewOnly(),
             // the delivery department (Access 'edit.delivery', not Admin / PM): a round opens งานจัดส่ง's steps for that project in a window
-            'shipUrl' => \App\Services\DeliveryFlow::canDeliver($user) && ! $user->canDispatchWork() && ! $user->isViewOnly() ? route('deliveries.index', ['embed' => 1]) : null,              // "ดูได้อย่างเดียว" (edit.work off): nothing to tick, type or press; EnsureCanWork refuses it anyway
+            'shipUrl' => DeliveryFlow::canDeliver($user) && ! $user->canDispatchWork() && ! $user->isViewOnly() ? route('deliveries.index', ['embed' => 1]) : null,              // "ดูได้อย่างเดียว" (edit.work off): nothing to tick, type or press; EnsureCanWork refuses it anyway
             'userName' => $user->name,
             'userId' => $user->id,                          // keys the browser-local "★" list
             'boardNo' => $current?->id,                    // null = the main board
             'boards' => collect([['id' => 'main', 'name' => 'PMO', 'url' => route('planning.board')]])
-                ->concat(\App\Models\Board::orderBy('sort')->orderBy('id')->get()->map(fn ($b) => ['id' => 'b'.$b->id, 'name' => $b->name, 'url' => route('planning.board', ['board' => $b->id])]))->all(),
+                ->concat(Board::orderBy('sort')->orderBy('id')->get()->map(fn ($b) => ['id' => 'b'.$b->id, 'name' => $b->name, 'url' => route('planning.board', ['board' => $b->id])]))->all(),
             'mine' => $board->mineProjectIds($user),         // project ids for the "ของฉัน" button
             'me' => ['id' => $user->id, 'name' => $user->name, 'avatar' => $user->avatar_url, 'deptId' => $user->department_id ? PlanningBoard::deptKey($user->department_id) : ''],
             'canTrash' => $user->canManageTrash(),
-            'eventStatuses' => \App\Support\EventStatuses::forPage(),   // Settings > สถานะงาน: the FAT / delivery states' names and colours
+            'eventStatuses' => EventStatuses::forPage(),   // Settings > สถานะงาน: the FAT / delivery states' names and colours
             // Settings > สิทธิ์การใช้งาน: what the page offers (the server leaves the data out and refuses the change anyway)
             'perms' => ['finance' => $user->allows('data.finance'), 'contact' => $user->allows('data.contact'),
                 'comments' => $user->allows('data.comments'), 'export' => $user->allows('page.export'), 'projects' => $user->allows('page.projects')],
             // in-page trash and the PM list of the "new project" window (PMO roles only)
-            'trash' => $user->canManageTrash() ? \App\Models\Project::onlyTrashed()->latest('deleted_at')->limit(100)->get(['id', 'project_no', 'project_name', 'deleted_at'])
+            'trash' => $user->canManageTrash() ? Project::onlyTrashed()->latest('deleted_at')->limit(100)->get(['id', 'project_no', 'project_name', 'deleted_at'])
                 ->map(fn ($p) => ['id' => 'p'.$p->id, 'so' => $p->project_no, 'title' => $p->project_name, 'at' => $p->deleted_at->getTimestampMs()])->all() : [],
             // the templates a new cabinet can start from, with their sub tasks (to hand to departments in the same window)
-            'templates' => $user->canDispatchWork() ? \App\Models\CabinetTemplate::where('is_active', true)->with(['taskTemplates.subtaskTemplates' => fn ($q) => $q->withCount('checklistTemplates')])->orderByDesc('is_default')->orderBy('name')->get()
+            'templates' => $user->canDispatchWork() ? CabinetTemplate::where('is_active', true)->with(['taskTemplates.subtaskTemplates' => fn ($q) => $q->withCount('checklistTemplates')])->orderByDesc('is_default')->orderBy('name')->get()
                 ->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'default' => (bool) $t->is_default,
                     'subtasks' => $t->taskTemplates->sortBy('sequence')->flatMap(fn ($task) => $task->subtaskTemplates->sortBy('sequence')->map(fn ($s) => [
                         'id' => $s->id, 'name' => $s->name, 'task' => $task->name, 'deptId' => $s->department_id ? PlanningBoard::deptKey($s->department_id) : '',
                         'checklists' => $s->checklist_templates_count,
                     ]))->values()->all()])->all() : [],
-            'jobTypes' => \App\Models\JobType::where('is_active', true)->orderBy('name')->get(['id', 'name'])->all(),
-            'pmoStatuses' => \App\Models\Project::$statuses,
+            'jobTypes' => JobType::where('is_active', true)->orderBy('name')->get(['id', 'name'])->all(),
+            'pmoStatuses' => Project::$statuses,
             // who can be the person doing a sub task (people of its department, or PMO roles)
-            'staff' => \App\Models\User::where('is_active', true)->with('extraDepartments:id')->orderBy('name')->get(['id', 'name', 'department_id', 'role'])
+            'staff' => User::where('is_active', true)->with('extraDepartments:id')->orderBy('name')->get(['id', 'name', 'department_id', 'role'])
                 ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'deptId' => $u->department_id ? PlanningBoard::deptKey($u->department_id) : '',
                     'deptIds' => $u->extraDepartments->map(fn ($d) => PlanningBoard::deptKey($d->id))->all(), 'pmo' => $u->canDispatchWork()])->all(),
             'urlsCabinet' => route('planning.cabinet', ['cabinet' => '__ID__']),
             'urlsCabinetPage' => route('cabinets.show', ['cabinet' => '__ID__']),
             'urlsFollow' => route('projects.follow', ['project' => '__ID__']),   // "ติดตามโครงการ"   // the cabinet's own page (the full checklist editor)
-            'managers' => $user->canDispatchWork() ? \App\Models\User::whereIn('role', [\App\Models\User::ROLE_ADMIN, \App\Models\User::ROLE_PROJECT_MANAGER])->where('is_active', true)->orderBy('name')->get(['id', 'name'])->all() : [],
+            'managers' => $user->canDispatchWork() ? User::whereIn('role', [User::ROLE_ADMIN, User::ROLE_PROJECT_MANAGER])->where('is_active', true)->orderBy('name')->get(['id', 'name'])->all() : [],
             'people' => $this->mentionablePeople($user),     // for the @ picker (the server re-checks every tag)
             'open' => $request->integer('project') ?: null,  // a notification's link: open this project's window on load
             // ... and that department's window (?stage=d_5), and with ?accept=1 (the push notice's "รับงาน") ask to accept its work
@@ -155,7 +170,7 @@ class PlanningController extends Controller
                 'dayNotes' => route('planning.day-notes.index'),
             ],
             // หมายเหตุรายวัน: the departments whose notes this user keeps (none: no notes at all)
-            'noteDepts' => \App\Models\Department::whereIn('id', $user->departmentIds())->orderBy('name')->get(['id', 'name'])->map(fn ($d) => ['id' => $d->id, 'name' => $d->name])->all(),
+            'noteDepts' => Department::whereIn('id', $user->departmentIds())->orderBy('name')->get(['id', 'name'])->map(fn ($d) => ['id' => $d->id, 'name' => $d->name])->all(),
         ]]);
 
         return $this->timed($response, $timing);
@@ -167,9 +182,9 @@ class PlanningController extends Controller
      */
     private function mentionablePeople($user): array
     {
-        return \App\Models\User::query()->where('is_active', true)->where('id', '!=', $user->id)
-            ->when(! $user->canViewOtherDepartments() && ! \App\Models\AppSetting::get('cross_mention'), fn ($q) => $q->where(fn ($w) => $w
-                ->whereIn('role', [\App\Models\User::ROLE_ADMIN, \App\Models\User::ROLE_PROJECT_MANAGER])
+        return User::query()->where('is_active', true)->where('id', '!=', $user->id)
+            ->when(! $user->canViewOtherDepartments() && ! AppSetting::get('cross_mention'), fn ($q) => $q->where(fn ($w) => $w
+                ->whereIn('role', [User::ROLE_ADMIN, User::ROLE_PROJECT_MANAGER])
                 ->when($user->departmentIds(), fn ($d) => $d->orWhere(fn ($o) => $o->ofDepartment($user->departmentIds())))))
             ->with('department:id,name')->orderBy('name')->limit(300)->get(['id', 'name', 'role', 'department_id'])
             ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'dept' => $u->department?->name])->all();
@@ -203,7 +218,7 @@ class PlanningController extends Controller
     }
 
     /** A comment with photos / files: same rules as a plain comment (PlanningSync), the files hang on the note it wrote. */
-    public function comment(Request $request, PlanningSync $sync, PlanningBoard $board, \App\Services\CommentAttachmentUploader $uploader)
+    public function comment(Request $request, PlanningSync $sync, PlanningBoard $board, CommentAttachmentUploader $uploader)
     {
         $data = $request->validate([
             'taskId' => ['required', 'string'],
@@ -212,7 +227,7 @@ class PlanningController extends Controller
             'mentions' => ['nullable', 'array'],
             'replyTo' => ['nullable', 'string'],
             'files' => ['required', 'array', 'min:1', 'max:5'],
-            'files.*' => ['file', 'max:20480', 'mimes:'.\App\Services\CommentAttachmentUploader::ALLOWED_MIMES],
+            'files.*' => ['file', 'max:20480', 'mimes:'.CommentAttachmentUploader::ALLOWED_MIMES],
         ]);
         $user = $request->user();
 
@@ -274,7 +289,9 @@ class PlanningController extends Controller
     private function measure(callable $work): array
     {
         $queries = 0;
-        DB::listen(function () use (&$queries) { $queries++; });
+        DB::listen(function () use (&$queries) {
+            $queries++;
+        });
         $t = microtime(true);
         $result = $work();
         $ms = (microtime(true) - $t) * 1000;

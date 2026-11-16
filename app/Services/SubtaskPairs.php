@@ -2,10 +2,13 @@
 
 namespace App\Services;
 
+use App\Models\ActivityLog;
 use App\Models\Cabinet;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetSubtaskTemplate;
 use App\Models\CabinetTemplate;
+use App\Models\Project;
+use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -41,9 +44,10 @@ class SubtaskPairs
     /**
      * Change one cabinet's pairs (the cabinet page, Admin / PM): what this Sub Task compares with, other Sub Tasks of the same
      * cabinet. Only this cabinet; the template keeps its own. @param list<int> $sourceIds @param list<int> $viewIds only followed
-     * @param list<int> $ownIds their list used, its own ticks
+     *
+     * @param  list<int>  $ownIds  their list used, its own ticks
      */
-    public function setCabinetPairs(CabinetSubtask $sub, array $sourceIds, ?\App\Models\User $actor = null, array $viewIds = [], array $ownIds = []): void
+    public function setCabinetPairs(CabinetSubtask $sub, array $sourceIds, ?User $actor = null, array $viewIds = [], array $ownIds = []): void
     {
         $sub->loadMissing('cabinetTask.cabinet');
         $cabinet = $sub->cabinetTask->cabinet;
@@ -66,7 +70,7 @@ class SubtaskPairs
 
         ksort($mode);
         if ($before !== $mode) {
-            \App\Models\ActivityLog::record($cabinet->project_id, $actor?->id, $sub, 'updated', $valid->isEmpty()
+            ActivityLog::record($cabinet->project_id, $actor?->id, $sub, 'updated', $valid->isEmpty()
                 ? "เลิกเทียบ Checklist ของ {$sub->name} ({$cabinet->mo_no})"
                 : "ตั้งคู่เทียบ {$sub->name} ({$cabinet->mo_no}) กับ ".$valid->map(fn ($s) => $s->name.($mode[$s->id]['view_only'] ? ' (ดูอย่างเดียว)' : ($mode[$s->id]['own_ticks'] ? ' (ใช้รายการเดียวกัน)' : '')))->implode(', '));
         }
@@ -118,7 +122,7 @@ class SubtaskPairs
     public function cabinetsOf(CabinetTemplate $template): Collection
     {
         return Cabinet::where('cabinet_template_id', $template->id)
-            ->whereHas('project', fn ($q) => $q->whereNotIn('status', [\App\Models\Project::STATUS_COMPLETED, \App\Models\Project::STATUS_CANCELLED]))
+            ->whereHas('project', fn ($q) => $q->whereNotIn('status', [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED]))
             ->get();
     }
 

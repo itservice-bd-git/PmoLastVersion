@@ -4,7 +4,9 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Compresses a (large) HTML/JSON response itself when the client accepts gzip and nothing in front of PHP has done it.
@@ -24,8 +26,8 @@ class GzipResponse
             || ! str_contains((string) $request->header('Accept-Encoding'), 'gzip')
             || $response->headers->has('Content-Encoding')
             || $response->getStatusCode() !== 200
-            || $response instanceof \Symfony\Component\HttpFoundation\StreamedResponse
-            || $response instanceof \Symfony\Component\HttpFoundation\BinaryFileResponse) {
+            || $response instanceof StreamedResponse
+            || $response instanceof BinaryFileResponse) {
             return $response;
         }
 

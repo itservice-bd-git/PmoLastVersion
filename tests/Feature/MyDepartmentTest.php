@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppSetting;
 use App\Models\Cabinet;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
@@ -9,6 +10,7 @@ use App\Models\Department;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
 use Tests\TestCase;
 
 class MyDepartmentTest extends TestCase
@@ -61,11 +63,12 @@ class MyDepartmentTest extends TestCase
     private function window(User $user, array $extra = [])
     {
         // Export CSV is off for a department by default (Settings > สิทธิ์การใช้งาน): on for both here
-        \App\Models\AppSetting::put('department_permissions', [(string) $this->busbar->id => ['page.export' => true], (string) $this->wiring->id => ['page.export' => true]]);
+        AppSetting::put('department_permissions', [(string) $this->busbar->id => ['page.export' => true], (string) $this->wiring->id => ['page.export' => true]]);
+
         return $this->actingAs($user)->get(route('my-department.export', ['from' => '2026-08-30', 'to' => '2026-10-10'] + $extra));
     }
 
-    /** @return \Illuminate\Support\Collection<string, array{overdue: bool}> rows keyed by Sub Task name */
+    /** @return Collection<string, array{overdue: bool}> rows keyed by Sub Task name */
     private function rows($response)
     {
         $response->assertOk();

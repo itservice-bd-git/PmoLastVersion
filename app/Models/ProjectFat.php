@@ -6,6 +6,7 @@ use App\Models\Concerns\GuardsClosedProject;
 use App\Support\EventStatuses;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /** วัน FAT: one round of a project's factory acceptance test (App\Http\Controllers\ProjectFatController). */
 class ProjectFat extends Model
@@ -63,7 +64,7 @@ class ProjectFat extends Model
     }
 
     /** The latest round cabinet $id is in (a round listing no cabinets is every cabinet's): the project table, the cabinet page. */
-    public static function latestFor(\Illuminate\Support\Collection $fats, int $id): ?self
+    public static function latestFor(Collection $fats, int $id): ?self
     {
         return $fats->sortByDesc('round')->first(fn (self $f) => ! $f->cabinet_ids || in_array($id, array_map('intval', $f->cabinet_ids), true));
     }

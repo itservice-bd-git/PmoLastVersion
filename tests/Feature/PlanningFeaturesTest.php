@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\ActivityLog;
 use App\Models\Board;
 use App\Models\BoardLabel;
 use App\Models\BoardStatus;
@@ -10,6 +9,7 @@ use App\Models\Cabinet;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
+use App\Models\CommentAttachment;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\User;
@@ -266,7 +266,7 @@ class PlanningFeaturesTest extends TestCase
             $this->post(route('planning.comment'), ['taskId' => $this->pid(), 'files' => [UploadedFile::fake()->create('x.exe', 5)]], ['Accept' => 'application/json'])->assertStatus(422);
             $res = $this->post(route('planning.comment'), ['taskId' => 'p'.(Project::forceCreate(['project_no' => 'P-9', 'project_name' => 'X', 'customer_name' => 'C', 'status' => 'in_progress', 'priority' => 'normal'])->id), 'files' => [UploadedFile::fake()->image('a.jpg')]], ['Accept' => 'application/json']);
             $this->assertFalse($res->json('results.0.ok'), "not someone else's project");
-            $this->assertSame(2, \App\Models\CommentAttachment::count(), 'no file kept for a refused comment');
+            $this->assertSame(2, CommentAttachment::count(), 'no file kept for a refused comment');
         } finally {
             foreach (array_diff(is_dir($uploads) ? scandir($uploads) : [], $before) as $f) {
                 @unlink($uploads.'/'.$f);   // the uploader writes to public/: leave the folder as it was

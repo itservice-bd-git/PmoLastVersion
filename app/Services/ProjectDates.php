@@ -5,10 +5,10 @@ namespace App\Services;
 use App\Models\ActivityLog;
 use App\Models\Cabinet;
 use App\Models\Project;
-use App\Models\ProjectDelivery;
-use App\Models\ProjectFat;
 use App\Models\ProjectDateChange;
 use App\Models\ProjectDateReason;
+use App\Models\ProjectDelivery;
+use App\Models\ProjectFat;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -30,13 +30,12 @@ use Illuminate\Validation\ValidationException;
  */
 class ProjectDates
 {
-    use Concerns\MovesLinkedDates;
     use Concerns\DescribesDateChanges;
+    use Concerns\MovesLinkedDates;
 
     public function __construct(private NotificationService $notifications) {}
 
     /**
-     * @param  Project|Cabinet  $subject
      * @param  array{kind: string, due_date: ?string, start_date?: ?string, reason_id?: ?int, note?: ?string, notify?: bool}  $data  validated by the caller
      */
     public function change(Project|Cabinet $subject, User $actor, array $data): ProjectDateChange
@@ -196,5 +195,4 @@ class ProjectDates
     {
         return $subject instanceof Project ? $subject : $subject->project;
     }
-
 }

@@ -3,20 +3,10 @@
 namespace App\Services\Concerns;
 
 use App\Models\ActivityLog;
-use App\Models\CabinetSubtask;
-use App\Models\Department;
 use App\Models\NotificationPreference;
 use App\Models\Project;
 use App\Models\User;
 use App\Notifications\PmoNotice;
-use App\Services\ChecklistNoticeRules;
-use App\Services\DeliveryFlow;
-use App\Services\HandoffService;
-use App\Services\PlanningBoard;
-use App\Services\PlanningSync;
-use App\Services\ProjectFollowers;
-use App\Services\StatusReport;
-use App\Services\WebPushService;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Collection;
 

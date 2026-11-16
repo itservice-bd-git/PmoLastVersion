@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\Department;
 use App\Models\ProjectDelivery;
 use App\Models\ProjectDeliveryVehicle;
 use App\Models\Vehicle;
@@ -23,7 +24,7 @@ class VehicleController extends Controller
             'used' => ProjectDeliveryVehicle::whereNotNull('vehicle_id')->selectRaw('vehicle_id, count(distinct project_delivery_id) as n')->groupBy('vehicle_id')->pluck('n', 'vehicle_id'),
             'reasons' => ProjectDelivery::rejectReasons(),
             'types' => Vehicle::whereNotNull('type')->distinct()->orderBy('type')->pluck('type'),
-            'departments' => \App\Models\Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'departments' => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'billing' => (int) AppSetting::get('delivery_billing_department'),
         ]);
     }

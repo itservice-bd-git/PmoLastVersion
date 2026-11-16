@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\UserRequest;
 use App\Models\Department;
 use App\Models\User;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
@@ -25,7 +25,7 @@ class UserController extends Controller
         ]);
     }
 
-    public function store(\App\Http\Requests\Settings\UserRequest $request)
+    public function store(UserRequest $request)
     {
         $data = $request->validated();
 
@@ -50,7 +50,7 @@ class UserController extends Controller
         ]);
     }
 
-    public function update(\App\Http\Requests\Settings\UserRequest $request, User $user)
+    public function update(UserRequest $request, User $user)
     {
         $data = $request->validated();
 

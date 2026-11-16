@@ -4,15 +4,17 @@ namespace App\Services;
 
 use App\Models\BoardLabel;
 use App\Models\Cabinet;
-use App\Models\DepartmentField;
-use App\Models\ProjectDepartmentStatus;
-use App\Models\ProjectFieldValue;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
+use App\Models\DepartmentField;
+use App\Models\JobType;
 use App\Models\Project;
 use App\Models\ProjectDateChange;
 use App\Models\ProjectDelivery;
+use App\Models\ProjectDepartmentStatus;
+use App\Models\ProjectFieldValue;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -35,9 +37,9 @@ use Illuminate\Support\Collection;
  */
 class PlanningBoard
 {
+    use Concerns\BoardPalette;
     use Concerns\BoardProjectShape;
     use Concerns\BoardStamp;
-    use Concerns\BoardPalette;
 
     public const BOARD_ID = 'pmo';
 
@@ -68,7 +70,7 @@ class PlanningBoard
     }
 
     /** @param  int|null|string  $board  null = the main board, an id = that extra board, 'any' = no board filter */
-    public function build(User $user, ?\Carbon\Carbon $today = null, int|string|null $board = null): array
+    public function build(User $user, ?Carbon $today = null, int|string|null $board = null): array
     {
         $today ??= today();
 
@@ -123,7 +125,7 @@ class PlanningBoard
      * @param  list<int>|null  $projectIds
      * @param  int|null|string  $board  null = the main board, an id = that extra board, 'any' = every board
      */
-    public function tasks(User $user, ?array $projectIds = null, ?\Carbon\Carbon $today = null, int|string|null $board = 'any'): array
+    public function tasks(User $user, ?array $projectIds = null, ?Carbon $today = null, int|string|null $board = 'any'): array
     {
         $today ??= today();
         $scope = DepartmentDashboard::scopeFor($user);   // null = every department, [] = none, [ids] = those
@@ -195,7 +197,7 @@ class PlanningBoard
         // the dashboard table, as the projects list: production % (the cabinets' average) and ประเภทงาน
         $this->production = $ids->isEmpty() ? collect() : Cabinet::whereIn('project_id', $ids)->selectRaw('project_id, avg(progress) as pct, count(*) as n')
             ->groupBy('project_id')->get()->keyBy('project_id');
-        $this->jobTypes = \App\Models\JobType::pluck('name', 'id');
+        $this->jobTypes = JobType::pluck('name', 'id');
         $cabinets = $builder ? Cabinet::with('boardStatus')->whereIn('project_id', $ids)->orderBy('sequence')->orderBy('id')->get()->groupBy('project_id') : null;
 
         $tasks = $byProject->map(fn (Collection $rows) => $this->task($rows->first()->cabinetTask->cabinet->project, $rows, $comments, $today, $user, $cabinets))
@@ -314,5 +316,4 @@ class PlanningBoard
 
         return $ids->merge($tagged)->filter()->unique()->values()->map(fn ($id) => (int) $id)->all();
     }
-
 }

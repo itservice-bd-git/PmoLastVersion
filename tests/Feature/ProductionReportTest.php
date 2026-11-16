@@ -9,7 +9,9 @@ use App\Models\Department;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\ProductionReport;
+use App\Services\ReportFilter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Tests\TestCase;
 
 /** "รายงานการผลิต": the six questions over the open production orders. */
@@ -176,7 +178,7 @@ class ProductionReportTest extends TestCase
         $other = Cabinet::forceCreate(['project_id' => $c->id, 'mo_no' => 'C-QC', 'cabinet_name' => 'Cab', 'quantity' => 1, 'progress' => 0, 'status' => 'in_progress', 'due_date' => '2026-11-01']);
         CabinetSubtask::forceCreate(['cabinet_task_id' => CabinetTask::forceCreate(['cabinet_id' => $other->id, 'name' => 'QC', 'status' => 'in_progress', 'progress' => 0, 'sequence' => 1])->id,
             'name' => 'ตรวจ', 'department_id' => $qc->id, 'assignment_status' => 'ACCEPTED', 'status' => 'in_progress', 'progress' => 0, 'due_date' => '2026-10-10']);
-        $build = fn (array $q) => app(ProductionReport::class)->build($this->admin(), filter: \App\Services\ReportFilter::fromRequest(\Illuminate\Http\Request::create('/', 'GET', $q)));
+        $build = fn (array $q) => app(ProductionReport::class)->build($this->admin(), filter: ReportFilter::fromRequest(Request::create('/', 'GET', $q)));
         $mos = fn (array $r) => collect($r['projects'])->pluck('so')->sort()->values()->all();
 
         // SO
@@ -203,11 +205,11 @@ class ProductionReportTest extends TestCase
         $r = $build(['projects' => [$b->id], 'cabinets' => [Cabinet::where('mo_no', 'A-DEC')->value('id')]]);
         $this->assertSame(['SO-A', 'SO-B'], $mos($r));
         $this->assertSame(2, $r['mo'], 'B-NOV (all of SO-B) and A-DEC, not A-OCT');
-        $this->assertSame('ตู้ A-DEC, C-QC', \App\Services\ReportFilter::fromRequest(\Illuminate\Http\Request::create('/', 'GET', ['cabinets' => [Cabinet::where('mo_no', 'A-DEC')->value('id'), $other->id]]))->describe());
+        $this->assertSame('ตู้ A-DEC, C-QC', ReportFilter::fromRequest(Request::create('/', 'GET', ['cabinets' => [Cabinet::where('mo_no', 'A-DEC')->value('id'), $other->id]]))->describe());
 
-        $f = \App\Services\ReportFilter::fromRequest(\Illuminate\Http\Request::create('/', 'GET', ['projects' => [$b->id], 'departments' => [$qc->id], 'period' => 'month']));
+        $f = ReportFilter::fromRequest(Request::create('/', 'GET', ['projects' => [$b->id], 'departments' => [$qc->id], 'period' => 'month']));
         $this->assertSame('เฉพาะ SO-B · แผนก QC · กำหนดส่ง เดือนนี้ (01/10/2569 – 31/10/2569)', $f->describe());
-        $this->assertSame('ทุกโครงการที่ยังไม่ปิด · ทุกแผนก · ทุกช่วงเวลา', (new \App\Services\ReportFilter)->describe());
+        $this->assertSame('ทุกโครงการที่ยังไม่ปิด · ทุกแผนก · ทุกช่วงเวลา', (new ReportFilter)->describe());
     }
 
     public function test_the_ceo_report_prints_only_the_parts_ticked_for_the_scope_chosen(): void

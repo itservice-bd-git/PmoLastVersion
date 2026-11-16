@@ -10,6 +10,7 @@ use App\Models\Department;
 use App\Models\JobType;
 use App\Models\Project;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\PlanningBoard;
 use App\Services\PlanningSync;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -176,7 +177,7 @@ class PlanningRecordsTest extends TestCase
         $b = CabinetSubtask::forceCreate(['cabinet_task_id' => $this->task->id, 'name' => 'b', 'department_id' => $this->busbar->id, 'assignment_status' => 'ACCEPTED', 'status' => 'not_started', 'progress' => 0]);
         $done = CabinetSubtask::forceCreate(['cabinet_task_id' => $this->task->id, 'name' => 'd', 'department_id' => $this->busbar->id, 'assignment_status' => 'COMPLETED', 'status' => 'completed', 'progress' => 100, 'due_date' => '2026-10-03']);
 
-        $stage = collect(app(\App\Services\PlanningBoard::class)->tasks($pm))->firstWhere('id', $this->pid())['deptStages'][0];
+        $stage = collect(app(PlanningBoard::class)->tasks($pm))->firstWhere('id', $this->pid())['deptStages'][0];
         $this->assertSame(['2026-10-02', '2026-10-10', 1], [$stage['start'], $stage['end'], $stage['undated']], 'the range of its work; one piece still has no date');
 
         $this->assertFalse($this->apply($this->user($this->busbar), ['type' => 'stage_dates', 'taskId' => $this->pid(), 'deptId' => 'd_'.$this->busbar->id, 'start' => '2026-10-05', 'due' => '2026-10-20'])['ok']);
@@ -192,7 +193,7 @@ class PlanningRecordsTest extends TestCase
         $this->assertTrue($this->apply($pm, ['type' => 'subtask_assign', 'taskId' => $this->pid(), 'assign' => ['s'.$c->id => 'd_'.$this->busbar->id]])['ok']);
         $this->assertSame(['2026-10-05', '2026-10-20'], [$c->fresh()->start_date->format('Y-m-d'), $c->fresh()->due_date->format('Y-m-d')]);
 
-        $cab = collect(app(\App\Services\PlanningBoard::class)->tasks($pm))->firstWhere('id', $this->pid())['subtasks'][0];
+        $cab = collect(app(PlanningBoard::class)->tasks($pm))->firstWhere('id', $this->pid())['subtasks'][0];
         $this->assertSame('2026-10-20', ((array) $cab['deptRanges'])['d_'.$this->busbar->id]['end']);
     }
 
@@ -202,8 +203,8 @@ class PlanningRecordsTest extends TestCase
         $this->project->update(['project_manager_id' => $pm->id]);
         CabinetSubtask::forceCreate(['cabinet_task_id' => $this->task->id, 'name' => 'x', 'department_id' => $this->busbar->id, 'assignment_status' => 'ASSIGNED', 'status' => 'not_started', 'progress' => 0]);
 
-        app(\App\Services\NotificationService::class)->sendReminders();
-        app(\App\Services\NotificationService::class)->sendReminders();
+        app(NotificationService::class)->sendReminders();
+        app(NotificationService::class)->sendReminders();
         $n = $pm->fresh()->notifications;
         $this->assertCount(1, $n);
         $this->assertSame('📅 ยังไม่มีวันส่ง 1 งาน', $n[0]->data['body']);

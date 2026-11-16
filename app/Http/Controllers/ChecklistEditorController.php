@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Exceptions\PlanningRejected;
 use App\Exceptions\ProjectLockedException;
+use App\Models\Cabinet;
 use App\Services\ChecklistEditor;
+use App\Services\WorkScope;
 use Illuminate\Http\Request;
 
 /** JSON behind the checklist editor (x-checklist-editor): {kind} = subtask (a cabinet's) | template (a cabinet template's). */
@@ -17,7 +19,7 @@ class ChecklistEditorController extends Controller
         $owner = $this->owner($kind, $id);
         // a cabinet's list: only for whoever may see that work (same rule as every other page); templates are open to all
         abort_if($kind === 'subtask' && ! $request->user()->canSeeAllWork()
-            && ! \App\Services\WorkScope::projectSubtasks($owner->cabinetTask->cabinet->project, $request->user())->whereKey($owner->id)->exists(), 403);
+            && ! WorkScope::projectSubtasks($owner->cabinetTask->cabinet->project, $request->user())->whereKey($owner->id)->exists(), 403);
 
         return response()->json($request->boolean('targets')
             ? $this->editor->targets($kind, $owner)
@@ -41,7 +43,7 @@ class ChecklistEditorController extends Controller
      * nothing did, else every list again - so a list shared with another Sub Task (SharedChecklist) or ticked by someone
      * else shows without a reload.
      */
-    public function live(Request $request, \App\Models\Cabinet $cabinet)
+    public function live(Request $request, Cabinet $cabinet)
     {
         $version = $this->editor->cabinetVersion($cabinet);
 

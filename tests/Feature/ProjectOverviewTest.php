@@ -10,6 +10,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Services\ProjectOverview;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Js;
 use Tests\TestCase;
 
 /** The project page's "ข้อมูลโครงการ" tab: progress and cabinet counts, the alert icons, the cabinet / MO table. */
@@ -178,7 +179,7 @@ class ProjectOverviewTest extends TestCase
                 ->getContent();
             $this->assertStringNotContainsString('>ภาพรวม<', $html, 'no ภาพรวม tab');
             // the table is filled from @js() data (quotes and Thai escaped): look for the row the same way
-            $this->assertStringContainsString(substr((string) \Illuminate\Support\Js::from(['mo' => 'ถนนวิทยุ Modify RMU โรงแรม Indigo']), strlen("JSON.parse('{"), -strlen("}')")), $html);
+            $this->assertStringContainsString(substr((string) Js::from(['mo' => 'ถนนวิทยุ Modify RMU โรงแรม Indigo']), strlen("JSON.parse('{"), -strlen("}')")), $html);
         }
     }
 }

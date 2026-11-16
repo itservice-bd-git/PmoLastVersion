@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Cabinet;
 use App\Models\CabinetSubtask;
 use App\Models\Project;
+use App\Models\ProjectFat;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -38,7 +39,7 @@ class ProjectOverview
             ->when(! $user->canSeeAllWork(), fn ($c) => $c->whereIn('department_id', $user->departmentIds()));
 
         $fats = $project->fats()->get();   // each cabinet's FAT: the latest round it is in
-        $rows = $cabinets->map(fn (Cabinet $c) => $this->row($c, $project, $late, $today) + ['fat' => $this->fatOf(\App\Models\ProjectFat::latestFor($fats, $c->id), $today)]);
+        $rows = $cabinets->map(fn (Cabinet $c) => $this->row($c, $project, $late, $today) + ['fat' => $this->fatOf(ProjectFat::latestFor($fats, $c->id), $today)]);
         $prefix = $this->sharedPrefix($rows->pluck('mo'));
 
         return [
@@ -87,7 +88,7 @@ class ProjectOverview
         return [
             'done' => $all->where('assignment_status', CabinetSubtask::ASSIGNMENT_COMPLETED)->count(),
             'unassigned' => $all->where('assignment_status', CabinetSubtask::ASSIGNMENT_UNASSIGNED)->count(),
-            'fat' => $fat && $fat->status !== \App\Models\ProjectFat::PASSED ? "FAT รอบที่ {$fat->round} ยัง{$fat->statusLabel()}" : null,
+            'fat' => $fat && $fat->status !== ProjectFat::PASSED ? "FAT รอบที่ {$fat->round} ยัง{$fat->statusLabel()}" : null,
         ];
     }
 
@@ -225,7 +226,7 @@ class ProjectOverview
     /** One cabinet as the table shows it, plus its steps for the "จ่ายงานทั้งขั้น" dialog. */
     private function row(Cabinet $c, Project $project, callable $late, Carbon $today): array
     {
-        $steps = $c->tasks->values()->map(function ($task, $i) use ($late) {
+        $steps = $c->tasks->values()->map(function ($task, $i) {
             $first = $task->subtasks->first(fn ($s) => $s->department_id);
             $open = $task->subtasks->first(fn ($s) => ! $s->isDone());
 
@@ -276,7 +277,7 @@ class ProjectOverview
     }
 
     /** A cabinet's FAT in the table, as its "ส่ง" column: the day, then days to it, or what happened once it has a result. */
-    private function fatOf(?\App\Models\ProjectFat $f, Carbon $today): ?array
+    private function fatOf(?ProjectFat $f, Carbon $today): ?array
     {
         return $f ? ['date' => $f->dateRange(), 'key' => $f->fat_date->format('Y-m-d'), 'round' => $f->round, 'days' => $f->daysTo($today),
             'result' => $f->daysTo($today) === null ? $f->status : null, 'resultText' => $f->daysTo($today) === null ? $f->statusLabel() : null] : null;

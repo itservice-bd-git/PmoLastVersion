@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Cabinet;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetSubtaskTemplate;
+use App\Models\CabinetTask;
 use App\Models\CabinetTaskTemplate;
 use App\Models\CabinetTemplate;
 use App\Models\ChecklistTemplate;
@@ -151,8 +152,8 @@ class PlanningDispatchTest extends TestCase
         $pm = $this->user(null, 'project_manager');
         // work typed in by hand (no template) called "สาย" went to Wiring; the template's own "สาย" was never handed out
         $old = Cabinet::forceCreate(['project_id' => $this->project->id, 'mo_no' => 'HAND', 'cabinet_name' => 'hand', 'quantity' => 1, 'status' => 'not_started', 'progress' => 0]);
-        $task = \App\Models\CabinetTask::forceCreate(['cabinet_id' => $old->id, 'name' => 'T', 'status' => 'not_started', 'progress' => 0]);
-        \App\Models\CabinetSubtask::forceCreate(['cabinet_task_id' => $task->id, 'name' => 'สาย', 'department_id' => $this->wiring->id, 'assignment_status' => 'ASSIGNED', 'status' => 'not_started', 'progress' => 0]);
+        $task = CabinetTask::forceCreate(['cabinet_id' => $old->id, 'name' => 'T', 'status' => 'not_started', 'progress' => 0]);
+        CabinetSubtask::forceCreate(['cabinet_task_id' => $task->id, 'name' => 'สาย', 'department_id' => $this->wiring->id, 'assignment_status' => 'ASSIGNED', 'status' => 'not_started', 'progress' => 0]);
         $this->apply($pm, ['type' => 'cabinet_add', 'taskId' => 'p'.$this->project->id, 'mo' => 'NEW', 'text' => 'new']);
 
         // (this used to break the whole board for Admin / PM: an empty Eloquent collection merged with plain numbers)

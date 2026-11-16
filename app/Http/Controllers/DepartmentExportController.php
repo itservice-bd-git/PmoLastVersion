@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Services\DepartmentSchedule;
 use App\Support\Csv;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 /**
  * "Export CSV" on the Planning page: a department's Sub Tasks over a window (from / to), filtered by project and status,
@@ -33,8 +34,8 @@ class DepartmentExportController extends Controller
             $i['task_name'],
             $i['name'],
             $i['owner_name'] ?? '-',
-            $i['start_date'] ? \Illuminate\Support\Carbon::parse($i['start_date'])->thaiDate() : '-',
-            $i['due_date'] ? \Illuminate\Support\Carbon::parse($i['due_date'])->thaiDate() : '-',
+            $i['start_date'] ? Carbon::parse($i['start_date'])->thaiDate() : '-',
+            $i['due_date'] ? Carbon::parse($i['due_date'])->thaiDate() : '-',
             $i['assignment_status_label'],
             $i['is_overdue'] ? 'เกินกำหนด '.abs($i['days_remaining']).' วัน' : '',
             $i['progress'].'%',

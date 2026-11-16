@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -52,7 +53,7 @@ class AlpineHandlersTest extends TestCase
         return array_unique($m[1]);
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('pages')]
+    #[DataProvider('pages')]
     public function test_every_handler_called_by_the_template_exists(string $viewDir, string $script): void
     {
         $missing = array_values(array_diff(

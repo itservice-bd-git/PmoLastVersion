@@ -2,12 +2,12 @@
 
 namespace App\Models\Concerns;
 
-use App\Models\Concerns\GuardsClosedProject;
 use App\Models\CommentAttachment;
 use App\Models\ProjectDelivery;
 use App\Support\EventStatuses;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * How a delivery round is said and shown: its state's name and colour, the method, the vehicles / people / cabinets as
@@ -21,7 +21,7 @@ trait PresentsDelivery
      * so they show in the project's Comment tab too) whose changes carry the round's id. Oldest first.
      *
      * @param  iterable<int>  $ids
-     * @return \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, CommentAttachment>>
+     * @return Collection<int, Collection<int, CommentAttachment>>
      */
     /** One of those files as <x-file-chip> / the panels show it: a photo or a PDF opens over the page (kind), the rest is a link. */
     public static function fileView(CommentAttachment $f): array

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\BoardStatus;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -47,7 +48,7 @@ class ProjectIndexOrderTest extends TestCase
     public function test_the_order_is_planning_dashboards_late_first_then_nearest_due_then_planning_order(): void
     {
         $this->travelTo('2026-09-24 09:00:00');
-        $done = \App\Models\BoardStatus::create(['name' => 'ส่งมอบแล้ว', 'color' => '#16a34a', 'is_done' => true, 'sort' => 9]);
+        $done = BoardStatus::create(['name' => 'ส่งมอบแล้ว', 'color' => '#16a34a', 'is_done' => true, 'sort' => 9]);
 
         $this->project('P-SOON-A', '2026-09-27');
         $this->project('P-MARKED-DONE', '2026-09-10');                  // past its date but done on Planning: not late

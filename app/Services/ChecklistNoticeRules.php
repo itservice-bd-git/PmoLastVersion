@@ -6,6 +6,7 @@ use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\ChecklistNoticeRule;
 use App\Models\User;
+use App\Notifications\PmoNotice;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -195,6 +196,6 @@ class ChecklistNoticeRules
     {
         $text = self::fill($rule->message, ['{รายการ}' => '"Breaker 100A"', '{ตู้}' => 'WH/MO/00001', '{วันที่}' => now()->thaiDate(),
             '{n}' => (string) ($rule->days ?: 1), '{โครงการ}' => 'SO-ตัวอย่าง', '{แผนก}' => (string) $rule->department?->name]);
-        $user->notify(new \App\Notifications\PmoNotice('handoff', 'ทดสอบ · '.$rule->department?->name.': '.$text, 'ตัวอย่างจากกฎแจ้งเตือน Checklist (ไม่ใช่งานจริง)', route('settings.notice-rules.index')));
+        $user->notify(new PmoNotice('handoff', 'ทดสอบ · '.$rule->department?->name.': '.$text, 'ตัวอย่างจากกฎแจ้งเตือน Checklist (ไม่ใช่งานจริง)', route('settings.notice-rules.index')));
     }
 }

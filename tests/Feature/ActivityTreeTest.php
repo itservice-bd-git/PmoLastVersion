@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\Cabinet;
-use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
 use App\Models\Project;
@@ -69,7 +69,7 @@ class ActivityTreeTest extends TestCase
         // Counts roll up from real rows: total is exactly the sum of the top-level nodes.
         $data = $this->tree();
         $this->assertSame($data['total'], collect($data['nodes'])->sum('count'));
-        $this->assertSame(\App\Models\ActivityLog::where('project_id', $this->project->id)->count(), $data['total']);
+        $this->assertSame(ActivityLog::where('project_id', $this->project->id)->count(), $data['total']);
     }
 
     public function test_project_level_activity_is_kept_in_its_own_section(): void

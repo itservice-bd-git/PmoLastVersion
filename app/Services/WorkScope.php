@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Cabinet;
 use App\Models\CabinetSubtask;
 use App\Models\Project;
 use App\Models\User;
@@ -34,7 +35,7 @@ class WorkScope
      * (and the Tasks that still have one). Who may see all keeps everything; ticking stays limited by CabinetSubtask::canTickBy.
      * The tasks.subtasks relation must be loaded.
      */
-    public static function trimCabinet(\App\Models\Cabinet $cabinet, User $user): void
+    public static function trimCabinet(Cabinet $cabinet, User $user): void
     {
         if ($user->canSeeAllWork()) {
             return;

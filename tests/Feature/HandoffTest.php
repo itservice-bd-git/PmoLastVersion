@@ -14,6 +14,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Services\CabinetCopyService;
 use App\Services\CabinetTemplateService;
+use App\Services\ChecklistEditor;
 use App\Services\HandoffService;
 use App\Services\NotificationService;
 use App\Services\PlanningBoard;
@@ -22,6 +23,9 @@ use App\Services\ProgressService;
 use App\Services\SubtaskPairs;
 use App\Services\TemplateTools;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Js;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 /**
@@ -115,7 +119,7 @@ class HandoffTest extends TestCase
         $this->assertSame([], $this->cab($this->user($this->purchasing))['linked'], 'nothing is passed backwards');
         $this->assertSame([], $this->cab($this->user(null, 'project_manager'))['linked'], 'PMO already sees every checklist');
 
-        $editor = app(\App\Services\ChecklistEditor::class);
+        $editor = app(ChecklistEditor::class);
         $this->assertSame('วันของเข้า', $editor->state('subtask', $order, $this->user(null, 'admin'))['dateLabel'], 'a date where something compares with it');
         $quotes = CabinetSubtask::where('name', 'ติดตามใบเสนอราคา')->first();
         $this->assertSame('วันของเข้า', $editor->state('subtask', $quotes, $this->user(null, 'admin'))['dateLabel'], 'the department\'s other work has it too, nobody comparing');
@@ -133,7 +137,7 @@ class HandoffTest extends TestCase
         $storeBreaker->update(['is_completed' => true]);
 
         // the source side: each item says whether คลัง has got it
-        $items = collect(app(\App\Services\ChecklistEditor::class)->items('subtask', $order->load('cabinetTask')))->keyBy('name');
+        $items = collect(app(ChecklistEditor::class)->items('subtask', $order->load('cabinetTask')))->keyBy('name');
         $this->assertSame([['dept' => 'คลัง', 'received' => true]], $items['Breaker 100A']['handoff']);
         $this->assertSame([['dept' => 'คลัง', 'received' => false]], $items['Busbar']['handoff']);
 
@@ -149,7 +153,7 @@ class HandoffTest extends TestCase
         $this->assertSame([['ตรวจรับอุปกรณ์', 'คลัง', route('cabinets.show', $this->cabinet).'#subtask-'.$receive->id]],
             array_map(fn ($r) => [$r['title'], $r['deptName'], $r['href']], $receivers));
         // the page hands the list to the editor through @js() (quotes and Thai escaped): look for it the same way
-        $inJs = fn (array $a) => substr((string) \Illuminate\Support\Js::from($a), strlen("JSON.parse('{"), -strlen("}')"));
+        $inJs = fn (array $a) => substr((string) Js::from($a), strlen("JSON.parse('{"), -strlen("}')"));
         $this->assertStringContainsString($inJs(['title' => 'สั่งซื้อตัวตู้']), $html);
     }
 
@@ -209,7 +213,7 @@ class HandoffTest extends TestCase
         try {
             $fn();
             $this->fail('a Sub Task of another template must be refused');
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             $this->assertArrayHasKey('sources', $e->errors());
         }
     }
@@ -335,7 +339,7 @@ class HandoffTest extends TestCase
         $this->assertSame('วันจ่ายของ', $this->store->fresh()->handoff_date_label);
         $this->actingAs($admin)->put(route('settings.departments.update', $this->store), ['name' => 'คลัง', 'code' => 'STO', 'is_active' => 1, 'handoff_date_label' => ''])->assertSessionHasNoErrors();
         $this->assertNull($this->store->fresh()->handoff_date_label);
-        $this->assertFalse(\Illuminate\Support\Facades\Route::has('settings.handoffs.index'));
+        $this->assertFalse(Route::has('settings.handoffs.index'));
     }
 
     public function test_admin_or_pm_can_change_one_cabinets_pairs_on_the_cabinet_page(): void

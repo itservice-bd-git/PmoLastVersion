@@ -4,8 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\ActivityLog;
 use App\Models\AppSetting;
-use App\Models\CabinetChecklist;
+use App\Models\AutomationRule;
 use App\Models\Cabinet;
+use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
 use App\Models\Department;
@@ -82,7 +83,7 @@ class ProjectStatusFlowTest extends TestCase
     {
         AppSetting::put('pmo_acts_for_departments', true);
         AppSetting::put('tick_accepts', true);
-        \App\Models\AutomationRule::create(['name' => 'ครบ → เสร็จ', 'trigger' => 'checklist_all_done', 'action' => 'complete', 'is_active' => true]);
+        AutomationRule::create(['name' => 'ครบ → เสร็จ', 'trigger' => 'checklist_all_done', 'action' => 'complete', 'is_active' => true]);
         $item = CabinetChecklist::forceCreate(['cabinet_subtask_id' => $this->a->id, 'name' => 'x', 'is_completed' => false, 'sequence' => 1]);
 
         $this->actingAs($this->pm)->patchJson(route('checklists.toggle', $item), ['is_completed' => true])->assertOk();

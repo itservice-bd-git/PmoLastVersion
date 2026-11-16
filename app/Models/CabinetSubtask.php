@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CabinetSubtask extends Model
 {
-    use HasFactory, LogsActivity, SoftDeletes, CascadesSoftDeletes, GuardsClosedProject;
+    use CascadesSoftDeletes, GuardsClosedProject, HasFactory, LogsActivity, SoftDeletes;
     use Concerns\SubtaskAssignmentRules;
     use Concerns\SubtaskDue;
 

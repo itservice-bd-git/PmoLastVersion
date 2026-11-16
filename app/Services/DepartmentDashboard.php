@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CabinetSubtask;
 use App\Models\Department;
+use App\Models\Project;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -128,7 +129,7 @@ class DepartmentDashboard
             ->whereIn('assignment_status', self::ACTIVE_STATUSES)
             ->when($departmentIds !== null, fn ($q) => $q->whereIn('department_id', $departmentIds))
             // a closed project is finished and read-only: its work is not the department's load (as on the overview)
-            ->whereHas('cabinetTask.cabinet.project', fn ($q) => $q->whereNotIn('status', [\App\Models\Project::STATUS_COMPLETED, \App\Models\Project::STATUS_CANCELLED]))
+            ->whereHas('cabinetTask.cabinet.project', fn ($q) => $q->whereNotIn('status', [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED]))
             ->withCount([
                 'checklists',
                 'checklists as completed_checklists_count' => fn ($q) => $q->where('is_completed', true),

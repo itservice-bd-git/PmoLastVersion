@@ -7,6 +7,7 @@ use App\Models\AppSetting;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
 use App\Models\User;
+use App\Support\Access;
 
 /** SubtaskAssignmentService: who may do what (the buttons offered, acting for a department) and the words of a refusal. */
 trait AssignmentChecks
@@ -52,7 +53,7 @@ trait AssignmentChecks
     /** A department set "ดูได้อย่างเดียว" (Settings > สิทธิ์การใช้งาน, edit.work off) does no work: nothing is handed to it. */
     private function assertCanTakeWork(?int $departmentId): void
     {
-        if ($departmentId && ! \App\Support\Access::departmentAllows($departmentId, 'edit.work')) {
+        if ($departmentId && ! Access::departmentAllows($departmentId, 'edit.work')) {
             throw new AssignmentException('แผนก '.$this->departmentName($departmentId).' ตั้งเป็น "ดูได้อย่างเดียว" — จ่ายงานให้แผนกนี้ไม่ได้ (ตั้งค่า → สิทธิ์การใช้งาน)', 422);
         }
     }

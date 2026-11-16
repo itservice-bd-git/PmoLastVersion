@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class ProfileController extends Controller
@@ -74,7 +75,7 @@ class ProfileController extends Controller
                 mkdir($dir, 0755, true);
                 file_put_contents($dir.'/.htaccess', "php_flag engine off\nRemoveHandler .php .phtml .php3 .php4 .php5 .php7 .phar\n");
             }
-            $path = \Illuminate\Support\Str::random(32).'.'.$request->file('avatar')->extension();
+            $path = Str::random(32).'.'.$request->file('avatar')->extension();
             $request->file('avatar')->move($dir, $path);
         }
         $user->forceFill(['avatar_path' => $path])->save();

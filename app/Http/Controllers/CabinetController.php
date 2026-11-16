@@ -8,10 +8,12 @@ use App\Models\CabinetSubtask;
 use App\Models\CabinetTemplate;
 use App\Models\Department;
 use App\Models\Project;
+use App\Models\User;
 use App\Services\CabinetCopyService;
 use App\Services\CabinetTemplateService;
 use App\Services\CommentAttachmentUploader;
-use App\Services\SubtaskAssignmentService;
+use App\Services\Remarks;
+use App\Services\WorkScope;
 use Illuminate\Http\Request;
 
 class CabinetController extends Controller
@@ -126,7 +128,7 @@ class CabinetController extends Controller
             'tasks.subtasks.pairSources.department:id,name',   // "แก้คู่เทียบ"
         ]);
 
-        \App\Services\WorkScope::trimCabinet($cabinet, $request->user());   // only their own department's work, unless they may see all
+        WorkScope::trimCabinet($cabinet, $request->user());   // only their own department's work, unless they may see all
         $cabinet->tasks->each(fn ($task) => $task->setRelation('cabinet', $cabinet));
 
         $comments = ActivityLog::where('loggable_type', Cabinet::class)
@@ -144,13 +146,14 @@ class CabinetController extends Controller
         return view('cabinets.show', [
             'cabinet' => $cabinet,
             'siblings' => ['prev' => $at > 0 ? $siblings[$at - 1] : null, 'next' => $siblings[$at + 1] ?? null, 'at' => $at + 1, 'count' => $siblings->count()],
-            'subtaskStatuses' => \App\Models\CabinetSubtask::$statuses,
-            'departments' => \App\Models\Department::orderBy('name')->get(),
-            'users' => \App\Models\User::orderBy('name')->get(),
+            'subtaskStatuses' => CabinetSubtask::$statuses,
+            'departments' => Department::orderBy('name')->get(),
+            'users' => User::orderBy('name')->get(),
             'comments' => $comments,
-            'remarks' => \App\Services\Remarks::forCabinet($cabinet),   // the "หมายเหตุ" tab: only the work this user sees (trimmed above)
+            'remarks' => Remarks::forCabinet($cabinet),   // the "หมายเหตุ" tab: only the work this user sees (trimmed above)
         ]);
     }
+
     public function edit(Cabinet $cabinet)
     {
         return view('cabinets.edit', [

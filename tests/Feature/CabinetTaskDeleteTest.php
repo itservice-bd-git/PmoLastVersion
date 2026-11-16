@@ -6,7 +6,6 @@ use App\Models\Cabinet;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetSubtaskTemplate;
-use App\Models\CabinetTask;
 use App\Models\CabinetTaskTemplate;
 use App\Models\CabinetTemplate;
 use App\Models\ChecklistTemplate;
@@ -14,6 +13,7 @@ use App\Models\Department;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\PlanningSync;
+use App\Services\ProgressService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -68,7 +68,7 @@ class CabinetTaskDeleteTest extends TestCase
         $before = $this->templateCounts();
         $task = $this->cabinet->tasks()->where('name', 'ประกอบ')->firstOrFail();
         $this->cabinet->tasks()->where('name', 'ทดสอบ')->first()->subtasks->first()->checklists->first()->update(['is_completed' => true]);
-        app(\App\Services\ProgressService::class)->recalculateSubtask(CabinetSubtask::whereHas('cabinetTask', fn ($q) => $q->where('name', 'ทดสอบ'))->first());
+        app(ProgressService::class)->recalculateSubtask(CabinetSubtask::whereHas('cabinetTask', fn ($q) => $q->where('name', 'ทดสอบ'))->first());
 
         $this->actingAs($this->user($this->busbar))->delete(route('cabinet-tasks.destroy', $task))->assertForbidden();
 

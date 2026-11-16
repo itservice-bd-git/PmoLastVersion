@@ -2,34 +2,14 @@
 
 namespace App\Services\Concerns;
 
-use App\Exceptions\AssignmentException;
 use App\Exceptions\PlanningRejected;
-use App\Exceptions\ProjectLockedException;
 use App\Models\ActivityLog;
 use App\Models\AppSetting;
-use App\Models\Board;
-use App\Models\BoardLabel;
-use App\Models\BoardStatus;
-use App\Models\Cabinet;
-use App\Models\CabinetChecklist;
-use App\Models\CabinetSubtask;
-use App\Models\CabinetTask;
-use App\Models\CabinetTemplate;
-use App\Models\DateLimitRule;
 use App\Models\Department;
-use App\Models\DepartmentField;
 use App\Models\Project;
-use App\Models\ProjectDepartmentStatus;
-use App\Models\ProjectFieldValue;
 use App\Models\User;
-use App\Services\CabinetCopyService;
-use App\Services\HandoffService;
-use App\Services\ProjectLock;
-use App\Services\SharedChecklist;
 use App\Services\WorkScope;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 /**
  * PlanningSync · Comments: post (with @mentions), edit / delete your own, acknowledge an alert.
@@ -44,7 +24,7 @@ trait SyncComments
      * (the same "no cross-department tagging" rule as the original page).
      *
      * @param  list<mixed>  $ids
-     * @return array{0: \Illuminate\Support\Collection<int, User>, 1: list<string>} [allowed targets, names that were skipped]
+     * @return array{0: Collection<int, User>, 1: list<string>} [allowed targets, names that were skipped]
      */
     public function mentionTargets(User $sender, Project $project, array $ids): array
     {

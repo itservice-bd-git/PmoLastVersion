@@ -2,6 +2,7 @@
 
 namespace App\Services\Concerns;
 
+use App\Models\Cabinet;
 use App\Models\CabinetSubtask;
 use App\Models\User;
 use App\Services\HandoffService;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 trait ChecklistLive
 {
     /** A stamp of every list of the cabinet: it moves with any add, edit, tick, order or delete (the page asks every 15 s). */
-    public function cabinetVersion(\App\Models\Cabinet $cabinet): string
+    public function cabinetVersion(Cabinet $cabinet): string
     {
         $row = DB::table('cabinet_checklists as c')->join('cabinet_subtasks as s', 's.id', '=', 'c.cabinet_subtask_id')
             ->join('cabinet_tasks as t', 't.id', '=', 's.cabinet_task_id')->where('t.cabinet_id', $cabinet->id)
@@ -26,7 +27,7 @@ trait ChecklistLive
      * Every Sub Task's list of the cabinet as the page shows it (its items and the lists it compares with), and the bars
      * (the same shape as an edit's answer, one per Sub Task).
      */
-    public function cabinetLists(\App\Models\Cabinet $cabinet, ?User $user = null): array
+    public function cabinetLists(Cabinet $cabinet, ?User $user = null): array
     {
         $cabinet->load('tasks.subtasks.checklists.completedBy:id,name');
         if ($user) {

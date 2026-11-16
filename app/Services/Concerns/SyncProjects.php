@@ -2,34 +2,22 @@
 
 namespace App\Services\Concerns;
 
-use App\Exceptions\AssignmentException;
 use App\Exceptions\PlanningRejected;
-use App\Exceptions\ProjectLockedException;
 use App\Models\ActivityLog;
-use App\Models\AppSetting;
 use App\Models\Board;
 use App\Models\BoardLabel;
 use App\Models\BoardStatus;
 use App\Models\Cabinet;
-use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
-use App\Models\CabinetTask;
-use App\Models\CabinetTemplate;
 use App\Models\DateLimitRule;
-use App\Models\Department;
-use App\Models\DepartmentField;
 use App\Models\Project;
-use App\Models\ProjectDepartmentStatus;
-use App\Models\ProjectFieldValue;
 use App\Models\User;
 use App\Services\CabinetCopyService;
-use App\Services\HandoffService;
+use App\Services\ProjectDates;
 use App\Services\ProjectLock;
-use App\Services\SharedChecklist;
-use App\Services\WorkScope;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Validator;
 
 /**
  * PlanningSync · Projects: fields, dates, the board it is on, delete; create / copy / restore; moving the whole project; people in charge; labels.
@@ -194,7 +182,7 @@ trait SyncProjects
         }
 
         // the rest of the project form (all optional): phone, job type, contract value, margin - same rules as everywhere else
-        $extra = \Illuminate\Support\Facades\Validator::make([
+        $extra = Validator::make([
             'customer_phone' => trim((string) ($op['customerPhone'] ?? '')) ?: null,
             'job_type_id' => ($op['jobTypeId'] ?? null) ?: null,
             'contract_value' => Project::cleanAmount($op['contractValue'] ?? null),
@@ -299,15 +287,15 @@ trait SyncProjects
         $moved = collect();
         [$oldStart, $oldDue] = [$project->start_date?->copy(), $project->due_date?->copy()];
         DB::transaction(function () use ($project, $move, &$moved, $user, $oldStart, $oldDue, $days) {
-            app(\App\Services\ProjectDates::class)->shifted($project, $user, $oldStart, $oldDue, $days);
+            app(ProjectDates::class)->shifted($project, $user, $oldStart, $oldDue, $days);
             $project->update(array_filter(['start_date' => $move($project->start_date), 'due_date' => $move($project->due_date)]));
             foreach ($project->cabinets()->get() as $cabinet) {
-                app(\App\Services\ProjectDates::class)->shifted($cabinet, $user, $cabinet->start_date?->copy(), $cabinet->due_date?->copy(), $days);
+                app(ProjectDates::class)->shifted($cabinet, $user, $cabinet->start_date?->copy(), $cabinet->due_date?->copy(), $days);
                 $cabinet->update(array_filter(['start_date' => $move($cabinet->start_date), 'due_date' => $move($cabinet->due_date), 'expected_completion_date' => $move($cabinet->expected_completion_date)]));
-                foreach (\App\Models\CabinetSubtask::whereHas('cabinetTask', fn ($q) => $q->where('cabinet_id', $cabinet->id))
-                    ->where('assignment_status', '!=', \App\Models\CabinetSubtask::ASSIGNMENT_COMPLETED)->get() as $s) {
+                foreach (CabinetSubtask::whereHas('cabinetTask', fn ($q) => $q->where('cabinet_id', $cabinet->id))
+                    ->where('assignment_status', '!=', CabinetSubtask::ASSIGNMENT_COMPLETED)->get() as $s) {
                     $due = $move($s->due_date);
-                    if ($due && ($message = \App\Models\DateLimitRule::violationFor($cabinet->id, $s->department_id, $due))) {
+                    if ($due && ($message = DateLimitRule::violationFor($cabinet->id, $s->department_id, $due))) {
                         throw new PlanningRejected($message);
                     }
                     $s->update(array_filter(['start_date' => $move($s->start_date), 'due_date' => $due]));

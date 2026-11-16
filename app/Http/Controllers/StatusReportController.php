@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\NotificationService;
 use App\Services\StatusReport;
 use Illuminate\Http\Request;
 
@@ -25,7 +26,7 @@ class StatusReportController extends Controller
         ]);
 
         // the same "รับทราบ" as the bell's: an alert / a tag tells its sender (NotificationService::acknowledge)
-        $count = app(\App\Services\NotificationService::class)->acknowledge($request->user(), $request->user()->unreadNotifications()->whereIn('id', $data['ids'])->get());
+        $count = app(NotificationService::class)->acknowledge($request->user(), $request->user()->unreadNotifications()->whereIn('id', $data['ids'])->get());
 
         return response()->json(['acknowledged' => $count]);
     }

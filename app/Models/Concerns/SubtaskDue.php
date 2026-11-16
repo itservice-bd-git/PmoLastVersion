@@ -2,6 +2,8 @@
 
 namespace App\Models\Concerns;
 
+use Illuminate\Support\Carbon;
+
 /** CabinetSubtask: done, late and days left. */
 trait SubtaskDue
 {
@@ -15,7 +17,7 @@ trait SubtaskDue
     }
 
     /** Not done and due before $today: the due day itself is not late yet. */
-    public function isLateOn(?\Illuminate\Support\Carbon $today = null): bool
+    public function isLateOn(?Carbon $today = null): bool
     {
         return $this->due_date !== null && ! $this->isDone() && $this->due_date->lt(($today ?? today())->copy()->startOfDay());
     }

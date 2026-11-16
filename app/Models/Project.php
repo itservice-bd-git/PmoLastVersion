@@ -5,15 +5,16 @@ namespace App\Models;
 use App\Models\Concerns\CascadesSoftDeletes;
 use App\Models\Concerns\HasAuditFields;
 use App\Models\Concerns\LogsActivity;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Services\ProjectLock;
+use App\Services\WorkScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Validation\ValidationException;
 
 class Project extends Model
 {
-    use HasFactory, HasAuditFields, LogsActivity, SoftDeletes, CascadesSoftDeletes;
+    use CascadesSoftDeletes, HasAuditFields, HasFactory, LogsActivity, SoftDeletes;
     use Concerns\ProjectMoney;
     use Concerns\ProjectProgress;
 
@@ -183,7 +184,7 @@ class Project extends Model
     /** Only the projects this person may see (App\Services\WorkScope - the same rule as opening one). */
     public function scopeVisibleTo($query, User $user)
     {
-        return \App\Services\WorkScope::visibleProjects($query, $user);
+        return WorkScope::visibleProjects($query, $user);
     }
 
     public function cabinets()

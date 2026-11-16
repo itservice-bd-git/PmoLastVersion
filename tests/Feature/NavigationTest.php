@@ -7,6 +7,7 @@ use App\Models\CabinetTemplate;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Js;
 use Tests\TestCase;
 
 /** Getting around: a project's MO cards open the full cabinet page; every sub-page has "← ย้อนกลับ" to its parent; tabs live in the URL. */
@@ -40,7 +41,7 @@ class NavigationTest extends TestCase
         $html = $this->actingAs($this->admin)->get(route('projects.show', [$this->project, 'tab' => 'cabinets']))->assertOk()->getContent();
 
         // the MO table is filled from @js() data: the link is there, JSON-escaped
-        $this->assertStringContainsString(substr((string) \Illuminate\Support\Js::from(['url' => route('cabinets.show', $this->cabinet)]), strlen("JSON.parse('{"), -strlen("}')")), $html);
+        $this->assertStringContainsString(substr((string) Js::from(['url' => route('cabinets.show', $this->cabinet)]), strlen("JSON.parse('{"), -strlen("}')")), $html);
         $this->assertStringNotContainsString('openCabinetPanel', $html, 'no quick panel any more');
         $this->assertStringContainsString("tab: 'info'", $html, 'the old MO tab name lands on ข้อมูลโครงการ');
         $this->assertStringContainsString('keepTabInUrl', $html, 'and goes back into it');

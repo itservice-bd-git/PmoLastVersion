@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\JobTypeRequest;
 use App\Models\JobType;
-use Illuminate\Http\Request;
 
 class JobTypeController extends Controller
 {
@@ -15,7 +15,7 @@ class JobTypeController extends Controller
         ]);
     }
 
-    public function store(\App\Http\Requests\Settings\JobTypeRequest $request)
+    public function store(JobTypeRequest $request)
     {
         $data = $request->validated();
         $data['is_active'] = true;
@@ -25,7 +25,7 @@ class JobTypeController extends Controller
         return back()->with('success', 'เพิ่มประเภทงานเรียบร้อยแล้ว');
     }
 
-    public function update(\App\Http\Requests\Settings\JobTypeRequest $request, JobType $jobType)
+    public function update(JobTypeRequest $request, JobType $jobType)
     {
         $data = $request->validated();
         $data['is_active'] = $request->boolean('is_active');

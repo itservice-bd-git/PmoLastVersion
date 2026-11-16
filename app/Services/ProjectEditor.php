@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Project;
+use App\Models\User;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -45,7 +46,7 @@ class ProjectEditor
         $rules = self::RULES;
         // a new Project Manager must be Admin / PM (one already on the project before this rule may stay)
         $rules['project_manager_id'][] = function (string $attr, mixed $value, \Closure $fail) use ($project) {
-            if ($value && (int) $value !== $project->project_manager_id && ! \App\Models\User::whereKey($value)->whereIn('role', Project::MANAGER_ROLES)->exists()) {
+            if ($value && (int) $value !== $project->project_manager_id && ! User::whereKey($value)->whereIn('role', Project::MANAGER_ROLES)->exists()) {
                 $fail('ผู้จัดการโครงการต้องเป็น Admin หรือ Project Manager');
             }
         };

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\PlanningRejected;
 use App\Models\CabinetChecklist;
 use App\Models\ProjectDelivery;
 use App\Models\User;
@@ -70,7 +71,7 @@ class DeliveryChecklist
     public function assertManual(CabinetChecklist $item): void
     {
         if ($d = $this->lockedBy($item)) {
-            throw new \App\Exceptions\PlanningRejected('"'.$item->name.'" ติ๊กจากหน้า "งานจัดส่ง" (รอบที่ '.$d->round.') · Checklist นี้ดูได้อย่างเดียว');
+            throw new PlanningRejected('"'.$item->name.'" ติ๊กจากหน้า "งานจัดส่ง" (รอบที่ '.$d->round.') · Checklist นี้ดูได้อย่างเดียว');
         }
     }
 

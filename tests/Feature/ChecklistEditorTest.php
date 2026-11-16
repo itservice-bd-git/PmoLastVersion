@@ -14,6 +14,7 @@ use App\Models\ChecklistTemplate;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\User;
+use App\Services\HandoffService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -104,7 +105,7 @@ class ChecklistEditorTest extends TestCase
         // the date shows where the department has one (Settings > แผนก), with or without another Sub Task comparing
         $this->op($this->user($this->busbar), ['type' => 'add', 'items' => [['name' => 'Y', 'date' => '20/10/2569']]])->assertStatus(422);
         $this->busbar->update(['handoff_date_label' => 'วันของเข้า']);
-        app(\App\Services\HandoffService::class)->forgetPairs();   // it read the departments' dates in the request above
+        app(HandoffService::class)->forgetPairs();   // it read the departments' dates in the request above
         $this->op($this->user($this->busbar), ['type' => 'add', 'items' => [['name' => 'Breaker', 'date' => '20/10/2569'], ['name' => 'CT', 'date' => '2026-11-01']]])->assertOk();
         $this->assertSame(['2026-10-20', '2026-11-01'], CabinetChecklist::where('cabinet_subtask_id', $this->sub->id)->whereIn('name', ['Breaker', 'CT'])->orderBy('sequence')->get()->map(fn ($c) => $c->expected_date->format('Y-m-d'))->all());
         $this->op($this->user($this->busbar), ['type' => 'add', 'items' => [['name' => 'X', 'date' => '31/02/2569']]])->assertStatus(422);

@@ -3,6 +3,11 @@
 namespace App\Services\Concerns;
 
 use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /** PlanningBoard: the stamp Planning polls with (ETag), and touch() to move it when something changes. */
 trait BoardStamp
@@ -14,15 +19,15 @@ trait BoardStamp
      * shared host (CloudLinux limits) feels when several tabs poll. Also changes with the day (late work) and every
      * STAMP_MAX_AGE seconds.
      */
-    public function stamp(User $user, int|string|null $board, ?\Carbon\Carbon $today = null): string
+    public function stamp(User $user, int|string|null $board, ?Carbon $today = null): string
     {
         $parts = collect(self::STAMP_TABLES)->map(fn (string $sum, string $table) => str_contains($sum, '*')   // the pivots have no timestamps
             ? "SELECT COUNT(*) AS n, NULL AS u, SUM({$sum}) AS s FROM {$table}"
             : "SELECT COUNT(*) AS n, MAX(updated_at) AS u, SUM({$sum}) AS s FROM {$table}");
-        $rows = \Illuminate\Support\Facades\DB::select($parts->implode(' UNION ALL '));
+        $rows = DB::select($parts->implode(' UNION ALL '));
 
         return md5(json_encode([
-            $rows, \Illuminate\Support\Facades\Cache::get('planning:version', 0),
+            $rows, Cache::get('planning:version', 0),
             $user->id, $board, ($today ?? today())->toDateString(), intdiv(now()->getTimestamp(), self::STAMP_MAX_AGE),
         ]));
     }
@@ -41,7 +46,7 @@ trait BoardStamp
                 return;
             }
             $app->forgetInstance('planning.touched');
-            \Illuminate\Support\Facades\Cache::forever('planning:version', \Illuminate\Support\Str::random(12));
+            Cache::forever('planning:version', Str::random(12));
         });
     }
 
@@ -49,7 +54,7 @@ trait BoardStamp
      * A date column as 'Y-m-d' straight from the row - the board reads thousands of these, and every read of a cast date
      * makes a new Carbon (most of the build time). Same value as ->format('Y-m-d'): Laravel does not shift dates on read.
      */
-    private static function ymd(\Illuminate\Database\Eloquent\Model $m, string $key): ?string
+    private static function ymd(Model $m, string $key): ?string
     {
         $v = $m->getAttributes()[$key] ?? null;
 
@@ -57,7 +62,7 @@ trait BoardStamp
     }
 
     /** Whether a 'Y-m-d' due date is before $today - exactly as Carbon's lt() (a due date is that day at 00:00). */
-    private static function before(string $due, \Carbon\Carbon $today): bool
+    private static function before(string $due, Carbon $today): bool
     {
         return $due.' 00:00:00.000000' < $today->format('Y-m-d H:i:s.u');
     }

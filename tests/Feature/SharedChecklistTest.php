@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\Cabinet;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
@@ -363,7 +364,7 @@ class SharedChecklistTest extends TestCase
         $this->assertSame(['สายไฟ 25 ✓', 'ตรวจสภาพกล่อง'], $this->list($this->receive));
         $this->assertSame(50, $this->receive->fresh()->progress);
         $this->assertSame(['Breaker 100A', 'สายไฟ 25'], $this->list($this->buy), 'the source keeps its list and ticks');
-        $this->assertStringContainsString('(ดูอย่างเดียว)', \App\Models\ActivityLog::where('project_id', $this->project->id)->latest('id')->value('description'));
+        $this->assertStringContainsString('(ดูอย่างเดียว)', ActivityLog::where('project_id', $this->project->id)->latest('id')->value('description'));
 
         // back to comparing: the copies come again
         app(SubtaskPairs::class)->setCabinetPairs($this->receive, [$this->buy->id]);

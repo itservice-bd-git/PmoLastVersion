@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\DeliveryChecklist;
 use App\Services\EventDates;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /** ProjectDates: the FAT / delivery rounds and Sub Tasks that move with a project's dates, taking them back, and telling the delivery department. */
 trait MovesLinkedDates
@@ -19,9 +20,9 @@ trait MovesLinkedDates
      * The FAT and delivery rounds a project's date can take along: a FAT round not held yet (no result), a delivery round
      * not on the road yet - whatever their day, so one whose day has passed waits with the project too (state says เลยกำหนด).
      *
-     * @return \Illuminate\Support\Collection<int, array{type: string, id: int, label: string, when: string, state: string, date: string, pending: bool}>
+     * @return Collection<int, array{type: string, id: int, label: string, when: string, state: string, date: string, pending: bool}>
      */
-    public static function linkedEvents(Project $project): \Illuminate\Support\Collection
+    public static function linkedEvents(Project $project): Collection
     {
         $today = today();
         $fats = ProjectFat::where('project_id', $project->id)->where('status', ProjectFat::SCHEDULED)->orderBy('round')->get()

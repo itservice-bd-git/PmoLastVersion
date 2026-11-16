@@ -2,15 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
 use App\Models\DateLimitRule;
 use App\Models\Department;
 use App\Models\Project;
+use App\Services\NotificationService;
 use App\Services\ProgressService;
 use App\Services\SubtaskAssignmentService;
 use App\Services\WorkScope;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
 class CabinetSubtaskController extends Controller
@@ -86,7 +89,7 @@ class CabinetSubtaskController extends Controller
         $dueBefore = $cabinetSubtask->due_date?->format('Y-m-d');
         $cabinetSubtask->update($data);
         if (array_key_exists('due_date', $data) && ($data['due_date'] ?: null) !== $dueBefore) {
-            app(\App\Services\NotificationService::class)->dueChanged(collect([$cabinetSubtask->fresh('cabinetTask.cabinet.project')]), $request->user());
+            app(NotificationService::class)->dueChanged(collect([$cabinetSubtask->fresh('cabinetTask.cabinet.project')]), $request->user());
         }
 
         // Cabinet Quick Detail Panel's Assignment Modal submits this same
@@ -139,7 +142,7 @@ class CabinetSubtaskController extends Controller
 
         // a due date given with the dispatch: Settings > Automation's date limits and each sub task's own start date,
         // checked for every one BEFORE anything is saved (as the single edit form does)
-        $due = ! empty($data['due_date']) && ! empty($data['department_id']) ? \Illuminate\Support\Carbon::parse($data['due_date'])->format('Y-m-d') : null;
+        $due = ! empty($data['due_date']) && ! empty($data['department_id']) ? Carbon::parse($data['due_date'])->format('Y-m-d') : null;
         if ($due) {
             foreach (CabinetSubtask::whereKey($data['subtask_ids'])->with('cabinetTask')->get() as $s) {
                 if ($s->start_date && $s->start_date->format('Y-m-d') > $due) {
@@ -158,7 +161,7 @@ class CabinetSubtaskController extends Controller
             ? ($department ? "จ่ายงาน {$changed} งานให้แผนก {$department} แล้ว" : "ยกเลิกการจ่ายงาน {$changed} งานแล้ว")
             : 'ไม่มีการเปลี่ยนแปลง';
         if ($result['dated']) {
-            $message .= ' · กำหนดส่ง '.\Illuminate\Support\Carbon::parse($due)->thaiDate().' ('.$result['dated'].' งาน)';
+            $message .= ' · กำหนดส่ง '.Carbon::parse($due)->thaiDate().' ('.$result['dated'].' งาน)';
         }
         if ($result['locked']) {
             $message .= " · ข้าม {$result['locked']} งานที่แผนกรับไปแล้ว (เปลี่ยนแผนกไม่ได้)";
@@ -187,9 +190,9 @@ class CabinetSubtaskController extends Controller
 
         $subtasks = CabinetSubtask::whereKey($data['subtask_ids'])->where('assignment_status', CabinetSubtask::ASSIGNMENT_ASSIGNED)
             ->with('cabinetTask.cabinet.project', 'department')->get();
-        $sent = app(\App\Services\NotificationService::class)->nudge($subtasks, $request->user());
+        $sent = app(NotificationService::class)->nudge($subtasks, $request->user());
         foreach (collect($sent)->where('sent', '>', 0) as $row) {
-            \App\Models\ActivityLog::record($row['project']->id, $request->user()->id, $row['project'], 'reminded', "ทวงถามแผนก {$row['department']} ให้รับงาน {$row['count']} งาน");
+            ActivityLog::record($row['project']->id, $request->user()->id, $row['project'], 'reminded', "ทวงถามแผนก {$row['department']} ให้รับงาน {$row['count']} งาน");
         }
 
         $reached = collect($sent)->where('sent', '>', 0);

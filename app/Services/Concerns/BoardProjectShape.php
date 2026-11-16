@@ -3,20 +3,17 @@
 namespace App\Services\Concerns;
 
 use App\Models\ActivityLog;
-use App\Models\BoardLabel;
+use App\Models\AppSetting;
 use App\Models\BoardStatus;
 use App\Models\Cabinet;
 use App\Models\CabinetSubtask;
 use App\Models\Department;
-use App\Models\DepartmentField;
 use App\Models\Project;
-use App\Models\ProjectDateChange;
 use App\Models\ProjectDelivery;
-use App\Models\ProjectDepartmentStatus;
-use App\Models\ProjectFieldValue;
 use App\Models\User;
 use App\Services\PlanningBoard;
 use App\Services\ProjectDates;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -25,7 +22,7 @@ use Illuminate\Support\Collection;
  */
 trait BoardProjectShape
 {
-    private function task(Project $project, Collection $rows, Collection $comments, \Carbon\Carbon $today, User $user, ?Collection $allCabinets): array
+    private function task(Project $project, Collection $rows, Collection $comments, Carbon $today, User $user, ?Collection $allCabinets): array
     {
         $dues = $rows->map(fn ($s) => self::ymd($s, 'due_date'))->filter();
         $starts = $rows->map(fn ($s) => self::ymd($s, 'start_date'))->filter();
@@ -146,7 +143,7 @@ trait BoardProjectShape
         ] : null;
     }
 
-    private function cabinet(Cabinet $cabinet, Collection $rows, \Carbon\Carbon $today): array
+    private function cabinet(Cabinet $cabinet, Collection $rows, Carbon $today): array
     {
         // in the cabinet's own order: Task, then its Sub Tasks (the checklist window shows Task › Sub Task › items)
         $rows = $rows->sortBy(fn ($s) => sprintf('%05d-%05d-%09d', $s->cabinetTask->sequence ?? 0, $s->sequence ?? 0, $s->id))->values();
@@ -216,7 +213,7 @@ trait BoardProjectShape
         $counts = $rows->countBy('assignment_status');   // once, not a pass per question below
         $n = fn (string $status) => (int) ($counts[$status] ?? 0);
         // the workflow actions belong to the department's own members (or Admin / PM, when Settings > กฎการทำงาน lets them act for it)
-        $mine = ! $user->isViewOnly() && ($user->inDepartment($deptId) || ($user->canDispatchWork() && \App\Models\AppSetting::get('pmo_acts_for_departments')));
+        $mine = ! $user->isViewOnly() && ($user->inDepartment($deptId) || ($user->canDispatchWork() && AppSetting::get('pmo_acts_for_departments')));
 
         return [
             'waiting' => $n(CabinetSubtask::ASSIGNMENT_ASSIGNED),
@@ -232,7 +229,7 @@ trait BoardProjectShape
     }
 
     /** Worst-first: overdue, then all done, then in progress, then accepted, else waiting. Returns the page id of a built-in status. */
-    private function statusFor(Collection $rows, \Carbon\Carbon $today): string
+    private function statusFor(Collection $rows, Carbon $today): string
     {
         $done = fn ($s) => $s->isDone();   // checklist complete or "เสร็จงาน" pressed (CabinetSubtask::isDone)
         $ids = BoardStatus::PAGE_IDS;
@@ -274,25 +271,25 @@ trait BoardProjectShape
         };
 
         return $notes->groupBy('project_id')->map(
-                fn (Collection $logs) => $logs->take(-30)->values()->map(fn (ActivityLog $l) => [
-                    'id' => 'a'.$l->id,
-                    'author' => $l->user?->name ?? 'ระบบ',
-                    'text' => $l->description,
-                    'at' => $l->created_at->getTimestampMs(),
-                    'userId' => $l->user_id,
-                    'avatar' => $l->user?->avatar_url,
-                    'mine' => $l->user_id === $user->id,
-                    'edited' => (bool) ($l->changes['edited'] ?? false),
-                    'replyTo' => isset($l->changes['reply_to']) ? 'a'.$l->changes['reply_to'] : null,
-                    'alert' => empty($l->changes['alert_department_id']) ? null : [
-                        'deptId' => self::deptKey((int) $l->changes['alert_department_id']),
-                        'acks' => collect($l->changes['acks'] ?? [])->map(fn ($a) => ['name' => $a['name'] ?? '', 'at' => $a['at'] ?? null])->values()->all(),
-                        'forMe' => $user->inDepartment((int) $l->changes['alert_department_id']),
-                        'acked' => collect($l->changes['acks'] ?? [])->contains('user_id', $user->id),
-                    ],
-                    'receipt' => $receipt($l),
-                    'files' => $l->attachments->map(fn ($a) => ['name' => $a->original_name, 'url' => $a->url, 'size' => $a->size_for_humans, 'image' => str_starts_with((string) $a->mime_type, 'image/')])->values()->all(),
-                ])
-            );
+            fn (Collection $logs) => $logs->take(-30)->values()->map(fn (ActivityLog $l) => [
+                'id' => 'a'.$l->id,
+                'author' => $l->user?->name ?? 'ระบบ',
+                'text' => $l->description,
+                'at' => $l->created_at->getTimestampMs(),
+                'userId' => $l->user_id,
+                'avatar' => $l->user?->avatar_url,
+                'mine' => $l->user_id === $user->id,
+                'edited' => (bool) ($l->changes['edited'] ?? false),
+                'replyTo' => isset($l->changes['reply_to']) ? 'a'.$l->changes['reply_to'] : null,
+                'alert' => empty($l->changes['alert_department_id']) ? null : [
+                    'deptId' => self::deptKey((int) $l->changes['alert_department_id']),
+                    'acks' => collect($l->changes['acks'] ?? [])->map(fn ($a) => ['name' => $a['name'] ?? '', 'at' => $a['at'] ?? null])->values()->all(),
+                    'forMe' => $user->inDepartment((int) $l->changes['alert_department_id']),
+                    'acked' => collect($l->changes['acks'] ?? [])->contains('user_id', $user->id),
+                ],
+                'receipt' => $receipt($l),
+                'files' => $l->attachments->map(fn ($a) => ['name' => $a->original_name, 'url' => $a->url, 'size' => $a->size_for_humans, 'image' => str_starts_with((string) $a->mime_type, 'image/')])->values()->all(),
+            ])
+        );
     }
 }

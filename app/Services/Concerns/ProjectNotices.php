@@ -3,21 +3,16 @@
 namespace App\Services\Concerns;
 
 use App\Models\ActivityLog;
-use App\Models\CabinetSubtask;
+use App\Models\Cabinet;
 use App\Models\Department;
-use App\Models\NotificationPreference;
 use App\Models\Project;
+use App\Models\ProjectDateChange;
 use App\Models\User;
 use App\Notifications\PmoNotice;
-use App\Services\ChecklistNoticeRules;
-use App\Services\DeliveryFlow;
-use App\Services\HandoffService;
-use App\Services\PlanningBoard;
-use App\Services\PlanningSync;
+use App\Services\ProjectDates;
 use App\Services\ProjectFollowers;
 use App\Services\StatusReport;
-use App\Services\WebPushService;
-use Illuminate\Notifications\DatabaseNotification;
+use App\Services\WorkScope;
 use Illuminate\Support\Collection;
 
 /**
@@ -75,7 +70,7 @@ trait ProjectNotices
     /** Ticked as a project's พนักงานขาย (ProjectFollowers::setSales): they follow it now - its news comes to them. */
     public function followerAdded(Project $project, User $actor, Collection $people): int
     {
-        $people = $people->reject(fn (User $u) => $u->id === $actor->id)->filter(fn (User $u) => \App\Services\WorkScope::canSeeProject($project, $u));
+        $people = $people->reject(fn (User $u) => $u->id === $actor->id)->filter(fn (User $u) => WorkScope::canSeeProject($project, $u));
 
         return $this->send($people, new PmoNotice(
             'follow',
@@ -95,15 +90,15 @@ trait ProjectNotices
      *
      * @param  list<int>  $skip
      */
-    public function commented(Project $project, User $actor, \App\Models\ActivityLog $note, array $skip = []): int
+    public function commented(Project $project, User $actor, ActivityLog $note, array $skip = []): int
     {
-        $ids = \App\Models\ActivityLog::where('project_id', $project->id)->where('action', 'note')->where('id', '!=', $note->id)->pluck('user_id')
+        $ids = ActivityLog::where('project_id', $project->id)->where('action', 'note')->where('id', '!=', $note->id)->pluck('user_id')
             ->merge($this->peopleInCharge($project)->pluck('id'))
             ->merge($project->followers()->pluck('users.id'))
             ->filter()->unique()->reject(fn ($id) => $id === $actor->id || in_array($id, $skip, true));
         // the author of the comment being answered hears it too (even if they never wrote here otherwise - they did, by definition)
 
-        $people = User::whereIn('id', $ids)->where('is_active', true)->get()->filter(fn (User $u) => \App\Services\WorkScope::canSeeProject($project, $u));
+        $people = User::whereIn('id', $ids)->where('is_active', true)->get()->filter(fn (User $u) => WorkScope::canSeeProject($project, $u));
 
         return $this->send($people, new PmoNotice(
             'comment',
@@ -122,11 +117,11 @@ trait ProjectNotices
      * everyone in a department with work in it (in the cabinet, for a cabinet) hear when and why. The departments are told
      * their own dates stayed, and open the project on Planning.
      */
-    public function projectRescheduled(Project $project, User $actor, \App\Models\ProjectDateChange $change, int $round, ?\App\Models\Cabinet $cabinet = null): int
+    public function projectRescheduled(Project $project, User $actor, ProjectDateChange $change, int $round, ?Cabinet $cabinet = null): int
     {
-        $canSee = fn (Collection $ids) => User::whereIn('id', $ids)->where('is_active', true)->get()->filter(fn (User $u) => \App\Services\WorkScope::canSeeProject($project, $u));
+        $canSee = fn (Collection $ids) => User::whereIn('id', $ids)->where('is_active', true)->get()->filter(fn (User $u) => WorkScope::canSeeProject($project, $u));
         $people = $canSee($this->peopleInCharge($project, $actor)->pluck('id')->merge($project->followers()->pluck('users.id'))->unique()->reject(fn ($id) => $id === $actor->id));
-        $deptIds = \App\Services\ProjectDates::departments($cabinet ?? $project)->pluck('id')->all();
+        $deptIds = ProjectDates::departments($cabinet ?? $project)->pluck('id')->all();
         $deptPeople = $deptIds ? $canSee(User::ofDepartment($deptIds)->where('id', '!=', $actor->id)->pluck('id')->diff($people->pluck('id'))) : collect();
 
         $days = $change->dueDays();
@@ -149,7 +144,7 @@ trait ProjectNotices
         $people = $this->peopleInCharge($project, $actor)->pluck('id')
             ->merge($project->followers()->pluck('users.id'))->unique()->reject(fn ($id) => $id === $actor->id);
 
-        return $this->send(User::whereIn('id', $people)->where('is_active', true)->get()->filter(fn (User $u) => \App\Services\WorkScope::canSeeProject($project, $u)), new PmoNotice(
+        return $this->send(User::whereIn('id', $people)->where('is_active', true)->get()->filter(fn (User $u) => WorkScope::canSeeProject($project, $u)), new PmoNotice(
             'date_pending', Project::PENDING_LABEL." · {$project->project_no}", $text, route('projects.show', $project),
             projectId: $project->id, group: "project:{$project->id}", parts: ['date_pending' => 1],
             projectLabel: "{$project->project_no} · {$project->project_name}",

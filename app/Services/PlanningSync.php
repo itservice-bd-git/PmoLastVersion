@@ -5,19 +5,8 @@ namespace App\Services;
 use App\Exceptions\AssignmentException;
 use App\Exceptions\PlanningRejected;
 use App\Exceptions\ProjectLockedException;
-use App\Models\ActivityLog;
-use App\Models\AppSetting;
 use App\Models\Board;
-use App\Models\BoardLabel;
-use App\Models\BoardStatus;
-use App\Models\Cabinet;
-use App\Models\CabinetTemplate;
-use App\Models\CabinetTask;
-use App\Models\DepartmentField;
-use App\Models\ProjectFieldValue;
-use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
-use App\Models\DateLimitRule;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\User;
@@ -44,8 +33,7 @@ use Illuminate\Validation\ValidationException;
  */
 class PlanningSync
 {
-    use Concerns\SyncChecklist, Concerns\SyncComments, Concerns\SyncProjects, Concerns\SyncStages, Concerns\SyncCabinets;
-
+    use Concerns\SyncCabinets, Concerns\SyncChecklist, Concerns\SyncComments, Concerns\SyncProjects, Concerns\SyncStages;
 
     /** @var list<string> warnings collected while one operation runs, added to its answer */
     private array $notes = [];

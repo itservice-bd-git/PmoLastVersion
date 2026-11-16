@@ -40,8 +40,8 @@ class ProductionReport
     private const MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 
     /**
-     * @param list<int> $projectIds only these projects (the "เลือกโครงการ" filter); empty = all
-     * @param ReportFilter|null $filter the CEO report's fuller "เลือก…" (SO / departments / period); wins over $projectIds
+     * @param  list<int>  $projectIds  only these projects (the "เลือกโครงการ" filter); empty = all
+     * @param  ReportFilter|null  $filter  the CEO report's fuller "เลือก…" (SO / departments / period); wins over $projectIds
      */
     public function build(User $user, ?Carbon $now = null, array $projectIds = [], ?ReportFilter $filter = null): array
     {

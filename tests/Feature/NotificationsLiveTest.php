@@ -10,6 +10,7 @@ use App\Models\CabinetTask;
 use App\Models\Department;
 use App\Models\Project;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\PlanningSync;
 use App\Services\SubtaskAssignmentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -246,8 +247,8 @@ class NotificationsLiveTest extends TestCase
         $this->assertCount(1, $notes, 'not 18');
         $this->assertSame(['P-1 · MDB', 'Busbar รับงาน 18'], [$notes[0]->data['title'], $notes[0]->data['body']]);
 
-        app(\App\Services\NotificationService::class)->sendReminders();
-        app(\App\Services\NotificationService::class)->sendReminders();   // a second run the same day changes nothing
+        app(NotificationService::class)->sendReminders();
+        app(NotificationService::class)->sendReminders();   // a second run the same day changes nothing
         $mine = $worker->fresh()->notifications;
         $this->assertCount(1, $mine, 'the worker: the project\'s one notice');
         $this->assertSame('⚠ เกินกำหนด 10 งาน (สุด 7 วัน) · ใกล้ครบกำหนด 8 งาน', $mine[0]->data['body']);

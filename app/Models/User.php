@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Support\Access;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -120,7 +121,7 @@ class User extends Authenticatable
     /** One permission of Settings > สิทธิ์การใช้งาน (App\Support\Access) - Admin may everything. */
     public function allows(string $permission): bool
     {
-        return \App\Support\Access::allows($this, $permission);
+        return Access::allows($this, $permission);
     }
 
     /** May SEE every project (read only): a PMO role, or a member of a department an admin marked "sees everything". */

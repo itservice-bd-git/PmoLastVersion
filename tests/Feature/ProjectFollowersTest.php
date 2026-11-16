@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppSetting;
 use App\Models\Cabinet;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
@@ -76,7 +77,7 @@ class ProjectFollowersTest extends TestCase
 
     public function test_anyone_who_sees_the_project_may_follow_it_even_view_only_and_hears_its_news(): void
     {
-        \App\Models\AppSetting::put('department_permissions', [(string) $this->sales->id => ['edit.work' => false]]);
+        AppSetting::put('department_permissions', [(string) $this->sales->id => ['edit.work' => false]]);
         $project = Project::forceCreate(['project_no' => 'SO-2', 'project_name' => 'MCC', 'customer_name' => 'C', 'status' => 'in_progress', 'priority' => 'normal', 'project_manager_id' => $this->pm->id]);
         $cab = Cabinet::forceCreate(['project_id' => $project->id, 'mo_no' => 'MO-1', 'cabinet_name' => 'Cab', 'quantity' => 1, 'status' => 'not_started', 'progress' => 0]);
         $task = CabinetTask::forceCreate(['cabinet_id' => $cab->id, 'name' => 'T', 'status' => 'not_started', 'progress' => 0]);

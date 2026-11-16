@@ -10,6 +10,7 @@ use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
 use App\Models\Department;
+use App\Models\DepartmentField;
 use App\Models\Project;
 use App\Models\PushSubscription;
 use App\Models\StatusRule;
@@ -108,7 +109,11 @@ class PlanningFullPageTest extends TestCase
         $this->assertSame('MO-1-P-2', $cab->mo_no);
         $this->assertSame(['a', 'b'], $cab->tasks()->first()->subtasks()->first()->checklists()->orderBy('sequence')->pluck('name')->all());
         $this->assertFalse($this->apply($pm, ['type' => 'project_duplicate', 'taskId' => $this->pid(), 'so' => 'P-2'])['ok'], 'number taken');
-        $this->assertSame('MO-1-P-3', (function () use ($pm) { $this->apply($pm, ['type' => 'project_duplicate', 'taskId' => $this->pid(), 'so' => 'P-3']); return Project::where('project_no', 'P-3')->first()->cabinets()->first()->mo_no; })());
+        $this->assertSame('MO-1-P-3', (function () use ($pm) {
+            $this->apply($pm, ['type' => 'project_duplicate', 'taskId' => $this->pid(), 'so' => 'P-3']);
+
+            return Project::where('project_no', 'P-3')->first()->cabinets()->first()->mo_no;
+        })());
     }
 
     public function test_trash_works_from_the_page(): void
@@ -310,7 +315,7 @@ class PlanningFullPageTest extends TestCase
     {
         $admin = $this->user(null, 'admin');
         $this->actingAs($admin)->post(route('settings.fields.store'), ['department_id' => $this->busbar->id, 'name' => 'รถ', 'type' => 'text']);
-        $field = \App\Models\DepartmentField::first();
+        $field = DepartmentField::first();
         $this->patch(route('settings.fields.chip', $field))->assertRedirect();
         $this->assertTrue($field->fresh()->show_on_chip);
         $dept = collect(app(PlanningBoard::class)->build($admin)['boards']['pmo']['departments'])->firstWhere('id', 'd_'.$this->busbar->id);

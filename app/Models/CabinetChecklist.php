@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CabinetChecklist extends Model
 {
-    use HasFactory, LogsActivity, SoftDeletes, CascadesSoftDeletes, GuardsClosedProject;
+    use CascadesSoftDeletes, GuardsClosedProject, HasFactory, LogsActivity, SoftDeletes;
 
     protected $fillable = [
         'cabinet_subtask_id',

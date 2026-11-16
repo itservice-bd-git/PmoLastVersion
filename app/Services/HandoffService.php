@@ -194,8 +194,8 @@ class HandoffService
 
             return ['id' => 's'.$s->id, 'deptId' => PlanningBoard::deptKey((int) $s->department_id), 'deptName' => (string) $s->department?->name,
                 'title' => $s->name, 'dateLabel' => $label, 'watch' => $watch, 'own' => $own] + $this->whereIs($s) + [
-                'items' => $items->all(), 'done' => $items->where('done', true)->count(), 'total' => $items->count(),
-                'got' => $items->where('received', true)->count()];
+                    'items' => $items->all(), 'done' => $items->where('done', true)->count(), 'total' => $items->count(),
+                    'got' => $items->where('received', true)->count()];
         })->values()->all();
     }
 

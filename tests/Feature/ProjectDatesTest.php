@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\ProjectDateChange;
 use App\Models\ProjectDateReason;
 use App\Models\User;
+use App\Services\PlanningBoard;
 use App\Services\ProjectDates;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -135,7 +136,7 @@ class ProjectDatesTest extends TestCase
     public function test_planning_gets_the_rounds_of_a_project_and_of_its_cabinets(): void
     {
         $cab = Cabinet::forceCreate(['project_id' => $this->project->id, 'mo_no' => 'MO-1', 'cabinet_name' => 'A', 'quantity' => 1, 'status' => 'not_started', 'progress' => 0, 'due_date' => '2026-10-10']);
-        $board = fn () => collect(app(\App\Services\PlanningBoard::class)->tasks($this->pm))->firstWhere('id', 'p'.$this->project->id);
+        $board = fn () => collect(app(PlanningBoard::class)->tasks($this->pm))->firstWhere('id', 'p'.$this->project->id);
         $this->assertNull($board()['reschedule'], 'never postponed: no chip');
 
         $url = route('projects.dates.store', $this->project);

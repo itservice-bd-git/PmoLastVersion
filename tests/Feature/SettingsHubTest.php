@@ -3,16 +3,21 @@
 namespace Tests\Feature;
 
 use App\Exceptions\AssignmentException;
+use App\Models\ActivityLog;
 use App\Models\AppSetting;
 use App\Models\AutomationRule;
+use App\Models\BoardStatus;
 use App\Models\Cabinet;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
 use App\Models\Department;
+use App\Models\DepartmentField;
 use App\Models\NotificationPreference;
 use App\Models\Project;
+use App\Models\ProjectFieldValue;
 use App\Models\User;
+use App\Services\AutomationService;
 use App\Services\NotificationService;
 use App\Services\PlanningBoard;
 use App\Services\PlanningSync;
@@ -208,11 +213,11 @@ class SettingsHubTest extends TestCase
         $s->checklists()->update(['is_completed' => true]);
 
         AppSetting::put('automation_locked_statuses', ['in_progress']);
-        $this->assertFalse(app(\App\Services\AutomationService::class)->afterChecklistTicked($s->fresh(), $worker));
+        $this->assertFalse(app(AutomationService::class)->afterChecklistTicked($s->fresh(), $worker));
         $this->assertSame('IN_PROGRESS', $s->fresh()->assignment_status);
 
         AppSetting::put('automation_locked_statuses', []);
-        $this->assertTrue(app(\App\Services\AutomationService::class)->afterChecklistTicked($s->fresh(), $worker));
+        $this->assertTrue(app(AutomationService::class)->afterChecklistTicked($s->fresh(), $worker));
         $this->assertSame('COMPLETED', $s->fresh()->assignment_status);
     }
 
@@ -278,11 +283,11 @@ class SettingsHubTest extends TestCase
     {
         $admin = $this->user(null, 'admin');
         $this->actingAs($admin)->post(route('settings.fields.store'), ['department_id' => $this->busbar->id, 'name' => 'รถขนส่ง', 'type' => 'select'])->assertRedirect();
-        $field = \App\Models\DepartmentField::first();
+        $field = DepartmentField::first();
         $this->post(route('settings.fields.options.store', $field), ['group_name' => 'รถบริษัท', 'labels' => "1กข-1234\n\n  2กก-5678  "])->assertRedirect();
         $this->post(route('settings.fields.store'), ['department_id' => $this->busbar->id, 'name' => 'แผนที่', 'type' => 'link'])->assertRedirect();
 
-        return [$field, \App\Models\DepartmentField::where('type', 'link')->first()];
+        return [$field, DepartmentField::where('type', 'link')->first()];
     }
 
     public function test_admin_builds_fields_and_members_cannot(): void
@@ -296,7 +301,7 @@ class SettingsHubTest extends TestCase
         $this->actingAs($member)->get(route('settings.fields.index'))->assertStatus(403);
         $this->actingAs($member)->post(route('settings.fields.store'), ['department_id' => $this->busbar->id, 'name' => 'x', 'type' => 'text'])->assertStatus(403);
         $this->actingAs($member)->delete(route('settings.fields.destroy', $field))->assertStatus(403);
-        $this->assertSame(2, \App\Models\DepartmentField::count());
+        $this->assertSame(2, DepartmentField::count());
     }
 
     public function test_the_board_carries_the_fields_and_what_each_department_chose(): void
@@ -320,7 +325,7 @@ class SettingsHubTest extends TestCase
         $this->assertSame('link', $defs[1]['type']);
         $fields = (array) $board['tasks'][0]['deptStages'][0]['fields'];
         $this->assertSame(['f'.$field->id => 'o'.$opt->id, 'f'.$link->id => 'https://maps.example/x'], $fields);
-        $this->assertNotEmpty(\App\Models\ActivityLog::where('project_id', $this->project->id)->where('description', 'like', '%รถขนส่ง%')->get(), 'the change is logged');
+        $this->assertNotEmpty(ActivityLog::where('project_id', $this->project->id)->where('description', 'like', '%รถขนส่ง%')->get(), 'the change is logged');
     }
 
     public function test_a_field_value_is_checked_and_kept_inside_the_department(): void
@@ -336,11 +341,11 @@ class SettingsHubTest extends TestCase
         $this->assertFalse($sync->apply($busbarMember, [$op('f'.$field->id, 'o999')])[0]['ok'], 'an option that is not in the field');
         $this->assertFalse($sync->apply($busbarMember, [$op('f'.$link->id, 'javascript:alert(1)')])[0]['ok'], 'only http(s) links');
         $this->assertFalse($sync->apply($this->user($this->wiring), [$op('f'.$link->id, 'https://a.example')])[0]['ok'], 'another department cannot fill it in');
-        $this->assertFalse($sync->apply($pm, [$op('f'.$link->id, 'https://a.example', $this->wiring)])[0]['ok'], "the field belongs to Busbar, not Wiring");
+        $this->assertFalse($sync->apply($pm, [$op('f'.$link->id, 'https://a.example', $this->wiring)])[0]['ok'], 'the field belongs to Busbar, not Wiring');
         $this->assertTrue($sync->apply($pm, [$op('f'.$link->id, 'https://a.example')])[0]['ok'], 'a PMO role may, for any department');
 
         $this->assertTrue($sync->apply($busbarMember, [$op('f'.$link->id, '')])[0]['ok'], 'blank clears');
-        $this->assertSame(0, \App\Models\ProjectFieldValue::count());
+        $this->assertSame(0, ProjectFieldValue::count());
 
         $this->project->update(['status' => 'completed']);
         $this->assertFalse($sync->apply($pm, [$op('f'.$link->id, 'https://b.example')])[0]['ok'], 'a closed project is read-only');
@@ -353,13 +358,13 @@ class SettingsHubTest extends TestCase
         $member = $this->user($this->busbar);
         $opt = $field->options()->first();
         app(PlanningSync::class)->apply($member, [['type' => 'stage_field', 'taskId' => 'p'.$this->project->id, 'deptId' => 'd_'.$this->busbar->id, 'fieldId' => 'f'.$field->id, 'value' => 'o'.$opt->id]]);
-        $this->assertSame(1, \App\Models\ProjectFieldValue::count());
+        $this->assertSame(1, ProjectFieldValue::count());
 
         $this->actingAs($this->user(null, 'admin'))->delete(route('settings.field-options.destroy', $opt))->assertRedirect();
-        $this->assertSame(0, \App\Models\ProjectFieldValue::count());
+        $this->assertSame(0, ProjectFieldValue::count());
 
         $this->delete(route('settings.fields.destroy', $field))->assertRedirect();
-        $this->assertNull(\App\Models\DepartmentField::find($field->id));
+        $this->assertNull(DepartmentField::find($field->id));
     }
 
     // ---- statuses ----
@@ -367,10 +372,10 @@ class SettingsHubTest extends TestCase
     public function test_admin_manages_statuses_built_in_ones_stay(): void
     {
         $admin = $this->user(null, 'admin');
-        $todo = \App\Models\BoardStatus::where('key', 'todo')->first();
+        $todo = BoardStatus::where('key', 'todo')->first();
 
         $this->actingAs($admin)->post(route('settings.statuses.store'), ['name' => 'รอลูกค้า', 'color' => '#123456'])->assertRedirect();
-        $custom = \App\Models\BoardStatus::whereNull('key')->first();
+        $custom = BoardStatus::whereNull('key')->first();
         $this->put(route('settings.statuses.update'), ['statuses' => [
             $todo->id => ['name' => 'รออยู่', 'color' => '#111111', 'is_done' => 1],
             $custom->id => ['name' => 'รอลูกค้าอนุมัติ', 'color' => '#222222', 'is_done' => 1],
@@ -393,7 +398,7 @@ class SettingsHubTest extends TestCase
     {
         $this->actingAs($this->user($this->busbar))->get(route('cabinet-templates.index'))->assertForbidden();   // off for a department by default
         $this->actingAs($this->user($this->busbar))->get(route('settings.notifications.edit'))->assertDontSee('เทมเพลตตู้/เช็คลิสต์');
-        \App\Models\AppSetting::put('department_permissions', [(string) $this->busbar->id => ['page.templates' => true]]);   // Settings > สิทธิ์การใช้งาน
+        AppSetting::put('department_permissions', [(string) $this->busbar->id => ['page.templates' => true]]);   // Settings > สิทธิ์การใช้งาน
         $member = $this->user($this->busbar);
 
         $html = $this->actingAs($member)->get(route('cabinet-templates.index'))->assertOk()->getContent();
@@ -406,7 +411,7 @@ class SettingsHubTest extends TestCase
     public function test_a_department_that_sees_everything_can_export_every_department(): void
     {
         $this->busbar->update(['sees_all' => true]);
-        \App\Models\AppSetting::put('department_permissions', [(string) $this->busbar->id => ['page.export' => true]]);   // Export CSV is off for a department by default
+        AppSetting::put('department_permissions', [(string) $this->busbar->id => ['page.export' => true]]);   // Export CSV is off for a department by default
         $this->subtask($this->wiring, 'ACCEPTED');
         $q = ['from' => '2026-10-01', 'to' => '2026-10-31', 'department_id' => 'all'];
 

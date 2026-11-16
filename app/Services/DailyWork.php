@@ -217,5 +217,4 @@ class DailyWork
 
         return true;
     }
-
 }

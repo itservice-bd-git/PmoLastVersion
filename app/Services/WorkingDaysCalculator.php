@@ -28,5 +28,4 @@ class WorkingDaysCalculator
 
         return $days;
     }
-
 }

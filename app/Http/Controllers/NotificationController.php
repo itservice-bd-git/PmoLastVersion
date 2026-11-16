@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Notifications\PmoNotice;
 use App\Services\NotificationService;
+use App\Services\StatusReport;
 use Illuminate\Http\Request;
 
 /**
@@ -69,7 +70,7 @@ class NotificationController extends Controller
             // unread urgent ones (tag, alert, new work, overdue): a new one pops the alert window up at once
             // (id + how many events it holds: a project's notice that gained something urgent counts as new)
             'urgent' => $user->unreadNotifications()->latest()->limit(50)->get()
-                ->filter(fn ($n) => ($n->data['urgent'] ?? false) || in_array($n->data['kind'] ?? null, \App\Services\StatusReport::URGENT_KINDS, true))
+                ->filter(fn ($n) => ($n->data['urgent'] ?? false) || in_array($n->data['kind'] ?? null, StatusReport::URGENT_KINDS, true))
                 ->map(fn ($n) => $n->id.':'.($n->data['count'] ?? 1))->values()->all(),
         ];
     }

@@ -22,8 +22,8 @@ use Illuminate\Support\Facades\DB;
  */
 class SubtaskAssignmentService
 {
-    use Concerns\DispatchesWork;
     use Concerns\AssignmentChecks;
+    use Concerns\DispatchesWork;
 
     public function __construct(private NotificationService $notifications) {}
 
@@ -80,8 +80,8 @@ class SubtaskAssignmentService
 
             $this->log($locked, $actor, 'rejected', "แผนก {$department?->name} ไม่รับงาน {$this->label($locked)} — เหตุผล: {$reason}"
                 .($this->isInAssignedDepartment($subtask, $actor) ? '' : " (ทำแทนโดย {$actor->name})"), [
-                'department_id' => ['label' => 'แผนก', 'old' => (string) $department?->name, 'new' => '-'],
-            ]);
+                    'department_id' => ['label' => 'แผนก', 'old' => (string) $department?->name, 'new' => '-'],
+                ]);
             $this->notifications->rejected($locked, (string) $department?->name, $actor, $reason);
             $this->syncInstance($subtask, $locked);
 

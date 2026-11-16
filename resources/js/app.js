@@ -147,10 +147,15 @@ document.addEventListener('DOMContentLoaded', () => {
 /**
  * A photo from a phone's camera (3-5 MB) made small before it goes up - quicker on a site's mobile data, and well under
  * the server's upload limits: its long side to 1600 px, JPEG. Anything else (PDF, a small picture) as it is; a picture the
- * browser cannot draw too. Used by งานจัดส่ง's ส่งถึงแล้ว and the driver's page (driver/show).
+ * browser cannot draw too. Another kind of picture (WEBP, ...) is always turned into a JPEG. Used by งานจัดส่ง's ส่งถึงแล้ว and the driver's page (driver/show).
  */
 window.pmoShrinkImage = function (file, max = 1600) {
-    if (!/^image\/(jpeg|png)$/.test(file.type || '') || file.size < 700 * 1024) return Promise.resolve(file);
+    const type = file.type || '';
+    const jpegOrPng = /^image\/(jpeg|png)$/.test(type);
+    // another kind of picture (an Android gallery's WEBP, ...) always becomes a JPEG: the server takes JPG / PNG / PDF only
+    const other = type.startsWith('image/') && !jpegOrPng;
+    const small = file.size < 700 * 1024;
+    if (!other && (!jpegOrPng || small)) return Promise.resolve(file);   // not a picture, or a JPEG / PNG small enough
     return new Promise((resolve) => {
         const url = URL.createObjectURL(file), img = new Image();
         img.onload = () => {
@@ -159,7 +164,7 @@ window.pmoShrinkImage = function (file, max = 1600) {
             c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
             c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
             URL.revokeObjectURL(url);
-            c.toBlob((blob) => resolve(blob && blob.size < file.size
+            c.toBlob((blob) => resolve(blob && (other || blob.size < file.size)
                 ? new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: file.lastModified }) : file), 'image/jpeg', 0.82);
         };
         img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };

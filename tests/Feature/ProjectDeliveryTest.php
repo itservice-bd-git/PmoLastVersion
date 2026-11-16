@@ -2,20 +2,28 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\DeliveryController;
+use App\Http\Controllers\DriverLinkController;
+use App\Http\Controllers\ProjectDeliveryController;
 use App\Models\ActivityLog;
 use App\Models\AppSetting;
 use App\Models\Cabinet;
 use App\Models\CabinetChecklist;
 use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
+use App\Models\CommentAttachment;
 use App\Models\Department;
 use App\Models\EventDateChange;
 use App\Models\Project;
 use App\Models\ProjectDelivery;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\CommentAttachmentUploader;
+use App\Services\DeliveryBrief;
+use App\Services\DeliveryFlow;
 use App\Services\PlanningBoard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
@@ -155,7 +163,7 @@ class ProjectDeliveryTest extends TestCase
         // ไม่รับงาน names the cabinets (as the card); จัดรถ / คน lists them with type, size and how many, sizes together
         $this->assertSame(1, substr_count($page->getContent(), 'x-text="r.cabinets.map((c) => c.model || c.name).join(\', \')"'));
         $page->assertSee('aria-label="ตู้ในรอบนี้"', false)->assertSee('x-for="g in cabSizes(r.cabinets)"', false)->assertSee("'รถที่เลือกจุ ~' + asgRoom", false);
-        $row =collect($page->viewData('rows'))->firstWhere('id', $d->id);
+        $row = collect($page->viewData('rows'))->firstWhere('id', $d->id);
         $this->assertSame(['MO-1', 'MDB-1 ตู้เมน', 'MDB', '80x200x60 ซม.', 2, true], [$row['cabinets'][0]['name'], $row['cabinets'][0]['model'], $row['cabinets'][0]['type'], $row['cabinets'][0]['size'], $row['cabinets'][0]['qty'], $row['packable']]);
 
         // the panel ticks without reloading: JSON back with what is packed now
@@ -225,6 +233,22 @@ class ProjectDeliveryTest extends TestCase
         $this->actingAs($this->pm)->post(route('projects.store'), ['project_no' => 'PJ-CARS', 'project_name' => 'X', 'customer_name' => 'C', 'priority' => 'normal',
             'delivery_date' => '2026-12-01', 'delivery_method' => 'company', 'delivery_vehicle_types' => ['กระบะ', 'กระบะ']])->assertSessionHasNoErrors();
         $this->assertSame(['กระบะ', 'กระบะ'], Project::where('project_no', 'PJ-CARS')->firstOrFail()->deliveries()->firstOrFail()->vehicle_types);
+    }
+
+    public function test_the_tomorrow_tab_comes_first_with_every_round_still_to_go_tomorrow(): void
+    {
+        // today is 2026-11-10: a round on the 11th (waiting), one over the 10th-12th (scheduled), one on the 12th, one on the 11th delivered
+        $one = $this->send(['delivery_date' => '2026-11-11']);
+        $copy = fn (int $round, array $fill) => tap($one->replicate()->forceFill(['round' => $round] + $fill))->saveQuietly();
+        $span = $copy(2, ['delivery_date' => '2026-11-10', 'delivery_end_date' => '2026-11-12', 'status' => ProjectDelivery::SCHEDULED]);
+        $later = $copy(3, ['delivery_date' => '2026-11-12']);
+        $copy(4, ['delivery_date' => '2026-11-11', 'status' => ProjectDelivery::DELIVERED, 'delivered_at' => now()]);
+
+        $this->assertSame('tomorrow', array_key_first(DeliveryController::TABS));
+        $page = $this->actingAs($this->clerk)->get(route('deliveries.index', ['tab' => 'tomorrow']))->assertOk()->assertSeeInOrder(['ส่งพรุ่งนี้', 'รอจัดรถ', 'ส่งวันนี้']);
+        $ids = collect($page->viewData('rows'))->pluck('id')->sort()->values()->all();
+        $this->assertSame([$one->id, $span->id], $ids);
+        $this->assertNotContains($later->id, $ids);
     }
 
     public function test_the_vehicles_panel_saves_without_reloading(): void
@@ -348,7 +372,7 @@ class ProjectDeliveryTest extends TestCase
             ActivityLog::where('action', 'delivery')->orderBy('id')->get()->pluck('description')->first(fn ($l) => str_contains($l, 'ลูกค้ายังไม่พร้อมรับ')));
         $this->assertSame([['delivery', $d->id, 'postpone', '20/11/2569 · 09:00 น.', '23/11/2569 · 09:00 น.'], ['delivery', $d->id, 'postpone', '23/11/2569 · 09:00 น.', '23/11/2569 · 13:00 น.']],
             EventDateChange::orderBy('id')->get()->map(fn ($c) => [$c->event, $c->event_id, $c->kind, $c->fromText(), $c->toText()])->all());
-        $this->assertSame(2, \App\Http\Controllers\ProjectDeliveryController::formData($this->project, $d->fresh())['moves']);
+        $this->assertSame(2, ProjectDeliveryController::formData($this->project, $d->fresh())['moves']);
         $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()
             ->assertSee('เลื่อน 2 ครั้ง')->assertSeeInOrder(['ประวัติการเลื่อนวัน (2)', 'ครั้งที่ 2', 'ครั้งที่ 1', '+3 วัน', 'ลูกค้ายังไม่พร้อมรับ']);
     }
@@ -429,11 +453,11 @@ class ProjectDeliveryTest extends TestCase
         $before = is_dir($uploads) ? scandir($uploads) : [];
 
         try {
-            $arrive([\Illuminate\Http\UploadedFile::fake()->create('x.exe', 5)])->assertSessionHasErrors('files.0');
-            $arrive(array_fill(0, 6, \Illuminate\Http\UploadedFile::fake()->image('a.jpg')))->assertSessionHasErrors(['files' => 'แนบได้ครั้งละไม่เกิน 5 ไฟล์']);
-            $this->assertSame(['departed', 0], [$d->fresh()->status, \App\Models\CommentAttachment::count()], 'a refused save keeps nothing');
+            $arrive([UploadedFile::fake()->create('x.exe', 5)])->assertSessionHasErrors('files.0');
+            $arrive(array_fill(0, 6, UploadedFile::fake()->image('a.jpg')))->assertSessionHasErrors(['files' => 'แนบได้ครั้งละไม่เกิน 5 ไฟล์']);
+            $this->assertSame(['departed', 0], [$d->fresh()->status, CommentAttachment::count()], 'a refused save keeps nothing');
 
-            $arrive([\Illuminate\Http\UploadedFile::fake()->create('DO-0412 เซ็นรับ.pdf', 30, 'application/pdf'), \Illuminate\Http\UploadedFile::fake()->image('หน้างาน.jpg')])
+            $arrive([UploadedFile::fake()->create('DO-0412 เซ็นรับ.pdf', 30, 'application/pdf'), UploadedFile::fake()->image('หน้างาน.jpg')])
                 ->assertSessionHasNoErrors()->assertSessionHas('success', 'บันทึกส่งถึงแล้ว');
             $note = ActivityLog::where('action', 'note')->sole();
             $this->assertSame([Project::class, $this->project->id, $this->clerk->id, ['delivery_id' => $d->id], 'ไฟล์การจัดส่งรอบที่ 1 · ส่งถึงแล้ว 20/11/2569'],
@@ -444,7 +468,7 @@ class ProjectDeliveryTest extends TestCase
             $this->pm->unreadNotifications->markAsRead();
 
             // แก้การส่งถึง adds; what was there stays
-            $arrive([\Illuminate\Http\UploadedFile::fake()->image('เพิ่ม.png')])->assertSessionHasNoErrors();
+            $arrive([UploadedFile::fake()->image('เพิ่ม.png')])->assertSessionHasNoErrors();
             $this->assertSame(['DO-0412 เซ็นรับ.pdf', 'หน้างาน.jpg', 'เพิ่ม.png'], ProjectDelivery::filesOf([$d->id])->get($d->id)->pluck('original_name')->all());
             $this->assertTrue(ProjectDelivery::filesOf([$d->id + 1])->isEmpty());
             $this->assertContains('ส่งถึงแล้ว · แนบไฟล์เพิ่ม 1 ไฟล์ → '.route('projects.show', $this->project).'#delivery', $said(), 'files added later are told too');
@@ -470,12 +494,12 @@ class ProjectDeliveryTest extends TestCase
         $this->pack($d, [$this->cab1, $this->cab2]);
         $this->assign($d);
         $this->actingAs($this->clerk)->post(route('deliveries.bill', $d))->assertSessionHasNoErrors();
-        $link = \App\Http\Controllers\DriverLinkController::urlFor($d, $this->clerk);
+        $link = DriverLinkController::urlFor($d, $this->clerk);
         $path = parse_url($link, PHP_URL_PATH).'?'.parse_url($link, PHP_URL_QUERY);
         // ข้อความส่งงาน: the crew's LINE message from the round, its link at the end (it works once the round has left)
         $row = collect($this->actingAs($this->clerk)->get(route('deliveries.index', ['tab' => 'scheduled']))->viewData('rows'))->firstWhere('id', $d->id);
         $this->project->forceFill(['payment_terms' => 'Cr.60'])->saveQuietly();
-        $brief = \App\Services\DeliveryBrief::text($d->fresh(['project', 'vehicles.vehicle']), \App\Models\Cabinet::whereIn('id', $d->cabinet_ids)->get()->keyBy('id'), $row['driverUrl']);
+        $brief = DeliveryBrief::text($d->fresh(['project', 'vehicles.vehicle']), Cabinet::whereIn('id', $d->cabinet_ids)->get()->keyBy('id'), $row['driverUrl']);
         foreach (['ทำการส่งตู้', "\nA = 1 SET", '💰 เงื่อนไขการชำระ : Cr.60', '🚚 รถ : ', 'โทรหาลูกค้าก่อนออกจากบริษัททุกครั้ง', $row['driverUrl']] as $part) {
             $this->assertStringContainsString($part, $brief);
         }
@@ -497,7 +521,7 @@ class ProjectDeliveryTest extends TestCase
         $uploads = public_path('uploads/comment-attachments');
         $before = is_dir($uploads) ? scandir($uploads) : [];
         try {
-            $this->post($path, ['issue' => 'ฝนตก', 'files' => [\Illuminate\Http\UploadedFile::fake()->image('ใบส่งของ.jpg'), \Illuminate\Http\UploadedFile::fake()->image('ตู้.jpg')]])
+            $this->post($path, ['issue' => 'ฝนตก', 'files' => [UploadedFile::fake()->image('ใบส่งของ.jpg'), UploadedFile::fake()->image('ตู้.jpg')]])
                 ->assertRedirect()->assertSessionHasNoErrors();
             $d->refresh();
             $this->assertSame(['delivered', [$this->cab1->id, $this->cab2->id], 'ฝนตก'], [$d->status, $d->cabinet_ids, $d->issue], 'every cabinet of the round, now');
@@ -519,7 +543,7 @@ class ProjectDeliveryTest extends TestCase
             $this->actingAs($this->clerk)->post(route('deliveries.review', $d))->assertSessionHasErrors(['delivery' => 'รอบนี้ไม่มีอะไรรอตรวจ']);
             auth()->logout();
             $this->get($path)->assertOk()->assertSee('ได้รับแล้ว ขอบคุณครับ')->assertDontSee('ถ่ายรูปตอนส่งถึง');
-            $this->post($path, ['files' => [\Illuminate\Http\UploadedFile::fake()->image('อีก.jpg')]])->assertRedirect();
+            $this->post($path, ['files' => [UploadedFile::fake()->image('อีก.jpg')]])->assertRedirect();
             $this->assertSame(2, ProjectDelivery::filesOf([$d->id])->get($d->id)->count(), 'arrived: the link takes nothing more');
         } finally {
             foreach (array_diff(is_dir($uploads) ? scandir($uploads) : [], $before) as $f) {
@@ -539,7 +563,7 @@ class ProjectDeliveryTest extends TestCase
         $this->actingAs($this->clerk)->post(route('deliveries.bill', $d));
         $this->actingAs($this->clerk)->post(route('deliveries.depart', $d));
         // the driver's report, as the link saves it (no files here)
-        app(\App\Services\DeliveryFlow::class)->deliver($d, ['delivered_date' => '2026-11-20', 'cabinet_ids' => [$this->cab1->id, $this->cab2->id]], $this->clerk, [], 'ผ่านลิงก์คนขับ', review: true);
+        app(DeliveryFlow::class)->deliver($d, ['delivered_date' => '2026-11-20', 'cabinet_ids' => [$this->cab1->id, $this->cab2->id]], $this->clerk, [], 'ผ่านลิงก์คนขับ', review: true);
         $this->assertNotNull($d->fresh()->review_at);
         $arrived = fn () => array_values(array_filter($this->notices($this->pm, 'delivery'), fn ($t) => str_starts_with($t, 'ส่งถึงแล้ว')));
         $this->assertSame([], $arrived());
@@ -551,7 +575,7 @@ class ProjectDeliveryTest extends TestCase
         $this->assertSame(['ส่งถึงแล้ว'], $arrived());
 
         // ย้อนขั้น from a report still waiting takes the wait with it
-        app(\App\Services\DeliveryFlow::class)->deliver($d, ['delivered_date' => '2026-11-20', 'cabinet_ids' => [$this->cab1->id]], $this->clerk, [], 'ผ่านลิงก์คนขับ', review: true);
+        app(DeliveryFlow::class)->deliver($d, ['delivered_date' => '2026-11-20', 'cabinet_ids' => [$this->cab1->id]], $this->clerk, [], 'ผ่านลิงก์คนขับ', review: true);
         $this->actingAs($this->clerk)->post(route('deliveries.back', $d))->assertSessionHasNoErrors();
         $this->assertSame(['departed', null], [$d->fresh()->status, $d->fresh()->review_at]);
     }
@@ -574,7 +598,7 @@ class ProjectDeliveryTest extends TestCase
 
         // it is in the crew's message and on the driver's page; with none, the page searches the site's words
         $row = collect($this->actingAs($this->clerk)->get(route('deliveries.index', ['tab' => 'scheduled']))->viewData('rows'))->firstWhere('id', $d->id);
-        $this->assertStringContainsString("🌏 โลเคชั่น : https://www.google.com/maps/search/?api=1&query=19.91,99.84", $row['brief']);
+        $this->assertStringContainsString('🌏 โลเคชั่น : https://www.google.com/maps/search/?api=1&query=19.91,99.84', $row['brief']);
         auth()->logout();
         $path = parse_url($row['driverUrl'], PHP_URL_PATH).'?'.parse_url($row['driverUrl'], PHP_URL_QUERY);
         $this->get($path)->assertSee('นำทางไปหน้างาน');
@@ -589,11 +613,11 @@ class ProjectDeliveryTest extends TestCase
         $this->assign($d);
         $this->actingAs($this->clerk)->post(route('deliveries.bill', $d));
         $this->actingAs($this->clerk)->post(route('deliveries.depart', $d))->assertSessionHasNoErrors();
-        $this->mock(\App\Services\CommentAttachmentUploader::class, fn ($m) => $m->shouldReceive('ready')->andReturn(false)->shouldNotReceive('store'));
+        $this->mock(CommentAttachmentUploader::class, fn ($m) => $m->shouldReceive('ready')->andReturn(false)->shouldNotReceive('store'));
         $logs = ActivityLog::count();
 
         $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-20', 'cabinet_ids' => [$this->cab1->id],
-            'files' => [\Illuminate\Http\UploadedFile::fake()->image('a.jpg')]])->assertSessionHasErrors('files');
+            'files' => [UploadedFile::fake()->image('a.jpg')]])->assertSessionHasErrors('files');
         $this->assertSame(['departed', $logs], [$d->fresh()->status, ActivityLog::count()], 'no history line, no empty comment: the log cannot roll back on MyISAM');
     }
 

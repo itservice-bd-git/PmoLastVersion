@@ -463,18 +463,15 @@
         <section role="dialog" aria-modal="true" :aria-label="'หมายเหตุวันที่ ' + fmtBE(dn.date)"
                  class="fixed inset-x-0 bottom-0 z-[81] flex max-h-[85dvh] flex-col rounded-t-2xl bg-white shadow-xl ring-1 ring-slate-200 sm:bottom-auto sm:inset-x-auto sm:max-h-[70vh] sm:w-[340px] sm:rounded-xl"
                  :style="window.innerWidth >= 640 ? 'left:' + dn.x + 'px;top:' + Math.max(8, Math.min(dn.y, window.innerHeight - 440)) + 'px' : ''">
-            <header class="flex items-start gap-2 border-b border-slate-100 px-4 pb-2 pt-3">
-                <div class="min-w-0 flex-1">
-                    <h3 class="text-[15px] font-bold text-slate-900" x-text="'หมายเหตุ ' + fmtBE(dn.date)"></h3>
-                    <p class="text-[12px] text-slate-500" x-text="noteDepts.map((d) => d.name).join(', ') + ' · เห็นเฉพาะในแผนก'"></p>
-                </div>
-                <button type="button" @click="closeDayNotes()" aria-label="ปิด" class="-mr-2 -mt-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100">
+            <header class="flex items-center gap-2 border-b border-slate-100 py-1 pl-4 pr-2">
+                <h3 class="min-w-0 flex-1 text-[15px] font-bold text-slate-900" x-text="'หมายเหตุ ' + fmtBE(dn.date)"></h3>
+                <button type="button" @click="closeDayNotes()" aria-label="ปิด" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
                 </button>
             </header>
             <ul class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
                 <template x-for="n in notesOn(dn.date)" :key="n.id">
-                    <li class="border-b border-slate-100 py-2.5 last:border-b-0">
+                    <li class="border-b border-slate-100 py-1.5 last:border-b-0">
                         <template x-if="dn.edit === n.id">
                             <div>
                                 <textarea x-model="dn.editText" rows="3" maxlength="500" class="w-full rounded-lg border-slate-300 text-sm" aria-label="แก้หมายเหตุ"
@@ -486,23 +483,21 @@
                             </div>
                         </template>
                         <template x-if="dn.edit !== n.id">
-                            <div>
-                                <p class="whitespace-pre-line break-words text-sm text-slate-900" x-text="n.body"></p>
-                                <div class="mt-0.5 flex items-center gap-1 text-[12px] text-slate-500">
-                                    <span class="min-w-0 truncate" x-text="(noteDepts.length > 1 ? noteDeptName(n.dept) + ' · ' : '') + n.by + ' · ' + n.at + ' น.' + (n.edited ? ' · แก้ไขแล้ว' : '')"></span>
-                                    <template x-if="n.mine">
-                                        <span class="ml-auto flex shrink-0">
-                                            <button type="button" @click="editDayNote(n)" class="h-9 rounded-md px-2 font-semibold text-slate-600 hover:bg-slate-100">แก้</button>
-                                            <button type="button" @click="deleteDayNote(n)" class="h-9 rounded-md px-2 font-semibold text-red-700 hover:bg-red-50">ลบ</button>
-                                        </span>
-                                    </template>
-                                </div>
+                            {{-- the note's words only; its writer also gets แก้ / ลบ beside them --}}
+                            <div class="flex items-start gap-1">
+                                <p class="min-w-0 flex-1 whitespace-pre-line break-words py-[11px] text-sm leading-[22px] text-slate-900" x-text="n.body"></p>
+                                <template x-if="n.mine">
+                                    <span class="-mr-2 flex shrink-0 text-[13px]">
+                                        <button type="button" @click="editDayNote(n)" class="h-11 rounded-md px-2.5 font-semibold text-slate-600 hover:bg-slate-100">แก้</button>
+                                        <button type="button" @click="deleteDayNote(n)" class="h-11 rounded-md px-2.5 font-semibold text-red-700 hover:bg-red-50">ลบ</button>
+                                    </span>
+                                </template>
                             </div>
                         </template>
                     </li>
                 </template>
-                <li x-show="!notesOn(dn.date).length" class="py-4 text-center text-sm text-slate-500">ยังไม่มีหมายเหตุวันนี้</li>
             </ul>
+            <p x-show="!notesOn(dn.date).length" class="py-4 text-center text-sm text-slate-500">ยังไม่มีหมายเหตุวันนี้</p>
             <form @submit.prevent="addDayNote()" class="border-t border-slate-100 px-4 pb-4 pt-3">
                 <template x-if="noteDepts.length > 1">
                     <select x-model.number="dn.dept" class="mb-2 h-10 w-full rounded-lg border-slate-300 text-sm" aria-label="แผนก">

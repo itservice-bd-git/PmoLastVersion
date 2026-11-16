@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Cabinet;
 use App\Models\ProjectDelivery;
 use App\Services\CommentAttachmentUploader;
+use App\Services\DeliveryBrief;
 use App\Services\DeliveryFlow;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -18,7 +19,15 @@ use Illuminate\Support\Collection;
  */
 class DeliveryController extends Controller
 {
-    public const TABS = ['waiting' => 'รอจัดรถ', 'today' => 'วันนี้', 'scheduled' => 'จัดรถแล้ว', 'departed' => 'ออกจากโรงงาน', 'delivered' => 'ส่งถึงแล้ว', 'rejected' => 'ไม่รับงาน'];
+    public const TABS = [
+        'tomorrow' => 'ส่งพรุ่งนี้',
+        'waiting' => 'รอจัดรถ',
+        'today' => 'ส่งวันนี้',
+        'scheduled' => 'จัดรถแล้ว',
+        'departed' => 'ออกจากโรงงาน',
+        'delivered' => 'ส่งถึงแล้ว',
+        'rejected' => 'ไม่รับงาน',
+    ];
 
     /** how far back "ส่งถึงแล้ว" lists */
     private const DELIVERED_DAYS = 30;
@@ -40,10 +49,19 @@ class DeliveryController extends Controller
         $day = fn ($d) => $d->delivery_date->format('Ymd').($d->delivery_time ?: '99');
         // a round waiting for sales is a draft again (ProjectDates) - not here; one billed before the wait goes on as usual
         $live = $all;
+        $tomorrow = $today->copy()->addDay();
+        // a round not there yet: waiting for a vehicle, scheduled, or on its way
+        $toGo = fn ($d) => in_array($d->status, [ProjectDelivery::WAITING, ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true);
         $tabs = [
+            // every round still to go whose days include tomorrow: what the department gets people and vehicles ready for
+            'tomorrow' => $live
+                ->filter(fn ($d) => $toGo($d) && $d->delivery_date->lte($tomorrow) && $d->lastDay()->gte($tomorrow))
+                ->sortBy($day),
             'waiting' => $live->where('status', ProjectDelivery::WAITING)->sortBy($day),
             // its days include today, or it is past them and not there yet
-            'today' => $live->filter(fn ($d) => in_array($d->status, [ProjectDelivery::WAITING, ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true) && $d->delivery_date->lte($today))->sortBy($day),
+            'today' => $live
+                ->filter(fn ($d) => $toGo($d) && $d->delivery_date->lte($today))
+                ->sortBy($day),
             'scheduled' => $live->where('status', ProjectDelivery::SCHEDULED)->sortBy($day),
             'departed' => $all->where('status', ProjectDelivery::DEPARTED)->sortBy($day),
             // รอตรวจ (from the driver's link) first, then the latest
@@ -196,7 +214,7 @@ class DeliveryController extends Controller
             // (the LINE message for the crew, DeliveryBrief) - from the day the vehicles are on it until it leaves
             'driverUrl' => $briefed = in_array($d->status, [ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED], true) && auth()->user()
                 ? DriverLinkController::urlFor($d, auth()->user()) : null,
-            'brief' => $briefed ? \App\Services\DeliveryBrief::text($d, $names, $briefed) : null,
+            'brief' => $briefed ? DeliveryBrief::text($d, $names, $briefed) : null,
             'urls' => ['assign' => route('deliveries.assign', $d), 'reject' => route('deliveries.reject', $d), 'pack' => route('deliveries.pack', $d), 'bill' => route('deliveries.bill', $d),
                 'review' => route('deliveries.review', $d), 'depart' => route('deliveries.depart', $d), 'deliver' => route('deliveries.deliver', $d), 'back' => route('deliveries.back', $d)],
         ];

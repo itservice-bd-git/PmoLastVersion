@@ -42,7 +42,16 @@
                    class="inline-flex min-h-[2.75rem] shrink-0 items-center gap-1.5 rounded-lg px-3 font-medium {{ $tab === $key ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100' }}">
                     {{ $label }}
                     @if ($n)
-                        <span @if ($key === 'delivered') title="รอตรวจ {{ $n }} รอบ" @endif class="rounded-full px-1.5 text-xs font-bold tabular-nums {{ $tab === $key ? 'bg-white/20' : (in_array($key, ['waiting', 'today', 'rejected', 'delivered'], true) ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600') }}">{{ $n }}</span>
+                        @php
+                            // the tabs whose count asks for work are amber; the others grey
+                            $badge = match (true) {
+                                $tab === $key => 'bg-white/20',
+                                in_array($key, ['tomorrow', 'waiting', 'today', 'rejected', 'delivered'], true) => 'bg-amber-100 text-amber-800',
+                                default => 'bg-slate-100 text-slate-600',
+                            };
+                        @endphp
+                        <span @if ($key === 'delivered') title="รอตรวจ {{ $n }} รอบ" @endif
+                              class="rounded-full px-1.5 text-xs font-bold tabular-nums {{ $badge }}">{{ $n }}</span>
                     @endif
                 </a>
             @endforeach
@@ -197,8 +206,16 @@
                 </article>
             @empty
                 <p class="px-4 py-10 text-center text-sm text-slate-500">
-                    {{ ['waiting' => 'ไม่มีรอบที่รอจัดรถ', 'today' => 'วันนี้ไม่มีรอบส่ง', 'scheduled' => 'ยังไม่มีรอบที่จัดรถแล้ว', 'departed' => 'ไม่มีรถที่ออกจากโรงงานอยู่',
-                        'delivered' => 'ยังไม่มีรอบที่ส่งถึงใน 30 วันนี้', 'rejected' => 'ไม่มีรอบที่ส่งกลับให้ PM', 'all' => 'โครงการนี้ยังไม่มีรอบที่ PM ส่งมาให้แผนกจัดส่ง'][$tab] }}
+                    {{ [
+                        'tomorrow' => 'พรุ่งนี้ไม่มีรอบส่ง',
+                        'waiting' => 'ไม่มีรอบที่รอจัดรถ',
+                        'today' => 'วันนี้ไม่มีรอบส่ง',
+                        'scheduled' => 'ยังไม่มีรอบที่จัดรถแล้ว',
+                        'departed' => 'ไม่มีรถที่ออกจากโรงงานอยู่',
+                        'delivered' => 'ยังไม่มีรอบที่ส่งถึงใน 30 วันนี้',
+                        'rejected' => 'ไม่มีรอบที่ส่งกลับให้ PM',
+                        'all' => 'โครงการนี้ยังไม่มีรอบที่ PM ส่งมาให้แผนกจัดส่ง',
+                    ][$tab] }}
                 </p>
             @endforelse
         </section>

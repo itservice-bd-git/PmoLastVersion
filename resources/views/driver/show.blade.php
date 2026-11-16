@@ -70,7 +70,12 @@
                 <p class="mt-1 text-sm text-slate-600">ติดต่อแผนกจัดส่งเพื่อขอลิงก์ใหม่</p>
             </section>
         @else
-            {{-- each pick ADDS (a phone's camera gives one photo a time); the input's list is rebuilt so all of them go up --}}
+            {{--
+                Android's Chrome offers only its photo picker (no camera) for a plain image input, so the same two ways on every phone:
+                  - ถ่ายรูป opens the back camera (capture)
+                  - เลือกรูปจากเครื่อง below picks from the gallery
+                Each pick ADDS (a phone's camera gives one photo a time); the input's list is rebuilt so all of them go up.
+            --}}
             <form method="POST" action="{{ request()->fullUrl() }}" enctype="multipart/form-data" class="space-y-4"
                   x-data="{ files: [], error: '', saving: false, max: {{ $max }},
                             shrinking: false,
@@ -82,12 +87,24 @@
                                 const room = Math.max(0, this.max - this.files.length);
                                 this.error = big.length ? 'รูปใหญ่เกิน 20 MB · ไม่ได้เพิ่ม' : (ok.length > room ? 'ส่งได้ครั้งละไม่เกิน ' + this.max + ' รูป' : '');
                                 this.files = this.files.concat(ok.slice(0, room).map((f) => ({ file: f, name: f.name, preview: (f.type || '').startsWith('image/') ? URL.createObjectURL(f) : '' })));
+                                this.sync(this.$refs.pick);   // the photos all go up in the one named input
+                                if (input !== this.$refs.pick) input.value = '';
+                            },
+                            drop(i, input) {
+                                const f = this.files[i];
+                                if (f && f.preview) URL.revokeObjectURL(f.preview);
+                                this.files.splice(i, 1);
+                                this.error = '';
                                 this.sync(input);
                             },
-                            drop(i, input) { const f = this.files[i]; if (f && f.preview) URL.revokeObjectURL(f.preview); this.files.splice(i, 1); this.error = ''; this.sync(input); },
                             sync(input) {
-                                try { const dt = new DataTransfer(); this.files.forEach((f) => dt.items.add(Alpine.raw(f).file)); input.files = dt.files; }
-                                catch (e) { this.files = [...input.files].map((f) => ({ file: f, name: f.name, preview: (f.type || '').startsWith('image/') ? URL.createObjectURL(f) : '' })); }
+                                try {
+                                    const dt = new DataTransfer();
+                                    this.files.forEach((f) => dt.items.add(Alpine.raw(f).file));
+                                    input.files = dt.files;
+                                } catch (e) {
+                                    this.files = [...input.files].map((f) => ({ file: f, name: f.name, preview: (f.type || '').startsWith('image/') ? URL.createObjectURL(f) : '' }));
+                                }
                             } }"
                   @submit="if (!files.length) { $event.preventDefault(); error = 'ถ่ายรูปอย่างน้อย 1 รูป'; return; } saving = true">
                 @csrf
@@ -111,8 +128,14 @@
                     </ul>
                     <label x-show="files.length < max" class="flex min-h-[3.5rem] cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-teal-600 bg-teal-50 px-4 text-base font-bold text-teal-800 focus-within:ring-2 focus-within:ring-teal-600">
                         <svg class="h-6 w-6 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.3l1.4-2h7.6l1.4 2h2.3A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
-                        <span x-text="files.length ? 'ถ่าย / เพิ่มรูปอีก (' + files.length + '/' + max + ')' : 'ถ่ายรูป หรือเลือกรูป'"></span>
-                        <input type="file" name="files[]" x-ref="pick" multiple accept="image/jpeg,image/png,.pdf" @change="add($event.target)" class="sr-only">
+                        <span x-text="files.length ? 'ถ่ายรูปอีก (' + files.length + '/' + max + ')' : 'ถ่ายรูป'"></span>
+                        <input type="file" name="files[]" x-ref="pick" multiple accept="image/*" capture="environment"
+                               @change="add($event.target)" class="sr-only">
+                    </label>
+                    {{-- photos taken before: the camera button above cannot open the gallery (on Android it never offers both) --}}
+                    <label x-show="files.length < max" class="flex min-h-[2.75rem] cursor-pointer items-center justify-center text-base font-semibold text-teal-800 underline underline-offset-4 focus-within:ring-2 focus-within:ring-teal-600 rounded-lg">
+                        เลือกรูปจากเครื่อง
+                        <input type="file" multiple accept="image/*" @change="add($event.target)" class="sr-only">
                     </label>
                     <p x-show="error" x-text="error" class="text-sm font-semibold text-red-700" role="alert"></p>
                 </section>

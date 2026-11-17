@@ -106,14 +106,14 @@
                                     this.files = [...input.files].map((f) => ({ file: f, name: f.name, preview: (f.type || '').startsWith('image/') ? URL.createObjectURL(f) : '' }));
                                 }
                             } }"
-                  @submit="if (!files.length) { $event.preventDefault(); error = 'ถ่ายรูปอย่างน้อย 1 รูป'; return; } saving = true">
+                  @submit="saving = true">
                 @csrf
                 @if ($errors->any())
                     <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800" role="alert">{{ $errors->first() }}</p>
                 @endif
 
                 <section class="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-                    <h2 class="text-base font-bold text-slate-900">ถ่ายรูปตอนส่งถึง</h2>
+                    <h2 class="text-base font-bold text-slate-900">ถ่ายรูปตอนส่งถึง <span class="font-normal text-slate-600">(ถ้ามี)</span></h2>
                     <p class="text-sm text-slate-600">ใบส่งของที่ลูกค้าเซ็นรับ และรูปตู้ที่หน้างาน · ได้ถึง {{ $max }} รูป</p>
                     <ul x-show="files.length" class="grid grid-cols-3 gap-2" aria-label="รูปที่จะส่ง" aria-live="polite">
                         <template x-for="(f, i) in files" :key="i">

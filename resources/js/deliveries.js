@@ -5,7 +5,7 @@ import Alpine from 'alpinejs';
 
 export default function registerDeliveriesPage() {
     Alpine.data('deliveriesPage', (config) => ({
-        r: null, tab: config.tab, busy: config.busy, vehicles: config.vehicles, reasons: config.reasons, people: config.people, dlv: { cabinet_ids: null }, toast: '',
+        r: null, tab: config.tab, busy: config.busy, vehicles: config.vehicles, reasons: config.reasons, people: config.people, dlv: { cabinet_ids: [], files: [], fileError: '', saving: false, shrinking: false }, toast: '',   // every key there from the start: the save button's :disabled reads them
         rej: { open: false, reason: '', note: '', saving: false, error: '', errors: {} },
         asg: { open: false, rows: [], carrier: '', saving: false, error: '', errors: {} },
         // จัดรถ / คน: the round's vehicles, or one empty line per kind PM asked for
@@ -188,7 +188,7 @@ export default function registerDeliveriesPage() {
         },
         openReject(row) { this.r = row; this.rej = { open: true, reason: '', note: '', saving: false, error: '', errors: {} }; },
         openDeliver(row) { this.r = row; const now = new Date(); this.dlv = { date: row.delivered_date || now.toISOString().slice(0, 10), time: row.delivered_time || String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
-            issue: row.issue, cabinet_ids: row.cabinets.map((c) => c.id), files: [], fileError: '', saving: false }; this.$dispatch('open-modal', 'dl-deliver'); },
+            issue: row.issue, cabinet_ids: row.cabinets.map((c) => c.id), files: [], fileError: '', saving: false, shrinking: false }; this.$dispatch('open-modal', 'dl-deliver'); },
         // the files picked for ส่งถึงแล้ว: each pick ADDS to the ones already picked (a phone's camera gives one photo a
         // time, so photo after photo), up to FILES_MAX; checked here first (the server checks again). The input's own
         // list is rebuilt from them (DataTransfer) so the form sends them all; a browser without it keeps the last pick.

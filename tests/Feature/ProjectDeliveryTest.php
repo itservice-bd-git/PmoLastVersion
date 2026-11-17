@@ -488,6 +488,24 @@ class ProjectDeliveryTest extends TestCase
         }
     }
 
+    public function test_the_driver_may_report_ส่งถึงแล้ว_without_a_photo(): void
+    {
+        $d = $this->send();
+        $this->pack($d, [$this->cab1, $this->cab2]);
+        $this->assign($d);
+        $this->actingAs($this->clerk)->post(route('deliveries.bill', $d))->assertSessionHasNoErrors();
+        $this->actingAs($this->clerk)->post(route('deliveries.depart', $d))->assertSessionHasNoErrors();
+        $link = DriverLinkController::urlFor($d, $this->clerk);
+        auth()->logout();
+
+        $this->get($link)->assertOk()->assertSee('ถ่ายรูปตอนส่งถึง')->assertSee('(ถ้ามี)');
+        $this->post($link, ['issue' => 'ไม่มีสัญญาณ ถ่ายรูปไม่ได้'])->assertRedirect()->assertSessionHasNoErrors();
+        $d->refresh();
+        $this->assertSame(['delivered', 'ไม่มีสัญญาณ ถ่ายรูปไม่ได้'], [$d->status, $d->issue]);
+        $this->assertNotNull($d->review_at, 'still รอตรวจ: the delivery department looks at it first');
+        $this->assertContains('คนขับแจ้งส่งถึง · ไม่มีรูป · รอตรวจ', $this->clerk->fresh()->notifications()->get()->map(fn ($n) => $n->data['title'])->all());
+    }
+
     public function test_the_driver_sends_the_photos_and_ส่งถึงแล้ว_through_a_link_with_no_login(): void
     {
         $d = $this->send();
@@ -515,8 +533,6 @@ class ProjectDeliveryTest extends TestCase
         $other = ProjectDelivery::forceCreate(['project_id' => $this->project->id, 'round' => 9, 'delivery_date' => '2026-11-25', 'status' => 'departed',
             'cabinet_ids' => [], 'method' => 'company', 'created_by' => $this->pm->id]);   // another round: its number in this link opens nothing
         $this->get(str_replace('/drive/'.$d->id, '/drive/'.$other->id, $path))->assertForbidden();
-        $this->post($path, ['issue' => 'ฝนตก'])->assertSessionHasErrors(['files' => 'ถ่ายรูปอย่างน้อย 1 รูป']);
-        $this->assertSame('departed', $d->fresh()->status);
 
         $uploads = public_path('uploads/comment-attachments');
         $before = is_dir($uploads) ? scandir($uploads) : [];

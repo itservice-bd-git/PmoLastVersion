@@ -50,9 +50,10 @@ class DriverLinkController extends Controller
         }
         $data = $request->validate([
             'issue' => ['nullable', 'string', 'max:500'],
-            'files' => ['required', 'array', 'min:1', 'max:'.ProjectDelivery::FILES_MAX],
+            // photos help the check (ใบส่งของที่เซ็นรับ, รูปหน้างาน) but are not required: a driver without a signal still reports it
+            'files' => ['nullable', 'array', 'max:'.ProjectDelivery::FILES_MAX],
             'files.*' => ['file', 'max:20480', 'mimes:jpg,jpeg,png,pdf'],
-        ], ['files.required' => 'ถ่ายรูปอย่างน้อย 1 รูป', 'files.min' => 'ถ่ายรูปอย่างน้อย 1 รูป', 'files.max' => 'ส่งได้ครั้งละไม่เกิน '.ProjectDelivery::FILES_MAX.' รูป',
+        ], ['files.max' => 'ส่งได้ครั้งละไม่เกิน '.ProjectDelivery::FILES_MAX.' รูป',
             'files.*.max' => 'รูป :attribute ใหญ่เกิน 20 MB', 'files.*.mimes' => 'ส่งได้เฉพาะรูป JPG / PNG หรือ PDF', 'files.*.uploaded' => 'อัปโหลดไม่สำเร็จ (รูปอาจใหญ่เกินไป)'],
             ['files.*' => 'ที่ส่ง']);
 
@@ -65,7 +66,7 @@ class DriverLinkController extends Controller
         // รอตรวจ: the delivery department looks at it first (the one who shared too: it was not their own doing); PM hears it
         // once they have (DeliveryFlow::review)
         app(NotificationService::class)->deliveryForDepartment($delivery->fresh('project'), $actor,
-            'คนขับแจ้งส่งถึง · '.count($request->file('files', [])).' รูป · รอตรวจ', todo: true, tellActor: true);
+            'คนขับแจ้งส่งถึง · '.(count($request->file('files', [])) ? count($request->file('files', [])).' รูป' : 'ไม่มีรูป').' · รอตรวจ', todo: true, tellActor: true);
 
         return redirect()->to($request->fullUrl());
     }

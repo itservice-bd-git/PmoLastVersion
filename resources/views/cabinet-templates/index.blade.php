@@ -1,10 +1,9 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">ตั้งค่า</h2>
+        <h1 class="text-lg font-semibold text-slate-900">ตั้งค่า</h1>
     </x-slot>
 
-    <div class="max-w-none mx-auto space-y-4">
-        <x-settings-nav />
+    <x-settings-layout space="space-y-4">
         <div class="space-y-4" x-data="{ q: '', importing: {{ $errors->any() ? 'true' : 'false' }} }">
 
         {{-- title, search, and (for whom may change templates) Excel import + new --}}
@@ -13,11 +12,11 @@
                 <h1 class="text-lg font-semibold text-slate-900">เทมเพลตตู้ / เช็คลิสต์</h1>
                 <p class="text-xs text-slate-500">ตู้ใหม่สร้างจากเทมเพลตเป็นสำเนา — แก้เทมเพลตภายหลังไม่กระทบตู้ที่สร้างไปแล้ว (ส่งรายการใหม่ไปตู้เดิมได้จากหน้าเทมเพลต)</p>
             </div>
-            <div class="flex shrink-0 flex-wrap items-center gap-2">
-            <label class="relative">
+            <div class="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+            <label class="relative w-full sm:w-auto">
                 <span class="sr-only">ค้นหาเทมเพลต</span>
                 <svg class="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 21l-4.3-4.3M11 18a7 7 0 100-14 7 7 0 000 14z"/></svg>
-                <input type="search" x-model="q" placeholder="ค้นหาชื่อ / รหัส / Task" class="h-9 w-60 rounded-lg border-slate-300 pl-8 text-sm">
+                <input type="search" x-model="q" placeholder="ค้นหาชื่อ / รหัส / Task" class="h-9 w-full rounded-lg sm:w-60 border-slate-300 pl-8 text-sm">
             </label>
             @edittemplates
                 <button type="button" @click="importing = !importing" class="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50" :aria-expanded="importing">นำเข้าจาก Excel</button>
@@ -27,12 +26,12 @@
         </div>
 
         @edittemplates
-        {{-- a new template from Excel (CSV: Task | Sub Task | แผนก | Checklist | หมายเหตุ - the same layout "Export Excel" gives) --}}
+        {{-- a new template from Excel (CSV: Task | Sub Task | แผนก | Checklist | หมายเหตุ - the same layout "ดาวน์โหลด Excel" gives) --}}
         <form x-show="importing" x-cloak method="POST" action="{{ route('cabinet-templates.import') }}" enctype="multipart/form-data"
               class="rounded-xl border border-blue-200 bg-blue-50/50 p-4 text-sm">
             @csrf
             <p class="font-semibold text-slate-800">นำเข้าเทมเพลตใหม่จาก Excel (CSV)</p>
-            <p class="mt-0.5 text-xs text-slate-500">คอลัมน์: Task | Sub Task | แผนก | Checklist | หมายเหตุ — กด "Export Excel" ที่เทมเพลตเดิมเพื่อได้ไฟล์ตัวอย่าง</p>
+            <p class="mt-0.5 text-xs text-slate-500">คอลัมน์: Task | Sub Task | แผนก | Checklist | หมายเหตุ — กด "ดาวน์โหลด Excel" ที่เทมเพลตเดิมเพื่อได้ไฟล์ตัวอย่าง</p>
             <div class="mt-3 flex flex-wrap items-center gap-2">
                 <input name="name" required maxlength="255" value="{{ old('name') }}" placeholder="ชื่อเทมเพลตใหม่" class="h-9 w-64 rounded-lg border-slate-300 text-sm">
                 <input type="file" name="file" required accept=".csv,text/csv" class="text-xs file:mr-2 file:rounded-md file:border-0 file:bg-white file:px-3 file:py-2 file:text-slate-700 file:ring-1 file:ring-slate-300">
@@ -59,10 +58,10 @@
                         <div class="flex flex-wrap items-center gap-2">
                             <h3 class="font-semibold text-slate-900">{{ $template->name }}</h3>
                             @if ($template->is_default)
-                                <span class="rounded bg-blue-100 px-1.5 py-0.5 text-[11.5px] font-semibold uppercase tracking-wide text-blue-700" title="ตู้ใหม่ใช้เทมเพลตนี้ถ้าไม่ได้เลือก">ค่าเริ่มต้น</span>
+                                <span class="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700" title="ตู้ใหม่ใช้เทมเพลตนี้ถ้าไม่ได้เลือก">ค่าเริ่มต้น</span>
                             @endif
                             @unless ($template->is_active)
-                                <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[11.5px] font-semibold uppercase tracking-wide text-slate-500" title="ไม่แสดงให้เลือกตอนสร้างตู้">ปิดใช้งาน</span>
+                                <span class="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-500" title="ไม่แสดงให้เลือกตอนสร้างตู้">ปิดใช้งาน</span>
                             @endunless
                         </div>
                         <p class="mt-0.5 text-xs text-slate-400">{{ $template->code }}</p>
@@ -98,7 +97,7 @@
                     @edittemplates
                     <div class="relative z-10 mt-auto flex items-center gap-1 border-t border-slate-100 px-3 py-2 text-xs">
                         <a href="{{ route('cabinet-templates.show', $template) }}" class="rounded-md px-2 py-1 font-medium text-blue-600 hover:bg-blue-50">เปิด / แก้ไข</a>
-                        <a href="{{ route('cabinet-templates.export', $template) }}" class="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100" title="Task | Sub Task | แผนก | Checklist | หมายเหตุ">Export Excel</a>
+                        <a href="{{ route('cabinet-templates.export', $template) }}" class="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100" title="Task | Sub Task | แผนก | Checklist | หมายเหตุ">ดาวน์โหลด Excel</a>
                         <form method="POST" action="{{ route('cabinet-templates.duplicate', $template) }}" onsubmit="return confirm('ทำสำเนาเทมเพลตนี้ทั้งหมด?')">@csrf
                             <button class="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100">ทำสำเนา</button></form>
                         <form method="POST" action="{{ route('cabinet-templates.destroy', $template) }}" class="ml-auto"
@@ -117,5 +116,5 @@
         </div>
         <p x-show="q" x-cloak class="text-xs text-slate-400">ค้นหา “<span x-text="q"></span>” — กดล้างช่องค้นหาเพื่อดูทั้งหมด</p>
         </div>
-    </div>
+    </x-settings-layout>
 </x-app-layout>

@@ -1,9 +1,9 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">ตู้ไฟฟ้า</h2>
+        <h1 class="text-lg font-semibold text-slate-900">ตู้ไฟฟ้า</h1>
     </x-slot>
 
-    <div class="max-w-7xl mx-auto space-y-4">
+    <div data-touch class="-mx-2 sm:-mx-3 lg:-mx-4 space-y-4">
         <form method="GET" class="flex flex-wrap items-center gap-2">
             <label class="relative w-full sm:w-72">
                 <span class="sr-only">ค้นหาตู้</span>

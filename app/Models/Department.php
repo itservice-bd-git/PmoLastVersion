@@ -33,6 +33,12 @@ class Department extends Model
         return $this->hasMany(User::class);
     }
 
+    /** Its teams (Settings › แผนก): the sales department has several, most departments none. */
+    public function teams()
+    {
+        return $this->hasMany(Team::class)->orderBy('name');
+    }
+
     public function cabinetSubtasks()
     {
         return $this->hasMany(CabinetSubtask::class);

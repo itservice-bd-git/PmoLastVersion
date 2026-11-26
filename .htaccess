@@ -1,0 +1,12 @@
+# Only public/ is meant for the web. On a host whose web root is the folder above this project (so the app is
+# reached as /PmoLastVersion/public/...), everything else here - storage/logs, vendor, composer.json, artisan,
+# database/sql, the app's code - would otherwise be downloadable by anyone. Refuse it all; public/ has its own rules.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^public(/|$) - [L]
+    RewriteRule ^ - [F]
+</IfModule>
+<IfModule !mod_rewrite.c>
+    Require all denied
+</IfModule>
+Options -Indexes

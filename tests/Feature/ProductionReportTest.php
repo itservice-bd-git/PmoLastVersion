@@ -92,15 +92,10 @@ class ProductionReportTest extends TestCase
         $this->assertSame(['late' => 1, 'doing' => 3, 'wait' => 0], array_intersect_key($depts['Production'], array_flip(['late', 'doing', 'wait'])));
     }
 
-    public function test_the_page_opens_on_the_tab_asked_for_and_hides_the_value_without_finance(): void
+    public function test_the_page_is_gone_and_an_old_bookmark_lands_on_the_dashboard(): void
     {
-        $this->cabinet($this->project('SO-A', value: 2_500_000), 'MO-1', '2026-10-15', 60);
-        $this->actingAs($this->admin())->get(route('reports.production', ['tab' => 'late']))->assertOk()
-            ->assertSee('รายงานการผลิต')->assertSee('ตู้ที่ล่าช้า หรือเสี่ยงส่งไม่ทัน')->assertSee('MO-1')->assertSee('2.5')
-            ->assertSee("tab: 'late'", false);
-
-        $member = User::forceCreate(['name' => 'M', 'email' => 'prod-m', 'password' => 'secret-pass', 'role' => 'member', 'department_id' => $this->prod->id, 'is_active' => true]);
-        $this->actingAs($member)->get(route('reports.production'))->assertOk()->assertDontSee('มูลค่างานที่กำลังทำ');
+        $this->actingAs($this->admin())->get('/reports/production')->assertRedirect('/dashboard');
+        $this->actingAs($this->admin())->get(route('dashboard'))->assertOk()->assertDontSee('รายงานการผลิต');
     }
 
     public function test_it_reads_per_project_and_for_the_projects_picked(): void
@@ -125,9 +120,6 @@ class ProductionReportTest extends TestCase
         $this->assertSame([1, 2, [$b->id]], [$only['so'], $only['mo'], $only['selected']]);
         $this->assertSame([], $only['late']);
         $this->assertCount(2, $only['projectOptions'], 'the picker still lists every project');
-
-        $this->actingAs($this->admin())->get(route('reports.production', ['by' => 'project', 'projects' => [$b->id]]))->assertOk()
-            ->assertSee("by: 'project'", false)->assertSee('เฉพาะ 1 โครงการที่เลือก')->assertSee('B-RUSH');
     }
 
     public function test_work_past_its_own_date_makes_a_cabinet_at_risk_before_its_due_date(): void

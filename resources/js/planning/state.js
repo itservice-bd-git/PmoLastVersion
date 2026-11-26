@@ -116,7 +116,7 @@ export default ({ config, board, starKey, loadStars, t0 }) => ({
     modalSize: (() => { try { const v = localStorage.getItem('planning.modalSize'); return ['normal', 'wide', 'full'].includes(v) ? v : 'wide'; } catch (e) { return 'wide'; } })(),
 
     // ---- saving ----
-    pending: {}, queue: Promise.resolve(), saving: 0, savedAt: '', etag: null,
+    pending: {}, queue: Promise.resolve(), saving: 0, savedAt: '', etag: config.etag || null,   // the page's own copy's version: the first poll is a 304
 
     init() {
         // a notification's link (?project=ID) opens that project; an unknown / not-visible one says so instead of doing nothing

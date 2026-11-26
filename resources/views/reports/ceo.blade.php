@@ -2,7 +2,7 @@
      gives A4 pages with the letterhead on every page: the bands are position: fixed in print (repeated per page) and the
      outer table's thead / tfoot spacers keep the content clear of them. Data from App\Services\ExecutiveReport ($r) and
      App\Services\ProductionReport ($p); ?by=project (default) / cabinet counts the summary and the lists per SO or per
-     cabinet. The summary on top is written by App\Services\CeoSummary from the same numbers. --}}
+     cabinet. The summary on top ($summary) is written by App\Services\CeoSummary from the same numbers (the controller). --}}
 @php
     $k = $r['kpis'];
     $value = $k['value'];
@@ -22,7 +22,6 @@
     $section = 0;
     $byProject = $by === 'project';
     $unit = $byProject ? 'โครงการ' : 'ตู้';
-    $summary = app(\App\Services\CeoSummary::class)->write($r, $p, $by, $value !== null);
     $lineTone = ['navy' => 'bg-ae-navy', 'red' => 'bg-red-600', 'orange' => 'bg-orange-500', 'green' => 'bg-emerald-500'];
     $pstate = [
         'late' => ['ล่าช้า', 'bg-red-100 text-red-700'], 'rush' => ['ต้องเร่ง', 'bg-orange-100 text-orange-700'],
@@ -62,6 +61,17 @@
         .printed { padding: 0 15mm 2mm; }
         /* on a wide screen the A4 sheet reads small: show it a little larger (print keeps the real size) */
         @media screen and (min-width: 1200px) { .sheet { zoom: 1.1; } }
+        /* on a phone or tablet the whole A4 sheet is shown shrunk to the screen, as a PDF viewer would, instead of a page
+           to scroll sideways (the sheet is 210mm = 794px; print keeps the real size) */
+        @media screen and (max-width: 820px) { .sheet { zoom: .95; } }
+        @media screen and (max-width: 760px) { .sheet { zoom: .88; } }
+        @media screen and (max-width: 700px) { .sheet { zoom: .8; } }
+        @media screen and (max-width: 640px) { .sheet { zoom: .72; } }
+        @media screen and (max-width: 580px) { .sheet { zoom: .65; } }
+        @media screen and (max-width: 520px) { .sheet { zoom: .58; } }
+        @media screen and (max-width: 460px) { .sheet { zoom: .52; } }
+        @media screen and (max-width: 410px) { .sheet { zoom: .47; } }
+        @media screen and (max-width: 370px) { .sheet { zoom: .43; } }
         @media print {
             html, body { background: #fff; }
             .no-print { display: none !important; }
@@ -325,7 +335,7 @@
                                     @endforeach
                                 </tbody>
                             </table>
-                            @if ($watchCabinets->count() > $listLimit)<p class="mt-1 text-[11.5px] text-slate-400">และอีก {{ $watchCabinets->count() - $listLimit }} ตู้ · ดูทั้งหมดที่ รายงานการผลิต › ล่าช้า / เสี่ยง</p>@endif
+                            @if ($watchCabinets->count() > $listLimit)<p class="mt-1 text-xs text-slate-400">และอีก {{ $watchCabinets->count() - $listLimit }} ตู้</p>@endif
                         @else
                             <p class="text-slate-500">ไม่มีตู้ที่ล่าช้าหรือเสี่ยง</p>
                         @endif
@@ -372,7 +382,7 @@
                             @endforelse
                         </tbody>
                     </table>
-                    <p class="mt-1 text-[11.5px] text-slate-400">เส้น │ บนแถบ = เวลาที่ผ่านไป (วันเริ่ม → วันส่ง)@if ($r['lastClosed']) · ปิดโครงการล่าสุด: {{ $r['lastClosed'] }}@endif</p>
+                    <p class="mt-1 text-xs text-slate-400">เส้น │ บนแถบ = เวลาที่ผ่านไป (วันเริ่ม → วันส่ง)@if ($r['lastClosed']) · ปิดโครงการล่าสุด: {{ $r['lastClosed'] }}@endif</p>
                 </section>
                 @endif
 

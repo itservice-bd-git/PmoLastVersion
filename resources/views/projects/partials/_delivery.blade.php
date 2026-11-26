@@ -3,19 +3,15 @@
      it as a draft, sends it to the delivery department, moves its day (ProjectDeliveryController). The steps after that are
      on "งานจัดส่ง" (DeliveryController). Planning shows the same rounds. --}}
 @php
-    $rounds = $project->deliveries()->with('vehicles.vehicle', 'rejecter', 'biller')->get();
-    $roundFiles = \App\Models\ProjectDelivery::filesOf($rounds->where('status', 'delivered')->pluck('id'));   // sent with ส่งถึงแล้ว
-    $canDeliver = auth()->user()->canDispatchWork() && ! $project->isLocked();
-    $win = \App\Http\Controllers\ProjectDeliveryController::windowData($project);
+    // $rounds, $roundFiles, $canDeliver, $win, $deliveryForms, $dlMoves: App\Services\ProjectPage::delivery
     $cabName = collect($win['cabinets'])->pluck('name', 'id');
     $arrived = $rounds->where('status', \App\Models\ProjectDelivery::DELIVERED)->flatMap(fn ($d) => $d->cabinet_ids)->unique()->count();
     $total = count($win['cabinets']);
     $next = $rounds->where('status', '!=', \App\Models\ProjectDelivery::DELIVERED)->sortBy(fn ($d) => $d->firstDay()->format('Y-m-d').$d->delivery_time)->first();
-    $form = fn (?\App\Models\ProjectDelivery $d) => \App\Http\Controllers\ProjectDeliveryController::formData($project, $d);
+    $form = fn (?\App\Models\ProjectDelivery $d) => $deliveryForms[$d?->id ?? 'new'] ?? null;
     $old = session()->getOldInput();
     $errorKeys = ['delivery_date', 'delivery_end_date', 'delivery_time', 'cabinet_ids', 'method', 'vehicle_types', 'vehicle_types.0', 'crew_size', 'delivery'];
     $deliveryPage = auth()->user()->allows('edit.delivery');
-    $dlMoves = \App\Services\EventDates::history($project, \App\Services\EventDates::DELIVERY);   // ประวัติการเลื่อน, by round
 @endphp
 {{-- A panel over the page when asked (หัวโครงการ › "ดูทุกรอบ", สถานะโครงการ › ส่งมอบ, a link to #delivery: the pmo-delivery event, 'show');
      'new' opens the window of a new round. The window stays in the page. --}}

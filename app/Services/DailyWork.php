@@ -24,12 +24,19 @@ use Illuminate\Support\Collection;
  *                  IN_PROGRESS), and of those, overdue (due before today) - the same counts as the dashboard's "งานตามแผนก"
  *  - new work      ("มีงานเข้า") pending work nobody has opened from this page yet: cabinet_subtasks.is_active = 0 until
  *                  someone in its department's scope clicks it here (acknowledge()); then 1. Not tied to the range.
- * "ตู้" is the cabinets' quantity, as in รายงานการผลิต.
+ * "ตู้" is the cabinets' quantity, as in ProductionReport.
  */
 class DailyWork
 {
     use Concerns\DailyWorkChart;
     use Concerns\DailyWorkFeed;
+    use Concerns\DailyWorkProjects;
+
+    /** one card per department (reports/today) */
+    public const BY_DEPARTMENT = 'department';
+
+    /** one card per project (reports/today/projects, DailyWorkProjects) */
+    public const BY_PROJECT = 'project';
 
     /** one day shown: its small chart covers this many days, ending on it */
     public const CHART_DAYS_FOR_ONE_DAY = 7;
@@ -79,9 +86,12 @@ class DailyWork
      * @param  list<int>|null  $departmentIds  null = every department, [] = none
      * @param  Carbon  $firstDay  the first day shown
      * @param  Carbon|null  $lastDay  the last day shown (null = $firstDay only); the caller keeps it on or before today
+     * @param  string  $by  self::BY_DEPARTMENT or self::BY_PROJECT: what each card (the "departments" rows) is
+     * @param  int|null  $onlyProject  BY_PROJECT: work out that project's row only (the dashboard's project panel)
      */
-    public function build(?array $departmentIds, Carbon $firstDay, ?Carbon $lastDay = null, ?Carbon $now = null): array
+    public function build(?array $departmentIds, Carbon $firstDay, ?Carbon $lastDay = null, ?Carbon $now = null, string $by = self::BY_DEPARTMENT, ?int $onlyProject = null): array
     {
+        $byProject = $by === self::BY_PROJECT;
         $now = ($now ?? now())->copy();
         $today = $now->copy()->startOfDay();
         $rangeStart = $firstDay->copy()->startOfDay();
@@ -102,7 +112,7 @@ class DailyWork
             ->map(fn ($subtask) => ['subtask' => $subtask, 'completed' => $this->completion($subtask)])
             ->filter(fn ($completion) => $completion['completed'] && $completion['completed']['at']->between($chartStart, $rangeEnd));
         $newCabinets = $this->newCabinets($departmentIds, $shownDepartmentIds, $rangeStart, $rangeEnd);
-        $pendingSubtasks = $this->pendingSubtasks($shownDepartmentIds);
+        $pendingSubtasks = $this->pendingSubtasks($shownDepartmentIds, $byProject);
 
         $receivedBetween = fn (Collection $subtasks, Carbon $start, Carbon $end) => $subtasks
             ->filter(fn ($subtask) => $subtask->assigned_at->between($start, $end));
@@ -149,12 +159,16 @@ class DailyWork
 
         // departments with work first, each group in name order, so cards stay put between refreshes
         $departmentRows = $departmentRows->sortBy(fn ($row) => [$row['isQuiet'] ? 1 : 0, $row['name']])->values();
+        $departmentNames = $departments->pluck('name', 'id');
+        $rows = $byProject
+            ? $this->projectRows($departmentIds, $departmentNames, $receivedSubtasks, $completions, $pendingSubtasks, $chartBars, $rangeStart, $rangeEnd, $today, $receivedBetween, $completedBetween, $onlyProject)
+            : $departmentRows;
         [$feed, $workEventCount] = $this->feed($movedSubtasks, $newCabinets, $rangeStart, $rangeEnd, $dayCount > 1);
         $shiftRange = fn (int $days) => [
             'from' => $rangeStart->copy()->addDays($days)->format('Y-m-d'),
             'to' => $lastDay->copy()->addDays($days)->format('Y-m-d'),
         ];
-        $chartValues = $departmentRows->flatMap(fn ($row) => array_merge(array_column($row['chart'], 'received'), array_column($row['chart'], 'completed')));
+        $chartValues = $rows->flatMap(fn ($row) => array_merge(array_column($row['chart'], 'received'), array_column($row['chart'], 'completed')));
 
         return [
             'range' => [
@@ -168,6 +182,7 @@ class DailyWork
                 'next' => $lastDay->copy()->addDays($dayCount)->lte($now) ? $shiftRange($dayCount) : null,
                 'chartLabel' => $this->chartLabel($dayCount, $chartBars[0]['unit']),
             ],
+            'by' => $by,
             'today' => $now->format('Y-m-d'),
             'updatedAt' => $now->format('H:i:s'),
             'totals' => [
@@ -184,9 +199,11 @@ class DailyWork
                 'pending' => $departmentRows->sum('pending'),
                 'unacknowledged' => $departmentRows->sum('unacknowledged'),
                 'activeDepartmentCount' => $departmentRows->filter(fn ($row) => $row['received'] + $row['completed'] > 0)->count(),
+                'activeProjectCount' => $byProject ? $rows->filter(fn ($row) => $row['received'] + $row['completed'] > 0)->count() : null,
             ],
             'chartMax' => max(1, (int) $chartValues->max()),
-            'departments' => $departmentRows->all(),
+            'departments' => $rows->all(),   // the cards: departments, or projects (by)
+            'departmentNames' => $departmentNames->map(fn ($name) => (string) $name)->all(),
             'feed' => $feed,
             'workEventCount' => $workEventCount,
             'newWork' => $this->newWork($shownDepartmentIds),

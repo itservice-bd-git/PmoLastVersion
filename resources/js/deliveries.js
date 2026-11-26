@@ -149,14 +149,14 @@ export default function registerDeliveriesPage() {
                 this.cab.act = '';
             }
         },
-        cabCount(f) { return this.cab.list.filter((c) => f === 'todo' ? !c.packed : f === 'done' ? c.packed : true).length; },
+        cabCount(f) { return this.cab.list.filter((c) => f === 'todo' ? !c.packed : f === 'done' ? c.packed : f === 'ready' ? !c.packed && !(c.left > 0) : true).length; },
         get cabShown() {
             const q = this.cab.q.trim().toLowerCase();
             return this.cab.list.filter((c) => (this.cab.filter === 'todo' ? !c.packed : this.cab.filter === 'done' ? c.packed : true)
                 && (!q || [c.name, c.model, c.type, c.size].join(' ').toLowerCase().includes(q)));
         },
         async packCabs(list, packed) {
-            list = list.filter((c) => c.packed !== packed && !c.busy);
+            list = list.filter((c) => c.packed !== packed && !c.busy && !(packed && c.left > 0));   // Checklist not done: not to pack
             if (!list.length || !this.cab.row.packable) return;
             const row = this.cab.row;
             this.cab.error = ''; this.cab.saving++;
@@ -187,7 +187,8 @@ export default function registerDeliveriesPage() {
             }, 500);
         },
         openReject(row) { this.r = row; this.rej = { open: true, reason: '', note: '', saving: false, error: '', errors: {} }; },
-        openDeliver(row) { this.r = row; const now = new Date(); this.dlv = { date: row.delivered_date || now.toISOString().slice(0, 10), time: row.delivered_time || String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
+        openDeliver(row) { this.r = row; const now = new Date(), p = (n) => String(n).padStart(2, '0');
+            this.dlv = { at: row.delivered_input || now.getFullYear() + '-' + p(now.getMonth() + 1) + '-' + p(now.getDate()) + ' ' + p(now.getHours()) + ':' + p(now.getMinutes()), iv: row.invoice_no || '',
             issue: row.issue, cabinet_ids: row.cabinets.map((c) => c.id), files: [], fileError: '', saving: false, shrinking: false }; this.$dispatch('open-modal', 'dl-deliver'); },
         // the files picked for ส่งถึงแล้ว: each pick ADDS to the ones already picked (a phone's camera gives one photo a
         // time, so photo after photo), up to FILES_MAX; checked here first (the server checks again). The input's own

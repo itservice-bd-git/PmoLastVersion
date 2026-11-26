@@ -37,7 +37,7 @@ const open = (p, who, url, expect = [200]) => step(p, `${who} ${url}`, async () 
 
 const b = await chromium.launch();
 await session(b, 'probe-adm@example.test', { viewport: { width: 1440, height: 1000 } }, 'admin', async (p) => {
-    for (const u of ['/dashboard', '/projects', '/projects/create', '/deliveries', '/deliveries?tab=all', '/notifications', '/reports/today', '/reports/production', '/reports/ceo', '/settings', '/settings/notice-rules', '/settings/notifications', '/cabinets', '/cabinet-templates', '/planning/classic'])
+    for (const u of ['/dashboard', '/projects', '/projects/create', '/deliveries', '/deliveries?tab=all', '/notifications', '/reports/today', '/reports/ceo', '/settings', '/settings/departments', '/settings/notice-rules', '/settings/notifications', '/cabinets', '/cabinet-templates', '/planning/classic'])
         await open(p, 'admin', u);
     const pid = await p.evaluate(async () => (await (await fetch('/planning/data')).json()).root.boards.pmo.tasks[0]?.id?.slice(1));
     if (pid) {

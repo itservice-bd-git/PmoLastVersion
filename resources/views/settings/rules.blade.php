@@ -1,10 +1,9 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">ตั้งค่า</h2>
+        <h1 class="text-lg font-semibold text-slate-900">ตั้งค่า</h1>
     </x-slot>
 
-    <div class="max-w-none mx-auto">
-        <x-settings-nav />
+    <x-settings-layout>
 
         <form method="POST" action="{{ route('settings.rules.update') }}" class="space-y-6">
             @csrf @method('PUT')
@@ -65,5 +64,5 @@
                 <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">บันทึก</button>
             </div>
         </form>
-    </div>
+    </x-settings-layout>
 </x-app-layout>

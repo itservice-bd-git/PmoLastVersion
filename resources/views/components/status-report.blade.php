@@ -9,7 +9,7 @@
     live in this browser's localStorage only; everything shown is server-scoped to the viewer's department.
 --}}
 <div x-data="statusReport(@js(['url' => route('status-report.show'), 'ackUrl' => route('status-report.acknowledge'), 'listUrl' => route('planning.board')]))"
-     x-init="init()" @open-status-report.window="openReport()" @pmo-urgent.window="showAlerts()" @keydown.escape.window="close()">
+     @open-status-report.window="openReport()" @pmo-urgent.window="showAlerts()" @keydown.escape.window="close()">
     <template x-if="open">
         <div class="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" :aria-label="step === 'alerts' ? 'แจ้งเตือนเร่งด่วน' : 'รายงานสถานะงาน'">
             <div class="absolute inset-0 bg-slate-900/40" @click="close()"></div>

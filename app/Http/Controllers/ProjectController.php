@@ -11,14 +11,16 @@ use App\Models\CabinetTemplate;
 use App\Models\Department;
 use App\Models\JobType;
 use App\Models\Project;
+use App\Models\Team;
 use App\Models\User;
+use App\Models\Vehicle;
 use App\Services\CommentAttachmentUploader;
 use App\Services\NewProjectAppointments;
 use App\Services\NotificationService;
-use App\Services\PlanningBoard;
 use App\Services\ProjectFollowers;
 use App\Services\ProjectList;
 use App\Services\ProjectOverview;
+use App\Services\ProjectPage;
 use App\Services\SubtaskAssignmentService;
 use App\Support\Csv;
 use Illuminate\Http\Request;
@@ -29,32 +31,31 @@ class ProjectController extends Controller
     public function index(Request $request, ProjectList $list)
     {
         $projects = $list->ordered($list->query($request))
-            ->with('latestFat', 'jobType:id,name')   // วัน FAT column (the latest round), ประเภทงาน column
+            ->with('latestFat', 'jobType:id,name', 'salesPerson:id,name,team_id', 'salesPerson.team:id,name')   // วัน FAT column (the latest round), ประเภทงาน column
             ->paginate(15)
             ->withQueryString();
 
         return view('projects.index', [
             'projects' => $projects,
-            'projectDepartments' => $list->departmentsOf($projects->pluck('id')),
-            'departmentColors' => PlanningBoard::departmentColors(),
-            'departmentNames' => Department::pluck('name', 'id'),
             'statuses' => Project::$statuses,
-            'filters' => $request->only(['q', 'status', 'priority', 'due']),
+            'filters' => $request->only(['q', 'status', 'priority', 'due', 'team']),
             'closedCount' => $list->closedCount($request),
+            'teams' => Team::with('department:id,name')->orderBy('name')->get(),   // the ทีม filter (none: not shown)
         ]);
     }
 
     /** Same search/status filters as the list, as a CSV (all matching rows, not just the page). */
     public function export(Request $request, ProjectList $list)
     {
-        $projects = $list->query($request)->with('projectManager', 'jobType')->orderBy('project_no')->get();
+        $projects = $list->query($request)->with('projectManager', 'jobType', 'salesPerson.team:id,name')->orderBy('project_no')->get();
 
         return Csv::download('โครงการ-'.today()->format('Y-m-d').'.csv', ProjectList::CSV_HEADERS, $projects->map(fn (Project $p) => $list->csvRow($p)));
     }
 
-    public function create()
+    public function create(Request $request)
     {
-        return view('projects.create', $this->formOptions());
+        // a new project's FAT / delivery (Admin / PM): the kinds of vehicle to ask for
+        return view('projects.create', $this->formOptions() + ['vehicleTypes' => $request->user()->canDispatchWork() ? Vehicle::types() : []]);
     }
 
     public function store(ProjectRequest $request, ProjectFollowers $followers, NewProjectAppointments $newAppointments)
@@ -106,7 +107,7 @@ class ProjectController extends Controller
             .(AppSetting::get('pmo_acts_for_departments') ? '' : ' (เปิด "Admin / PM ทำแทนแผนกได้" ที่ ตั้งค่า › กฎการทำงาน ก่อน)')) : $back;
     }
 
-    public function show(Project $project)
+    public function show(Project $project, ProjectPage $page)
     {
         $project->load([
             'cabinets.tasks.subtasks.department', 'cabinets.tasks.subtasks.owner', 'cabinets.cabinetTemplate',
@@ -135,7 +136,7 @@ class ProjectController extends Controller
             'departments' => Department::orderBy('name')->get(),
             'comments' => $comments,
             'overview' => app(ProjectOverview::class)->build($project, auth()->user()),
-        ]);
+        ] + $page->build($project, auth()->user()));
     }
 
     public function edit(Project $project)

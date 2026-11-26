@@ -1,19 +1,16 @@
 {{-- วัน FAT (the customer's acceptance test at the factory): the latest round, its earlier rounds, and for Admin / PM the
      form that sets it (ProjectFatController). The same round shows on Planning's calendar and timeline (PlanningBoard). --}}
 @php
-    $fats = $project->fats()->get();
+    // $fats, $canFat, $fatCabinets, $fatForms, $fatMoves: App\Services\ProjectPage::fat
     $fat = $fats->last();
     $history = $fats->slice(0, -1)->reverse();
-    $canFat = auth()->user()->canDispatchWork() && ! $project->isLocked();
-    $fatCabinets = $project->cabinets()->orderBy('sequence')->orderBy('id')->get(['id', 'mo_no', 'cabinet_name']);
     $cabName = fn ($c) => $c->mo_no ?: $c->cabinet_name;
     $colour = fn (?\App\Models\ProjectFat $f) => \App\Support\EventStatuses::color('fat', $f ? $f->stateKey($project) : 'scheduled');   // Settings > สถานะงาน
     $days = $fat ? (int) today()->diffInDays($fat->fat_date, false) : null;
     $daysLeft = $fat ? (int) today()->diffInDays($fat->lastDay(), false) : null;   // a FAT over several days: still running until its last day
     $late = $fat?->isAfterDue($project);
-    $form = fn (?\App\Models\ProjectFat $f) => \App\Models\ProjectFat::formData($project, $f, $fat);   // edit the latest round, or a new one
+    $form = fn (?\App\Models\ProjectFat $f) => $fatForms[$f?->id ?? 'new'] ?? null;   // edit the latest round, or a new one
     $old = session()->getOldInput();
-    $fatMoves = \App\Services\EventDates::history($project, \App\Services\EventDates::FAT);   // ประวัติการเลื่อน, by round
     $allMoves = $fatMoves->flatten(1)->sortByDesc('id')->values();
     $latestMoves = $fat ? $fatMoves->get($fat->id, collect())->whereNotNull('n')->count() : 0;
 @endphp

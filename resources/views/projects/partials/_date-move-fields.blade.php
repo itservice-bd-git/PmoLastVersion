@@ -1,7 +1,6 @@
 {{-- A round's day moved in its window (FAT / การจัดส่ง): postpone (counts, เลื่อนครั้งที่ n of the round) or a date typed
      wrong, why and what happened - kept in ประวัติการเลื่อน (App\Services\EventDates). Needs `moved` and `f` (formData:
-     moves, move_kind, move_reason_id, move_note) in the Alpine scope. --}}
-@php $moveReasons = \App\Services\EventDates::reasons(); @endphp
+     moves, move_kind, move_reason_id, move_note) in the Alpine scope; $moveReasons from App\View\Composers\DateMoveFieldsComposer. --}}
 <div x-show="moved" x-cloak class="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
     <fieldset>
         <legend class="sr-only">ชนิดการเปลี่ยนวัน</legend>

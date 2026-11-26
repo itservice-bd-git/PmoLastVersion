@@ -138,8 +138,11 @@ export default function registerCabinetPage() {
         const label = document.getElementById('progress-value-' + id);
         if (fill) {
             fill.style.width = value + '%';
-            fill.classList.remove('bg-emerald-500', 'bg-blue-500', 'bg-amber-500', 'bg-slate-300');
-            fill.classList.add(value >= 100 ? 'bg-emerald-500' : value >= 60 ? 'bg-blue-500' : value >= 30 ? 'bg-amber-500' : 'bg-slate-300');
+            // the "progress-2" bar keeps its own orange; an older bar still gets its colour by the value
+            if (!fill.classList.contains('progress-2-fill')) {
+                fill.classList.remove('bg-emerald-500', 'bg-blue-500', 'bg-amber-500', 'bg-slate-300');
+                fill.classList.add(value >= 100 ? 'bg-emerald-500' : value >= 60 ? 'bg-blue-500' : value >= 30 ? 'bg-amber-500' : 'bg-slate-300');
+            }
         }
         if (label) label.textContent = value + '%';
     }
@@ -150,10 +153,10 @@ export default function registerCabinetPage() {
     }
 
     const STATUS_MAP = {
-        not_started: ['bg-slate-100 text-slate-600', 'Not Started'],
-        in_progress: ['bg-blue-100 text-blue-700', 'In Progress'],
-        completed: ['bg-emerald-100 text-emerald-700', 'Completed'],
-        on_hold: ['bg-amber-100 text-amber-700', 'On Hold'],
+        not_started: ['bg-slate-100 text-slate-600', 'ยังไม่เริ่ม'],
+        in_progress: ['bg-blue-100 text-blue-700', 'กำลังดำเนินการ'],
+        completed: ['bg-emerald-100 text-emerald-700', 'เสร็จสิ้น'],
+        on_hold: ['bg-amber-100 text-amber-700', 'พักไว้'],
     };
 
     // the Sub Task status badge's menu: open / close (a click in a <summary> would otherwise fold the Sub Task)

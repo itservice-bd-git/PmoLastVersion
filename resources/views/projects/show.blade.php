@@ -14,7 +14,7 @@
         $asked = in_array(request('tab'), ['project', 'cabinets', 'overview'], true) ? 'info' : request('tab');
         $initialTab = in_array($asked, $tabs, true) ? $asked : 'info';
     @endphp
-    <div class="pmo-project max-w-screen-2xl mx-auto space-y-4" x-data="{ tab: '{{ $initialTab }}' }" x-init="$watch('tab', (t) => keepTabInUrl(t, 'info'))">
+    <div data-touch class="pmo-project -mx-2 sm:-mx-3 lg:-mx-4 space-y-4" x-data="{ tab: '{{ $initialTab }}' }" x-init="$watch('tab', (t) => keepTabInUrl(t, 'info'))">
 
         <x-closed-project-banner :project="$project" />
 
@@ -22,11 +22,8 @@
              delivery on the right with the buttons that open their windows (_fat / _delivery, through the pmo-fat /
              pmo-delivery events), the rest of the actions in the ⋯ menu. --}}
         @php
-            $hdrFat = $project->fats()->get()->last();
-            $hdrRounds = $project->deliveries()->with('vehicles.vehicle')
-                ->when(! \App\Services\DeliveryFlow::canBook(auth()->user()), fn ($q) => $q->where('status', '!=', \App\Models\ProjectDelivery::DRAFT))->get();
+            // $hdrFat, $hdrRounds, $hdrCanAppt, $followers: App\Services\ProjectPage
             $hdrNext = $hdrRounds->where('status', '!=', \App\Models\ProjectDelivery::DELIVERED)->sortBy(fn ($d) => $d->firstDay()->format('Ymd').$d->delivery_time)->first();
-            $hdrCanAppt = auth()->user()->canDispatchWork() && ! $project->isLocked();
             $hdrRisk = ['on_track' => ['ปกติ', 'bg-emerald-50 text-emerald-800', 'bg-emerald-500'], 'watch' => ['เฝ้าระวัง', 'bg-orange-50 text-orange-800', 'bg-orange-500'],
                 'behind' => ['สูง', 'bg-red-50 text-red-800', 'bg-red-500']][$overview['summary']['pace'] ?? ''] ?? null;
             $today = today();
@@ -57,7 +54,6 @@
                 $dlDays <= 0 => [$range($hdrNext->firstDay(), $hdrNext->lastDay()), 'วันนี้'.($dlTime ? ' · '.$dlTime : ''), 'text-blue-700'],
                 default => [$range($hdrNext->firstDay(), $hdrNext->lastDay()), 'อีก '.$dlDays.' วัน'.($dlTime ? ' · '.$dlTime : ''), 'text-slate-700'],
             };
-            $followers = $project->followers()->orderBy('name')->get(['users.id', 'name']);
             $following = $followers->contains('id', auth()->id());
         @endphp
         <section aria-label="หัวโครงการ" class="relative rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(11,31,58,.05),0_6px_18px_-12px_rgba(11,31,58,.18)] sm:p-5">
@@ -162,10 +158,10 @@
             @if (auth()->user()->allows('data.comments'))
             <button type="button" @click="tab = 'comment'" role="tab" :aria-selected="tab === 'comment'"
                     :class="tab === 'comment' ? 'bg-ae-navy text-white' : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-800'"
-                    class="whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold">Comment</button>
+                    class="whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold">ความคิดเห็น</button>
             <button type="button" @click="tab = 'activity'" role="tab" :aria-selected="tab === 'activity'"
                     :class="tab === 'activity' ? 'bg-ae-navy text-white' : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-800'"
-                    class="whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold">Activity Log</button>
+                    class="whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold">ประวัติการแก้ไข</button>
             @endif
         </div>
 

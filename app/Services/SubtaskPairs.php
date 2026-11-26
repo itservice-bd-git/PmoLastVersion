@@ -20,6 +20,12 @@ use Illuminate\Validation\ValidationException;
  */
 class SubtaskPairs
 {
+    /** One chosen pair for the picker (x-pair-picker). */
+    public static function chip($source): array
+    {
+        return ['id' => $source->id, 'name' => $source->name, 'dept' => (string) $source->department?->name, 'view' => (bool) $source->pivot?->view_only, 'own' => (bool) $source->pivot?->own_ticks];
+    }
+
     /**
      * Set what a template Sub Task compares with: other Sub Tasks of the same template. Those in $viewIds it only follows
      * ("ดูอย่างเดียว": no copies, nothing to tick, e.g. ขาย watching จัดซื้อ → คลัง); those in $ownIds it uses the list of

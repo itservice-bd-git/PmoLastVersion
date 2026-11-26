@@ -234,8 +234,8 @@ class SubtaskAssignmentService
         $old = Project::$statuses[$project->status];
         Project::withoutEvents(fn () => $project->forceFill(['status' => Project::STATUS_IN_PROGRESS])->save());
         ActivityLog::record($project->id, $actor->id, $project, 'updated',
-            "สถานะโครงการ {$old} → In Progress อัตโนมัติ (แผนก {$subtask->department?->name} รับงานแรก)",
-            ['status' => ['label' => 'สถานะ', 'old' => $old, 'new' => 'In Progress']]);
+            "สถานะโครงการ {$old} → ".Project::$statuses[Project::STATUS_IN_PROGRESS]." อัตโนมัติ (แผนก {$subtask->department?->name} รับงานแรก)",
+            ['status' => ['label' => 'สถานะ', 'old' => $old, 'new' => Project::$statuses[Project::STATUS_IN_PROGRESS]]]);
         PlanningBoard::touch();
     }
 

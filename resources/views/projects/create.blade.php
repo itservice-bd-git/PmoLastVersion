@@ -2,7 +2,7 @@
     <x-slot name="header">
         <div class="flex min-w-0 items-center gap-2">
             <x-back-link :href="route('projects.index')" label="รายการโครงการ" />
-            <h2 class="text-lg font-semibold text-slate-900">New Project</h2>
+            <h1 class="text-lg font-semibold text-slate-900">สร้างโครงการ</h1>
         </div>
     </x-slot>
 

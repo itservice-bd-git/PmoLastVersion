@@ -76,7 +76,7 @@ async function sweep(b, who, email, opts, pages) {
 const b = await chromium.launch();
 const adminPages = ['/dashboard', '/projects', '/projects/create', '/projects/9', '/projects/9?tab=comment', '/projects/9/edit', '/cabinets', '/cabinets/31',
     '/cabinet-templates', '/cabinet-templates/1', '/planning/board', '/deliveries', '/deliveries?tab=waiting', '/deliveries?tab=scheduled', '/deliveries?tab=delivered',
-    '/assignments', '/reports/today', '/reports/production', '/reports/ceo', '/notifications', '/trash', '/settings', '/settings/notice-rules', '/settings/notifications'];
+    '/assignments', '/reports/today', '/reports/ceo', '/notifications', '/trash', '/settings', '/settings/notice-rules', '/settings/notifications'];
 const shipPages = ['/deliveries', '/deliveries?tab=waiting', '/deliveries?tab=scheduled', '/deliveries?tab=departed', '/deliveries?tab=delivered', '/planning/board', '/notifications', '/cabinets/31'];
 await sweep(b, 'admin-desktop', 'probe-adm@example.test', { viewport: { width: 1440, height: 1000 } }, adminPages);
 await sweep(b, 'ship-phone', 'probe-ship@example.test', { ...devices['iPhone 13'] }, shipPages);

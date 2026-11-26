@@ -24,10 +24,10 @@ class Cabinet extends Model
     const STATUS_ON_HOLD = 'on_hold';
 
     public static array $statuses = [
-        self::STATUS_NOT_STARTED => 'Not Started',
-        self::STATUS_IN_PROGRESS => 'In Progress',
-        self::STATUS_COMPLETED => 'Completed',
-        self::STATUS_ON_HOLD => 'On Hold',
+        self::STATUS_NOT_STARTED => 'ยังไม่เริ่ม',
+        self::STATUS_IN_PROGRESS => 'กำลังดำเนินการ',
+        self::STATUS_COMPLETED => 'เสร็จสิ้น',
+        self::STATUS_ON_HOLD => 'พักไว้',
     ];
 
     protected $fillable = [
@@ -63,6 +63,18 @@ class Cabinet extends Model
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    /** The delivery rounds that name this cabinet (delivery_cabinet), with when it was packed for each. */
+    public function deliveries()
+    {
+        return $this->belongsToMany(ProjectDelivery::class, 'delivery_cabinet')->withPivot('packed_at', 'packed_by')->withTimestamps();
+    }
+
+    /** The FAT rounds that name this cabinet (fat_cabinet). */
+    public function fats()
+    {
+        return $this->belongsToMany(ProjectFat::class, 'fat_cabinet')->withTimestamps();
     }
 
     /** Its start / due date changes, oldest first (App\Services\ProjectDates). */

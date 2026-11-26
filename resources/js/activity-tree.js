@@ -30,7 +30,14 @@ function activityTree(url, exportUrl) {
         f: { from: '', to: '', category: '', entity: '', user_id: '', q: '', sort: 'desc' },
         seq: 0,
 
-        init() { this.load(); },
+        // load the first time the panel is on screen: it sits in a tab most visits never open (a big project's history is MBs)
+        init() {
+            if (!('IntersectionObserver' in window)) { this.load(); return; }
+            const seen = new IntersectionObserver((entries) => {
+                if (entries.some((e) => e.isIntersecting)) { seen.disconnect(); this.load(); }
+            });
+            seen.observe(this.$el);
+        },
 
         hasFilter() { return Object.values(this.f).some((v, i) => v && Object.keys(this.f)[i] !== 'sort'); },
 

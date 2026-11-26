@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">ตั้งค่า</h2>
+        <h1 class="text-lg font-semibold text-slate-900">ตั้งค่า</h1>
     </x-slot>
 
     @php
@@ -21,8 +21,7 @@
             'url' => route('settings.notice-rules.update', $r)])->keyBy('id');
     @endphp
 
-    <div class="max-w-none mx-auto">
-        <x-settings-nav />
+    <x-settings-layout>
         <div class="space-y-5" x-data="noticeRules(@js(['rules' => $ruleData, 'storeUrl' => route('settings.notice-rules.store'), 'depts' => $deptNames, 'old' => session()->getOldInput() ?: null]))">
 
         <x-card title="กฎแจ้งเตือน Checklist" subtitle="แจ้งเตือนระหว่างแผนกที่ใช้รายการร่วมกัน (คู่เทียบในเทมเพลต) เช่น คลังรับของแล้วแจ้งจัดซื้อและช่าง · แผนกที่ยังไม่มีกฎของเหตุการณ์นั้นจะแจ้งแบบเดิม · ผู้ใช้แต่ละคนยังปิดของตัวเองได้ที่ “การแจ้งเตือน”">
@@ -32,7 +31,7 @@
                 </button>
             </x-slot>
 
-            <div class="-mx-5 -my-4 overflow-x-auto">
+            <div class="-mx-5 -my-4 overflow-x-auto relative">
                 <table class="w-full min-w-[56rem] text-sm">
                     <thead class="bg-slate-50 text-left text-xs text-slate-500">
                         <tr>
@@ -209,6 +208,6 @@
             <form id="rule-delete-{{ $rule->id }}" method="POST" action="{{ route('settings.notice-rules.destroy', $rule) }}" onsubmit="return confirm('ลบกฎนี้?')" class="hidden">@csrf @method('DELETE')</form>
         @endforeach
         </div>
-    </div>
+    </x-settings-layout>
 
 </x-app-layout>

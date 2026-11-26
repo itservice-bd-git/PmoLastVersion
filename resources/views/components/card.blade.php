@@ -2,15 +2,16 @@
 
 <div {{ $attributes->merge(['class' => 'bg-white rounded-xl border border-slate-200 shadow-sm']) }}>
     @if ($title)
-        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <div>
-                <h3 class="text-sm font-semibold text-ae-navy">{{ $title }}</h3>
+        {{-- the actions drop under the title on a narrow screen rather than squeezing it --}}
+        <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div class="min-w-0 flex-1 basis-64">
+                <h3 class="text-base font-semibold text-ae-navy">{{ $title }}</h3>
                 @if ($subtitle)
-                    <p class="text-xs text-slate-500 mt-0.5">{{ $subtitle }}</p>
+                    <p class="text-sm text-slate-600 mt-0.5 max-w-prose">{{ $subtitle }}</p>
                 @endif
             </div>
             @isset($actions)
-                <div>{{ $actions }}</div>
+                <div class="shrink-0">{{ $actions }}</div>
             @endisset
         </div>
     @endif

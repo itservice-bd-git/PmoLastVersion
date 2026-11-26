@@ -1,10 +1,9 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">ตั้งค่า</h2>
+        <h1 class="text-lg font-semibold text-slate-900">ตั้งค่า</h1>
     </x-slot>
 
-    <div class="max-w-none mx-auto space-y-6">
-        <x-settings-nav />
+    <x-settings-layout space="space-y-6">
         <p class="text-sm text-slate-500">โครงการ ตู้ไฟฟ้า Task และ Sub Task ที่ถูกลบจะอยู่ที่นี่ พร้อมงาน/Checklist/ประวัติทั้งหมดใต้รายการนั้น กู้คืนได้ตลอด</p>
 
         <x-card title="โครงการที่ถูกลบ">
@@ -82,5 +81,5 @@
                 @endforelse
             </div>
         </x-card>
-    </div>
+    </x-settings-layout>
 </x-app-layout>

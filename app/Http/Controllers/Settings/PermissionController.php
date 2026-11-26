@@ -23,7 +23,9 @@ class PermissionController extends Controller
         return view('settings.permissions', [
             'table' => Access::table(),
             'columns' => $columns,
-            'fullRoles' => User::where('is_active', true)->whereIn('role', Access::FULL_ROLES)->count(),
+            'groups' => Access::GROUPS,
+            // key => [group, label, hint]: the rows, in the order both views show them
+            'permissions' => collect(Access::PERMISSIONS)->map(fn ($p) => ['group' => $p[0], 'label' => $p[1], 'hint' => $p[2]])->all(),
         ]);
     }
 

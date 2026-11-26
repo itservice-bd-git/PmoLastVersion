@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">งานแผนกของฉัน</h2>
+        <h1 class="text-lg font-semibold text-slate-900">งานแผนกของฉัน</h1>
     </x-slot>
 
     {{--

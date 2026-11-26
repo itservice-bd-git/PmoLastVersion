@@ -97,6 +97,9 @@
         @endforeach
     </section>
 
+    {{-- this week's board projects: how much of each was made in the week --}}
+    @includeWhen($weekProgress ?? null, 'dashboard._week-progress')
+
     {{-- projects to follow --}}
     <section aria-labelledby="ov-follow" class="order-none rounded-xl bg-white px-4 py-5 shadow-sm ring-1 ring-slate-200 sm:px-6 lg:order-last">
         <div class="mb-4 flex flex-wrap items-baseline justify-between gap-2 px-1 sm:px-0">

@@ -39,11 +39,11 @@
                     </template>
                     <template x-for="(d, idx) in week" :key="'evm' + d.date">
                         <button type="button" x-show="evHidden(week, d.date) > 0" @click="evOpen = { ...evOpen, [week[0].date]: true }" :style="'grid-column:' + (idx + 1) + '; grid-row: 5;'"
-                                class="self-start justify-self-start px-2 text-left text-[11.5px] font-medium text-blue-600 hover:underline" x-text="'+ อีก ' + evHidden(week, d.date)"></button>
+                                class="self-start justify-self-start px-2 text-left text-xs font-medium text-blue-600 hover:underline" x-text="'+ อีก ' + evHidden(week, d.date)"></button>
                     </template>
                 </div>
                 <div x-show="evOpen[week[0].date]" class="relative flex justify-center pb-1.5">
-                    <button type="button" @click="evOpen = { ...evOpen, [week[0].date]: false }" class="rounded px-2 text-[11.5px] font-medium text-blue-600 hover:underline">▲ ย่อกลับ</button>
+                    <button type="button" @click="evOpen = { ...evOpen, [week[0].date]: false }" class="rounded px-2 text-xs font-medium text-blue-600 hover:underline">▲ ย่อกลับ</button>
                 </div>
             </div>
         </div>

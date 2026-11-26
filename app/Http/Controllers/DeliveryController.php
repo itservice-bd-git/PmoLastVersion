@@ -6,7 +6,10 @@ use App\Models\Cabinet;
 use App\Models\ProjectDelivery;
 use App\Services\CommentAttachmentUploader;
 use App\Services\DeliveryBrief;
+use App\Services\DeliveryChecklist;
 use App\Services\DeliveryFlow;
+use App\Services\DeliveryWindow;
+use App\Support\EventStatuses;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -41,6 +44,11 @@ class DeliveryController extends Controller
         // in round order, no tabs - so the steps are the same buttons as here
         $project = $request->integer('project') ?: null;
         $embed = $request->boolean('embed');
+        // two tabs, จัดการรอบส่ง first: everyone lands on the step tabs below; ปฏิทินสัปดาห์ (the dashboard's look) when its
+        // tab is pressed (?view=week) - not for a tab, a notice's round or Planning's window
+        if (! $project && ! $embed && ! $request->hasAny(['tab', 'round']) && $request->input('view') === 'week') {
+            return $this->week($request);
+        }
         $all = ProjectDelivery::with('project', 'vehicles.vehicle', 'sender', 'rejecter', 'biller')->whereHas('project')
             ->where('status', '!=', ProjectDelivery::DRAFT)
             ->when($project, fn ($q) => $q->where('project_id', $project),
@@ -77,7 +85,7 @@ class DeliveryController extends Controller
             $tab = $round && ($d = $all->firstWhere('id', $round)) ? ($tabs['today']->contains('id', $d->id) ? 'today' : $d->status)
                 : collect(['today', 'waiting', 'scheduled'])->first(fn ($k) => $tabs[$k]->isNotEmpty(), 'waiting');
         }
-        $vehicles = ProjectDeliveryController::vehicles($all->flatMap(fn ($d) => $d->vehicles->pluck('vehicle_id'))->filter()->unique()->values()->all());
+        $vehicles = DeliveryWindow::vehicles($all->flatMap(fn ($d) => $d->vehicles->pluck('vehicle_id'))->filter()->unique()->values()->all());
         $people = $all->flatMap(fn ($d) => $d->people())->merge(array_column($vehicles, 'driver'))->filter()->unique()->sort()->values();
         // what the delivery department loads: each cabinet's MO, its name, type, size and how many
         $names = Cabinet::whereIn('id', $all->flatMap(fn ($d) => $d->cabinet_ids ?? [])->unique())->get(['id', 'mo_no', 'cabinet_name', 'cabinet_type', 'size', 'quantity'])->keyBy('id');
@@ -85,12 +93,71 @@ class DeliveryController extends Controller
         $files = ProjectDelivery::filesOf($tabs[$tab]->where('status', ProjectDelivery::DELIVERED)->pluck('id'));   // ใบส่งของ / รูป sent with ส่งถึงแล้ว
 
         return view('deliveries.index', [
-            'tabs' => $tabs, 'tab' => $tab, 'round' => $round, 'embed' => $embed, 'project' => $project,
+            'tabs' => $tabs, 'tabLabels' => self::TABS, 'tab' => $tab, 'round' => $round, 'embed' => $embed, 'project' => $project,
             'rows' => $tabs[$tab]->values()->map(fn ($d) => $this->row($d, $names, $today, $files))->all(),
             'vehicles' => $vehicles,
             'busy' => $this->busy($all),
             'reasons' => ProjectDelivery::rejectReasons(),
             'people' => $people->all(),   // names typed before, offered when typing who goes
+        ]);
+    }
+
+    /**
+     * ปฏิทินสัปดาห์: the week's rounds (sent to the delivery department) as Monday-to-Friday columns, the way the dashboard
+     * shows FAT and deliveries - each round on its first day in the week (Saturday and Sunday on Friday's), the state of each
+     * step on its card, the rest in a panel; the work itself is done on the step tabs (จัดการรอบส่ง).
+     */
+    private function week(Request $request)
+    {
+        $today = today();
+        $offset = max(-8, min(8, $request->integer('week')));
+        $mon = $today->copy()->startOfWeek(Carbon::MONDAY)->addWeeks($offset);
+        $sun = $mon->copy()->addDays(6);
+        $rounds = ProjectDelivery::with('project', 'vehicles.vehicle', 'sender', 'rejecter', 'biller')->whereHas('project')
+            ->where('status', '!=', ProjectDelivery::DRAFT)
+            ->whereDate('delivery_date', '<=', $sun)
+            ->where(fn ($q) => $q->whereDate('delivery_date', '>=', $mon)->orWhereDate('delivery_end_date', '>=', $mon))
+            ->orderBy('delivery_date')->orderBy('delivery_time')->get();
+        $names = Cabinet::whereIn('id', $rounds->flatMap(fn ($d) => $d->cabinet_ids ?? [])->unique())->get(['id', 'mo_no', 'cabinet_name', 'cabinet_type', 'size', 'quantity'])->keyBy('id');
+
+        $short = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'];
+        $rows = $rounds->map(function ($d) use ($names, $today, $mon, $short) {
+            $on = $d->firstDay()->copy()->max($mon);
+            $row = $this->row($d, $names, $today);
+
+            $done = $d->status === ProjectDelivery::DELIVERED;
+            // what has to happen next, in words (the card says this instead of a bar of steps)
+            $next = match (true) {
+                $done => null,
+                $d->status === ProjectDelivery::REJECTED => 'รอ PM เลือกวันใหม่',
+                $d->status === ProjectDelivery::WAITING => 'จัดรถ / คน',
+                $d->status === ProjectDelivery::DEPARTED => 'บันทึกส่งถึง',
+                $row['step']['n'] === 0 => 'ห่อตู้ ('.$row['packedCount'].'/'.count($row['cabinets']).')',
+                $row['step']['n'] === 1 => 'แจ้งเปิดบิล',
+                default => 'ออกจากโรงงาน',
+            };
+
+            return $row + ['col' => min(4, $on->dayOfWeekIso - 1), 'weekend' => $on->dayOfWeekIso > 5 ? $short[$on->dayOfWeekIso - 1].' '.$on->day : null,
+                'manage' => route('deliveries.index', ['round' => $d->id]), 'done' => $done, 'next' => $next, 'stepsDone' => min(4, $row['step']['n'])];
+        });
+        // a day: the rounds still to do first (in the order they go), the delivered ones after, apart
+        $days = collect(range(0, 4))->map(function ($i) use ($mon, $short, $today, $rows) {
+            $d = $mon->copy()->addDays($i);
+            $mine = $rows->where('col', $i);
+
+            return ['date' => $d, 'short' => $short[$i], 'n' => $d->day, 'today' => $d->equalTo($today), 'past' => $d->lt($today),
+                'items' => $mine->where('done', false)->values()->all(), 'delivered' => $mine->where('done', true)->values()->all()];
+        })->all();
+        $fri = $mon->copy()->addDays(4);
+        $months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+        $label = ($mon->month === $fri->month ? $mon->day : $mon->day.' '.$months[$mon->month - 1]).'–'.$fri->day.' '.$months[$fri->month - 1].' '.($fri->year + 543);
+
+        return view('deliveries.week', [
+            'days' => $days, 'label' => $label, 'offset' => $offset,
+            'todayText' => $today->betweenIncluded($mon, $sun) ? ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'][$today->dayOfWeekIso - 1].' '.$today->day.' '.$months[$today->month - 1] : null,
+            // the states the week can be narrowed to, in the order the work goes, with how many rounds are in each
+            'states' => collect([ProjectDelivery::WAITING, ProjectDelivery::SCHEDULED, ProjectDelivery::DEPARTED, ProjectDelivery::DELIVERED, ProjectDelivery::REJECTED])
+                ->map(fn ($k) => ['key' => $k, 'label' => ProjectDelivery::statusName($k), 'color' => EventStatuses::color('delivery', $k), 'n' => $rows->where('status', $k)->count()])->all(),
         ]);
     }
 
@@ -148,17 +215,20 @@ class DeliveryController extends Controller
     public function deliver(Request $request, ProjectDelivery $delivery)
     {
         $data = $request->validate([
-            'delivered_date' => ['required', 'date'],
-            'delivered_time' => ['nullable', 'date_format:H:i'],
+            'delivered_at' => ['required', 'date_format:Y-m-d H:i'],
+            'invoice_no' => ['nullable', 'string', 'max:50'],
             'issue' => ['nullable', 'string', 'max:500'],
             'cabinet_ids' => ['required', 'array', 'min:1'],
             'cabinet_ids.*' => ['integer'],
             'files' => ['nullable', 'array', 'max:'.ProjectDelivery::FILES_MAX],
             'files.*' => ['file', 'max:20480', 'mimes:'.CommentAttachmentUploader::ALLOWED_MIMES],
-        ], ['delivered_date.required' => 'ใส่วันที่ส่งถึง', 'cabinet_ids.required' => 'ติ๊กตู้ที่ส่งถึงอย่างน้อย 1 ตู้',
+        ], ['delivered_at.required' => 'ใส่วันที่และเวลาที่ส่งถึง', 'delivered_at.date_format' => 'วันที่ / เวลาส่งถึงไม่ถูกต้อง', 'invoice_no.max' => 'เลข IV ยาวได้ไม่เกิน 50 ตัวอักษร', 'cabinet_ids.required' => 'ติ๊กตู้ที่ส่งถึงอย่างน้อย 1 ตู้',
             'files.max' => 'แนบได้ครั้งละไม่เกิน '.ProjectDelivery::FILES_MAX.' ไฟล์', 'files.*.max' => 'ไฟล์ :attribute ใหญ่เกิน 20 MB',
             'files.*.mimes' => 'แนบได้เฉพาะ PDF, Word, Excel, รูปภาพ (JPG / PNG), DWG / DXF', 'files.*.uploaded' => 'อัปโหลดไฟล์ไม่สำเร็จ (ไฟล์อาจใหญ่เกินไป)'],
             ['files.*' => 'ที่แนบ']);
+        // one field (วันที่ / เวลา) for the day and the time the flow takes apart; the IV number goes with it
+        [$data['delivered_date'], $data['delivered_time']] = explode(' ', $data['delivered_at']);
+        $data['invoice_no'] ??= null;
         $this->flow->deliver($delivery, $data, $request->user(), $request->file('files', []));
 
         return $this->done($request, 'บันทึกส่งถึงแล้ว');
@@ -183,12 +253,14 @@ class DeliveryController extends Controller
         $left = (int) $today->diffInDays($d->delivery_date, false);   // to its first day
         $end = (int) $today->diffInDays($d->lastDay(), false);
 
+        $unmade = app(DeliveryChecklist::class)->remaining(array_map('intval', $d->cabinet_ids ?? []));   // Checklist not done: not to pack yet
+
         return [
             'id' => $d->id, 'status' => $d->status, 'state' => $d->stateLabel(), 'color' => $d->stateColor(),
             'project' => $d->project->project_no, 'name' => $d->project->project_name, 'round' => $d->round,
             'cabinets' => collect($d->cabinet_ids ?? [])->map(fn ($id) => ['id' => (int) $id, 'name' => ($c = $names->get($id)) ? ($c->mo_no ?: $c->cabinet_name) : 'ตู้ที่ลบแล้ว',
                 'model' => $c && $c->mo_no ? (string) $c->cabinet_name : '', 'type' => (string) $c?->cabinet_type, 'size' => (string) $c?->size, 'qty' => (int) ($c?->quantity ?? 1),
-                'packed' => $d->isPacked((int) $id),
+                'packed' => $d->isPacked((int) $id), 'left' => $unmade[(int) $id] ?? 0,
                 'at' => isset(($d->packed ?? [])[$id]) ? Carbon::parse($d->packed[$id])->format('d/m H:i') : ''])->values()->all(),
             'packable' => $d->beforeDeparture() && ! $d->billed_at,   // ห่อ / เอาการห่อออก still allowed (the panel's buttons)
             'site' => (string) $d->site, 'map' => (string) $d->map_url, 'nav' => (string) $d->navUrl(), 'contact' => collect([$d->contact_name, $d->contact_phone])->filter()->implode(' '), 'note' => (string) $d->note,
@@ -205,7 +277,7 @@ class DeliveryController extends Controller
             'step' => $d->step(), 'packedCount' => $d->packedCount(), 'allPacked' => $d->allPacked(),
             'billed' => $d->billed_at ? $d->billed_at->format('d/m H:i').($d->biller ? ' · '.$d->biller->name : '') : '',
             'departed' => $d->departed_at?->format('d/m H:i'), 'delivered' => $d->delivered_at ? $d->delivered_at->thaiDate().($d->delivered_at->format('H:i') !== '00:00' ? ' '.$d->delivered_at->format('H:i').' น.' : '') : '',
-            'delivered_date' => $d->delivered_at?->format('Y-m-d') ?? '', 'delivered_time' => $d->delivered_at && $d->delivered_at->format('H:i') !== '00:00' ? $d->delivered_at->format('H:i') : '',
+            'delivered_input' => $d->delivered_at?->format('Y-m-d H:i') ?? '', 'invoice_no' => $d->invoice_no,
             'review' => $d->review_at ? $d->review_at->format('d/m H:i') : '',   // รอตรวจ since (the driver's link)
             'receiver' => (string) $d->receiver, 'doc_no' => (string) $d->doc_no, 'issue' => (string) $d->issue,
             'files' => ($files ?? collect())->get($d->id, collect())->map(fn ($f) => ProjectDelivery::fileView($f))->values()->all(),

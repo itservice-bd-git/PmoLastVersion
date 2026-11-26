@@ -36,6 +36,11 @@
         <x-input-label for="po_no" value="เลขที่ใบสั่งซื้อ (PO)" />
         <x-text-input id="po_no" name="po_no" class="mt-1 block w-full" :value="old('po_no', $p?->po_no)" />
     </div>
+    <div>
+        <x-input-label for="avt_no" value="เลข AVT" />
+        <x-text-input id="avt_no" name="avt_no" class="mt-1 block w-full" :value="old('avt_no', $p?->avt_no)" maxlength="50" placeholder="เช่น AVT69502" />
+        <x-input-error :messages="$errors->get('avt_no')" class="mt-1" />
+    </div>
     {{-- พนักงานขาย: tick the sales people (several at once) - they follow the project and hear its news (ProjectFollowers);
          a project made before this keeps its typed names, and a name that is one of them comes ticked --}}
     @php
@@ -154,7 +159,7 @@
          cabinets are there (ProjectController::storeAppointments). --}}
     @if (! $p && auth()->user()->canDispatchWork())
         @php
-            $vehicleTypes = \App\Models\Vehicle::types();
+            // $vehicleTypes: ProjectController::create
             $box = 'mt-1 block h-11 w-full rounded-lg border-slate-300 text-sm font-normal';
         @endphp
         <div class="space-y-4 md:col-span-2"

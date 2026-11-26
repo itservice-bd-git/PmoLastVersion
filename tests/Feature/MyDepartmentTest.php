@@ -148,7 +148,7 @@ class MyDepartmentTest extends TestCase
         $this->get(route('my-department.index'))->assertRedirect(route('login'));
 
         // the one page carries what My Department had: the CSV export of the month on screen (the same endpoint)
-        $page = $this->actingAs($member)->get(route('planning.board'))->assertOk()->assertSee('Export CSV');
+        $page = $this->actingAs($member)->get(route('planning.board'))->assertOk()->assertSee('ดาวน์โหลด CSV');
         $this->assertSame(route('my-department.export'), $page->viewData('config')['urls']['export']);
     }
 

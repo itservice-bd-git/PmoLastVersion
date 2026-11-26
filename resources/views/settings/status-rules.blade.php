@@ -1,5 +1,5 @@
 <x-app-layout>
-    <x-slot name="header"><h2 class="text-lg font-semibold text-slate-900">ตั้งค่า</h2></x-slot>
+    <x-slot name="header"><h1 class="text-lg font-semibold text-slate-900">ตั้งค่า</h1></x-slot>
     @php
         $deptName = $departments->pluck('name', 'id');
         $statusName = $statuses->pluck('name', 'id');
@@ -13,8 +13,7 @@
             default => '?',
         };
     @endphp
-    <div class="max-w-none mx-auto space-y-4">
-        <x-settings-nav />
+    <x-settings-layout space="space-y-4">
 
         <x-card title="กฎสถานะ (อัตโนมัติ)" subtitle="เมื่อเงื่อนไขเป็นจริง (หลังมีคนติ๊ก Checklist) ระบบตั้งสถานะบน Planning ของตู้หรือโครงการให้ — ไม่ย้อนกลับเมื่อเงื่อนไขไม่จริงแล้ว และไม่แตะขั้นรับงาน/เสร็จงานของ PMO">
             <div class="divide-y divide-slate-100 -mx-5 -mt-2">
@@ -43,21 +42,21 @@
                 @csrf
                 <div class="flex flex-wrap items-center gap-2">
                     <span>ตั้งสถานะของ</span>
-                    <select name="target" class="rounded-lg border-slate-300 text-sm">@foreach (\App\Models\StatusRule::TARGETS as $k => $v)<option value="{{ $k }}">{{ $v }}</option>@endforeach</select>
+                    <select name="target" aria-label="ใช้กับ" class="rounded-lg border-slate-300 text-sm">@foreach (\App\Models\StatusRule::TARGETS as $k => $v)<option value="{{ $k }}">{{ $v }}</option>@endforeach</select>
                     <span>เป็น</span>
-                    <select name="board_status_id" class="rounded-lg border-slate-300 text-sm">@foreach ($statuses as $s)<option value="{{ $s->id }}">{{ $s->name }}</option>@endforeach</select>
+                    <select name="board_status_id" aria-label="ตั้งเป็นสถานะ" class="rounded-lg border-slate-300 text-sm">@foreach ($statuses as $s)<option value="{{ $s->id }}">{{ $s->name }}</option>@endforeach</select>
                     <span>เมื่อ</span>
-                    <select name="logic" class="rounded-lg border-slate-300 text-sm"><option value="and">ครบทุกเงื่อนไข (และ)</option><option value="or">ข้อใดข้อหนึ่ง (หรือ)</option></select>
+                    <select name="logic" aria-label="เงื่อนไขรวม" class="rounded-lg border-slate-300 text-sm"><option value="and">ครบทุกเงื่อนไข (และ)</option><option value="or">ข้อใดข้อหนึ่ง (หรือ)</option></select>
                 </div>
                 @for ($i = 0; $i < 3; $i++)
                     <div class="grid gap-2 rounded-lg bg-slate-50 p-2 sm:grid-cols-4">
-                        <select name="conditions[{{ $i }}][when]" class="rounded-lg border-slate-300 text-xs">
+                        <select name="conditions[{{ $i }}][when]" aria-label="เมื่อ (เงื่อนไขที่ {{ $i + 1 }})" class="rounded-lg border-slate-300 text-xs">
                             <option value="">— เงื่อนไข {{ $i + 1 }} {{ $i ? '(ไม่บังคับ)' : '' }} —</option>
                             @foreach (\App\Models\StatusRule::WHEN as $k => $v)<option value="{{ $k }}">{{ $v }}</option>@endforeach
                         </select>
-                        <select name="conditions[{{ $i }}][department_id]" class="rounded-lg border-slate-300 text-xs"><option value="">แผนก (ถ้าใช้)</option>@foreach ($departments as $d)<option value="{{ $d->id }}">{{ $d->name }}</option>@endforeach</select>
-                        <input type="text" name="conditions[{{ $i }}][item]" maxlength="255" placeholder="ชื่อรายการ checklist (ถ้าใช้)" class="rounded-lg border-slate-300 text-xs">
-                        <select name="conditions[{{ $i }}][status_id]" class="rounded-lg border-slate-300 text-xs"><option value="">สถานะ (ถ้าใช้)</option>@foreach ($statuses as $s)<option value="{{ $s->id }}">{{ $s->name }}</option>@endforeach</select>
+                        <select name="conditions[{{ $i }}][department_id]" aria-label="แผนก (เงื่อนไขที่ {{ $i + 1 }})" class="rounded-lg border-slate-300 text-xs"><option value="">แผนก (ถ้าใช้)</option>@foreach ($departments as $d)<option value="{{ $d->id }}">{{ $d->name }}</option>@endforeach</select>
+                        <input type="text" name="conditions[{{ $i }}][item]" aria-label="ชื่อรายการ checklist (เงื่อนไขที่ {{ $i + 1 }})" maxlength="255" placeholder="ชื่อรายการ checklist (ถ้าใช้)" class="rounded-lg border-slate-300 text-xs">
+                        <select name="conditions[{{ $i }}][status_id]" aria-label="สถานะ (เงื่อนไขที่ {{ $i + 1 }})" class="rounded-lg border-slate-300 text-xs"><option value="">สถานะ (ถ้าใช้)</option>@foreach ($statuses as $s)<option value="{{ $s->id }}">{{ $s->name }}</option>@endforeach</select>
                     </div>
                 @endfor
                 <x-input-error :messages="$errors->get('conditions')" />
@@ -76,5 +75,5 @@
                 <div class="flex justify-end"><button class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">บันทึก</button></div>
             </form>
         </x-card>
-    </div>
+    </x-settings-layout>
 </x-app-layout>

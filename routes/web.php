@@ -18,7 +18,6 @@ use App\Http\Controllers\DepartmentExportController;
 use App\Http\Controllers\DriverLinkController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PlanningController;
-use App\Http\Controllers\ProductionReportController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectDateController;
@@ -38,6 +37,7 @@ use App\Http\Controllers\Settings\ProjectDateReasonController;
 use App\Http\Controllers\Settings\SettingsController;
 use App\Http\Controllers\Settings\StatusController;
 use App\Http\Controllers\Settings\StatusRuleController;
+use App\Http\Controllers\Settings\TeamController;
 use App\Http\Controllers\Settings\UserController;
 use App\Http\Controllers\Settings\VehicleController;
 use App\Http\Controllers\StatusReportController;
@@ -62,11 +62,15 @@ Route::middleware(['signed:relative', 'throttle:20,1'])->group(function () {
 // 'perm:…' = Settings > สิทธิ์การใช้งาน (App\Support\Access).
 Route::middleware(['auth', 'project.visible'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('perm:page.dashboard')->name('dashboard');
-    Route::get('reports/production', [ProductionReportController::class, 'index'])->middleware('perm:page.dashboard')->name('reports.production');   // รายงานการผลิต
+    Route::redirect('reports/production', '/dashboard');   // รายงานการผลิต was taken out (2026-11-20): an old bookmark lands on the dashboard
     Route::get('reports/ceo', [DashboardController::class, 'report'])->middleware('perm:page.dashboard')->name('reports.ceo');
     Route::middleware('perm:page.today')->group(function () {   // สรุปงาน: the page and the JSON it polls every few seconds
         Route::get('reports/today', [DailyWorkController::class, 'index'])->name('reports.today');
         Route::get('reports/today/data', [DailyWorkController::class, 'data'])->middleware('throttle:120,1')->name('reports.today.data');
+        Route::get('reports/projects', [DailyWorkController::class, 'projects'])->name('reports.projects');   // สรุปงานรายโครงการ: its own page
+        Route::get('reports/projects/data', [DailyWorkController::class, 'projectsData'])->middleware('throttle:120,1')->name('reports.projects.data');
+        Route::get('reports/projects/{project}/one', [DailyWorkController::class, 'projectOne'])->middleware('throttle:120,1')->name('reports.projects.one');   // the dashboard's project panel
+        Route::get('reports/projects/{project}/tree', [DailyWorkController::class, 'projectTree'])->middleware('throttle:120,1')->name('reports.projects.tree');
         Route::post('reports/today/acknowledge', [DailyWorkController::class, 'acknowledge'])->middleware('throttle:120,1')->name('reports.today.acknowledge');
     });
 
@@ -295,6 +299,12 @@ Route::middleware(['auth', 'project.visible'])->group(function () {
     // Settings are admin-only: user management in particular can mint admin accounts and reset passwords.
     Route::resource('settings/users', UserController::class)->parameters(['users' => 'user'])->names('settings.users')->except('show')->middleware('admin');
     Route::resource('settings/departments', DepartmentController::class)->parameters(['departments' => 'department'])->names('settings.departments')->only(['index', 'store', 'update', 'destroy'])->middleware('admin');
+    // ทีม of a department (the sales department has several), kept on the แผนก page
+    Route::middleware('admin')->group(function () {
+        Route::post('settings/departments/{department}/teams', [TeamController::class, 'store'])->name('settings.departments.teams.store');
+        Route::put('settings/teams/{team}', [TeamController::class, 'update'])->name('settings.teams.update');
+        Route::delete('settings/teams/{team}', [TeamController::class, 'destroy'])->name('settings.teams.destroy');
+    });
     // Admin-only (checked inside the controller): workflow automation + date-limit rules.
     Route::get('settings/automation', [AutomationController::class, 'index'])->name('settings.automation.index');
     // Settings > แจ้งเตือน Checklist: who hears what when a paired checklist moves (App\Services\ChecklistNoticeRules)

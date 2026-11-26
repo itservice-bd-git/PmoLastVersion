@@ -58,6 +58,9 @@ final class Access
     /** a permission that comes with another one (who may edit the templates may open their page) */
     public const IMPLIED = ['page.templates' => 'edit.templates', 'edit.work' => 'edit.manage'];
 
+    /** a permission that only works together with another one (the settings page warns when it is on without it) */
+    public const NEEDS = ['page.assignments' => 'edit.manage'];
+
     /** @return array<string, array<string, bool>> column ('none' or a department id) => key => allowed, for the active departments */
     public static function table(): array
     {

@@ -17,6 +17,7 @@ use Illuminate\Support\Collection;
  */
 class ProjectDelivery extends Model
 {
+    use Concerns\KeepsIdListsInStep;
     use Concerns\PresentsDelivery;
     use GuardsClosedProject;
 
@@ -50,7 +51,7 @@ class ProjectDelivery extends Model
 
     protected $fillable = ['project_id', 'round', 'delivery_date', 'delivery_end_date', 'delivery_time', 'date_pending_at', 'status',
         'cabinet_ids', 'packed', 'billed_at', 'billed_by', 'method', 'vehicle_types', 'crew_size', 'carrier', 'site', 'map_url', 'contact_name', 'contact_phone', 'note', 'departed_at', 'delivered_at', 'review_at',
-        'receiver', 'doc_no', 'issue', 'sent_by', 'scheduled_by', 'scheduled_at', 'rejected_by', 'rejected_at', 'rejected_reason', 'rejected_note', 'created_by'];
+        'receiver', 'doc_no', 'invoice_no', 'issue', 'sent_by', 'scheduled_by', 'scheduled_at', 'rejected_by', 'rejected_at', 'rejected_reason', 'rejected_note', 'created_by'];
 
     protected function casts(): array
     {
@@ -61,6 +62,33 @@ class ProjectDelivery extends Model
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    /**
+     * The round's cabinets as rows of delivery_cabinet, each with when it was packed (kept in step with cabinet_ids and
+     * packed by KeepsIdListsInStep). No rows and all_cabinets = every cabinet of the project.
+     */
+    public function cabinets()
+    {
+        return $this->belongsToMany(Cabinet::class, 'delivery_cabinet')->withPivot('packed_at', 'packed_by')->withTimestamps();
+    }
+
+    protected static function idLists(): array
+    {
+        return [['cabinet_ids', 'delivery_cabinet', 'project_delivery_id', 'cabinet_id', 'cabinets', 'all_cabinets']];
+    }
+
+    /** packed ({cabinet id: "Y-m-d H:i"}) as each cabinet's packed_at; who packed it is the one saving it then. */
+    protected function extraPivot(string $join, int $otherId, ?object $before): array
+    {
+        $at = ($this->packed ?? [])[$otherId] ?? ($this->packed ?? [])[(string) $otherId] ?? null;
+        $at = $at ? Carbon::parse($at)->format('Y-m-d H:i:s') : null;
+        if ($before && (string) $before->packed_at === (string) $at) {
+            return [];
+        }
+        $by = $at && ! $before?->packed_at ? auth()->id() : ($at ? $before?->packed_by : null);
+
+        return ['packed_at' => $at, 'packed_by' => $by];
     }
 
     /** The vehicles the delivery department put on it, each with its driver and people. */

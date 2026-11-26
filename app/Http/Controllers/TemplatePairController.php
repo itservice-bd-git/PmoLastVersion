@@ -16,12 +16,6 @@ class TemplatePairController extends Controller
 
     public function __construct(private SubtaskPairs $pairs) {}
 
-    /** One chosen pair for the picker (x-pair-picker). */
-    public static function chip($source): array
-    {
-        return ['id' => $source->id, 'name' => $source->name, 'dept' => (string) $source->department?->name, 'view' => (bool) $source->pivot?->view_only, 'own' => (bool) $source->pivot?->own_ticks];
-    }
-
     public function update(Request $request, CabinetSubtaskTemplate $subtaskTemplate)
     {
         $data = $request->validate(self::RULES);
@@ -31,7 +25,7 @@ class TemplatePairController extends Controller
         return response()->json([
             'ok' => true,
             'message' => $sources->isEmpty() ? 'ไม่เทียบกับงานใดแล้ว' : 'บันทึกคู่เทียบแล้ว',
-            'sources' => $sources->map(fn ($s) => self::chip($s))->values(),
+            'sources' => $sources->map(fn ($s) => SubtaskPairs::chip($s))->values(),
             'cabinets' => $this->pairs->cabinetsOf($subtaskTemplate->taskTemplate->cabinetTemplate)->count(),
         ]);
     }
@@ -47,7 +41,7 @@ class TemplatePairController extends Controller
         return response()->json([
             'ok' => true,
             'message' => $sources->isEmpty() ? 'ไม่เทียบกับงานใดแล้ว' : 'บันทึกคู่เทียบของตู้นี้แล้ว',
-            'sources' => $sources->map(fn ($s) => self::chip($s))->values(),
+            'sources' => $sources->map(fn ($s) => SubtaskPairs::chip($s))->values(),
         ]);
     }
 

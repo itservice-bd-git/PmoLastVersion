@@ -20,7 +20,7 @@ class AssignmentController extends Controller
         abort_unless($request->user()->canDispatchWork(), 403, 'เฉพาะผู้ดูแลระบบ (Admin) หรือ Project Manager เท่านั้นที่เข้าหน้านี้ได้');
 
         $query = CabinetSubtask::query()
-            ->with(['cabinetTask.cabinet.project', 'department', 'acceptedBy']);
+            ->with(['cabinetTask.cabinet.project', 'department', 'acceptedBy'])->withExists('checklists');   // _assignment: has a checklist?
 
         if ($search = $request->get('q')) {
             $query->where(function ($q) use ($search) {

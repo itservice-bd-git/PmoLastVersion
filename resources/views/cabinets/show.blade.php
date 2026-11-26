@@ -9,29 +9,22 @@
     </x-slot>
 
     @php
-        $checklistEditor = app(\App\Services\ChecklistEditor::class);
-        $handoff = app(\App\Services\HandoffService::class);   // one instance: the cabinet's checklist pairs are read once for the page
+        // $canPair, $tagCatalog, $dates, $canDates, $cabFat, $checklistVersion, $subtaskView (per Sub Task), $reasons / $linked /
+        // $notifyDepts (the dates window): App\Services\CabinetPage
         $canComments = auth()->user()->allows('data.comments');   // Settings > สิทธิ์การใช้งาน
         $initialTab = in_array(request('tab'), array_merge(['tasks', 'remarks'], $canComments ? ['comment', 'activity'] : [])) ? request('tab') : 'tasks';
 
         $allSubtasks = $cabinet->tasks->flatMap->subtasks;
         // "แก้คู่เทียบ" of this cabinet (Admin / PM): any other Sub Task of the cabinet
-        $canPair = auth()->user()->canDispatchWork() && ! \App\Services\ProjectLock::isLocked($cabinet->project_id);
         $canBuild = $canPair;   // "+ เพิ่ม Task / Sub Task" (Admin / PM, open project): this cabinet only
         $pairOptions = $canPair ? $cabinet->tasks->flatMap(fn ($t) => $t->subtasks->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'task' => $t->name, 'dept' => (string) $s->department?->name]))->values() : collect();
-        $tagCatalog = app(\App\Services\ChecklistStatuses::class)->catalog();   // Settings > สีสถานะ Checklist
         $expectedLate = $cabinet->expected_completion_date && $cabinet->due_date && $cabinet->expected_completion_date->gt($cabinet->due_date);
-        // เลื่อน / แก้วัน of this cabinet (App\Services\ProjectDates; windows: projects.partials._dates)
-        $dates = app(\App\Services\ProjectDates::class)->summary($cabinet);
-        $canDates = $canPair;
-        // its วัน FAT once it is in a round (the latest one; a round of every cabinet counts)
-        $cabFat = \App\Models\ProjectFat::latestFor($cabinet->project->fats()->get(), $cabinet->id);
         $cabFatDays = $cabFat?->daysTo();
     @endphp
 
     {{-- every checklist editor and the status summaries below draw their chips from this --}}
     <script>window.pmoChecklistStatuses = @js($tagCatalog);</script>
-    <div class="max-w-screen-2xl mx-auto space-y-5" x-data="{ tab: '{{ $initialTab }}', remarkTask: null, remarkDept: null }" x-init="$watch('tab', (t) => keepTabInUrl(t, 'tasks'))">
+    <div class="-mx-2 sm:-mx-3 lg:-mx-4 space-y-5" x-data="{ tab: '{{ $initialTab }}', remarkTask: null, remarkDept: null }" x-init="$watch('tab', (t) => keepTabInUrl(t, 'tasks'))">
 
         <x-closed-project-banner :project="$cabinet->project" />
 
@@ -82,10 +75,10 @@
             @if ($canComments)
             <button type="button" @click="tab = 'comment'"
                     :class="tab === 'comment' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'"
-                    class="whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px">Comment</button>
+                    class="whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px">ความคิดเห็น</button>
             <button type="button" @click="tab = 'activity'"
                     :class="tab === 'activity' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'"
-                    class="whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px">Activity Log</button>
+                    class="whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px">ประวัติการแก้ไข</button>
             @endif
         </div>
 
@@ -345,18 +338,18 @@
 
                                         @if ($canPair)
                                             <x-pair-picker class="mt-3 ml-7" :url="route('cabinet-subtasks.pairs', $subtask)" :can-edit="true" :chips="false" :reload="true"
-                                                           :chosen="$subtask->pairSources->map(fn ($s) => \App\Http\Controllers\TemplatePairController::chip($s))->values()"
+                                                           :chosen="$subtaskView[$subtask->id]['pairChosen']"
                                                            :options="$pairOptions->where('id', '!=', $subtask->id)->values()"
                                                            hint="เลือก Sub Task ที่จะเทียบ Checklist ด้วย (เฉพาะตู้นี้ · เทมเพลตไม่เปลี่ยน)" />
                                         @endif
                                         {{-- the one checklist editor: tick, edit in place, add many / paste from Excel, select to move / copy / delete, undo --}}
                                         <x-checklist-editor kind="subtask" :owner="$subtask" class="mt-3 ml-7"
-                                                            :items="$checklistEditor->items('subtask', $subtask)"
+                                                            :items="$subtaskView[$subtask->id]['items']"
                                                             :editable="$subtask->isChecklistEditableBy(auth()->user())"
                                                             :tickable="$subtask->tickWouldAccept(auth()->user())"
-                                                            :date-label="$handoff->dateLabelFor($subtask)"
-                                                            :linked="$handoff->linkedForSubtask($subtask)"
-                                                            :receivers="$handoff->receiversOf($subtask)" />
+                                                            :date-label="$subtaskView[$subtask->id]['dateLabel']"
+                                                            :linked="$subtaskView[$subtask->id]['linked']"
+                                                            :receivers="$subtaskView[$subtask->id]['receivers']" />
                                     </details>
                                 @empty
                                     <p class="px-5 py-4 text-sm text-slate-400">ยังไม่มี Sub Task</p>
@@ -522,7 +515,7 @@
                             <div>
                                 <x-input-label value="จำนวนวัน" />
                                 <input type="number" min="1" max="999" inputmode="numeric" data-span-days aria-label="จำนวนวันทำงาน"
-                                       value="{{ $subtask->start_date && $subtask->due_date ? (app(\App\Services\WorkingDaysCalculator::class)->countWorkingDays($subtask->start_date, $subtask->due_date) ?: '') : '' }}"
+                                       value="{{ $subtaskView[$subtask->id]['workingDays'] }}"
                                        class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
                                 <p class="text-xs text-slate-400 mt-1">วันทำงาน</p>
                             </div>
@@ -566,7 +559,7 @@
     {{-- the page's values for resources/js/cabinet-page.js --}}
     <script>window.pmoCabinetPage = @js([
         'liveUrl' => route('cabinets.checklists-live', $cabinet),
-        'version' => $checklistEditor->cabinetVersion($cabinet),
+        'version' => $checklistVersion,
         'cabinetId' => $cabinet->id,
         'newSubtask' => session('new_subtask'),
         'newTask' => session('new_task'),

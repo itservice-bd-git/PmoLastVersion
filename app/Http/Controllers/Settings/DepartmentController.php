@@ -12,7 +12,7 @@ class DepartmentController extends Controller
     public function index()
     {
         return view('settings.departments.index', [
-            'departments' => Department::withCount('users')->orderBy('name')->get(),
+            'departments' => Department::withCount('users')->with(['teams' => fn ($q) => $q->withCount('users')])->orderBy('name')->get(),
         ]);
     }
 

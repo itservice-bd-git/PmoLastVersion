@@ -5,22 +5,46 @@ namespace App\Http\Controllers;
 use App\Models\Cabinet;
 use App\Models\Department;
 use App\Models\Project;
+use App\Services\CeoOverview;
+use App\Services\CeoSummary;
 use App\Services\DepartmentDashboard;
 use App\Services\ExecutiveReport;
+use App\Services\PmWeek;
 use App\Services\ProductionReport;
 use App\Services\ReportFilter;
+use App\Services\WeekProgress;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request, DepartmentDashboard $departmentDashboard, ExecutiveReport $executive)
+    public function index(Request $request, DepartmentDashboard $departmentDashboard, ExecutiveReport $executive, PmWeek $pmWeek, WeekProgress $weekProgress, CeoOverview $ceoOverview)
     {
-        // two views: "ภาพรวมผู้บริหาร" (opens first for people who see every department's work) and "งานตามแผนก"
+        // one view each, no tabs: "สัปดาห์นี้" for Admin / PM (what to do this week and what is stuck); the others keep
+        // theirs - "ภาพรวมผู้บริหาร" for those who see every department's work, else "งานตามแผนก". ?view= is not read any
+        // more (the other views' code stays: exec, ceo, dept)
         $view = match (true) {
-            in_array($request->query('view'), ['exec', 'dept'], true) => $request->query('view'),
-            $request->has('department') => 'dept',   // a department filter link
-            default => $request->user()->canSeeAllWork() ? 'exec' : 'dept',
+            $request->user()->canDispatchWork() => 'pm',
+            $request->user()->canSeeAllWork() => 'exec',
+            default => 'dept',
         };
+
+        $user = $request->user();
+        // ‹ › on "ความคืบหน้าสัปดาห์นี้" swap only that section in place (fetch), no page change
+        if ($view === 'exec' && $request->ajax() && $request->has('week')) {
+            return view('dashboard._week-progress', ['weekProgress' => $weekProgress->build($user, $request->integer('week'))]);
+        }
+        $tabs = [];   // no tabs: one view each
+        // สัปดาห์นี้ and ภาพรวมผู้บริหาร need only their own report: the department tab's numbers below are not worked out for them
+        if ($view !== 'dept') {
+            return view('dashboard', [
+                'view' => $view, 'tabs' => $tabs,
+                'exec' => $view === 'exec' ? $executive->build($user) : null,
+                // ภาพรวมผู้บริหาร's "ความคืบหน้าสัปดาห์นี้": the projects on the สัปดาห์นี้ board and how far each moved (‹ › = earlier weeks)
+                'weekProgress' => $view === 'exec' ? $weekProgress->build($user, $request->integer('week')) : null,
+                'ceo' => $view === 'ceo' ? $ceoOverview->build($user) : null,
+                'pm' => $view === 'pm' ? $pmWeek->build($user, $request->boolean('mine'), null, max(-8, min(8, $request->integer('week')))) : null,
+            ]);
+        }
 
         $projects = Project::visibleTo($request->user())   // the projects this person may see (WorkScope)
             ->withAvg('cabinets', 'progress')
@@ -51,14 +75,12 @@ class DashboardController extends Controller
         // Department section. Same scoping rule as My Department: admin/PM may look at
         // any department (or all); everyone else only ever gets their own - a hand-edited
         // ?department= is ignored for them, not just hidden in the UI.
-        $user = $request->user();
         $canViewOthers = $user->canViewOtherDepartments();
         $filterDepartmentId = $canViewOthers ? ($request->integer('department') ?: null) : null;
         $scopeIds = DepartmentDashboard::scopeFor($user, $filterDepartmentId);
 
         return view('dashboard', [
-            'view' => $view,
-            'exec' => $view === 'exec' ? $executive->build($user) : null,
+            'view' => $view, 'tabs' => $tabs, 'exec' => null, 'pm' => null, 'weekProgress' => null, 'ceo' => null,
             'activeProjectsCount' => $activeProjects->count(),
             'nearDueCount' => $nearDue->count(),
             'delayedCount' => $delayed->count(),
@@ -87,7 +109,7 @@ class DashboardController extends Controller
      * The CEO report: ExecutiveReport (projects, months, bottlenecks) plus ProductionReport (cabinets, hand-overs), read
      * by project or by cabinet, for the SO / departments / hand-over period chosen, with the parts chosen.
      */
-    public function report(Request $request, ExecutiveReport $executive, ProductionReport $production)
+    public function report(Request $request, ExecutiveReport $executive, ProductionReport $production, CeoSummary $summary)
     {
         $filter = ReportFilter::fromRequest($request);
         $sections = $request->boolean('pick')   // the options form was sent: what is ticked (maybe nothing); else everything
@@ -97,10 +119,15 @@ class DashboardController extends Controller
         $open = Project::visibleTo($request->user())->whereNotIn('status', [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED])
             ->orderBy('project_no')->get(['id', 'project_no', 'project_name', 'customer_name']);
 
+        $r = $executive->build($request->user(), filter: $filter);
+        $p = $production->build($request->user(), filter: $filter);
+        $by = $request->query('by') === 'cabinet' ? 'cabinet' : 'project';
+
         return view('reports.ceo', [
-            'r' => $executive->build($request->user(), filter: $filter),
-            'p' => $production->build($request->user(), filter: $filter),
-            'by' => $request->query('by') === 'cabinet' ? 'cabinet' : 'project',
+            'r' => $r,
+            'p' => $p,
+            'by' => $by,
+            'summary' => $summary->write($r, $p, $by, $r['kpis']['value'] !== null),   // the paragraph on top, from the same numbers
             'filter' => $filter,
             'sections' => $sections,
             'allSections' => self::CEO_SECTIONS,

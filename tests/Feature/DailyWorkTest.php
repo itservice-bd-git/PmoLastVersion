@@ -9,6 +9,9 @@ use App\Models\CabinetSubtask;
 use App\Models\CabinetTask;
 use App\Models\Department;
 use App\Models\Project;
+use App\Models\ProjectDelivery;
+use App\Models\ProjectFat;
+use App\Models\Team;
 use App\Models\User;
 use App\Services\DailyWork;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -122,6 +125,132 @@ class DailyWorkTest extends TestCase
         $this->assertSame(['SO-OPEN', 'P SO-OPEN'], [$feed['accepted-'.$work['overdue']->id]['projectNo'], $feed['accepted-'.$work['overdue']->id]['projectName']]);
         $this->assertSame(route('cabinets.show', $this->task->cabinet_id).'#goto-subtask-'.$work['overdue']->id, $feed['accepted-'.$work['overdue']->id]['url'], 'opens the cabinet at that Sub Task');
         $this->assertArrayNotHasKey('completed-'.$work['completedYesterday']->id, $feed->all());
+    }
+
+    public function test_it_counts_the_day_per_project(): void
+    {
+        $work = $this->dayOfWork();
+        $team = Team::forceCreate(['department_id' => $this->production->id, 'name' => 'ทีมขายเหนือ']);
+        $sales = User::forceCreate(['name' => 'S', 'email' => 'sales-1', 'password' => 'secret-pass', 'role' => 'sales', 'is_active' => true, 'team_id' => $team->id]);
+        Project::where('project_no', 'SO-OPEN')->update(['sales_person_id' => $sales->id]);
+        $this->project('SO-IDLE');
+        $open = Project::where('project_no', 'SO-OPEN')->first();
+        $open->forceFill(['due_date' => '2026-10-20'])->saveQuietly();   // past due, nothing made: late
+        $summary = app(DailyWork::class)->build(null, today(), by: DailyWork::BY_PROJECT);
+        $rows = collect($summary['departments'])->keyBy('projectNo');
+
+        $this->assertSame(DailyWork::BY_PROJECT, $summary['by']);
+        $openRow = $rows['SO-OPEN'];
+        $this->assertSame([1, 2, 2, 2], [$openRow['received'], $openRow['receivedCabinets'], $openRow['completed'], $openRow['completedCabinets']], 'every department of the project');
+        $this->assertSame(['waiting' => 1, 'inProgress' => 1, 'overdue' => 1, 'pending' => 2], array_intersect_key($openRow, array_flip(['pending', 'waiting', 'inProgress', 'overdue'])));
+        $this->assertSame([['name' => 'Production', 'count' => 2]], $openRow['pendingDepartments']);
+        $this->assertSame(['late', -1, route('projects.show', $open)], [$openRow['dueTone'], $openRow['daysLeft'], $openRow['url']]);
+        $this->assertSame(['ทีมขายเหนือ', ''], [$openRow['team'], $rows['SO-CLOSED']['team']], 'the sales person\'s team');
+        $this->assertSame(2, $openRow['ticked'], 'the Checklist items ticked today (completedByChecklist\'s two ticks; yesterday\'s tick not)');
+        $this->assertSame(2, $openRow['tickedToday']);
+        $this->assertSame([Carbon::parse('2026-10-21 11:15')->getTimestamp(), 'วันนี้ 11:15'], [$openRow['lastTickAt'], $openRow['lastTickLabel']], 'the latest tick: for "เคลื่อนไหวล่าสุด"');
+        $this->assertNull($rows['SO-IDLE']['lastTickAt']);
+        $this->assertSame(2, collect(app(DailyWork::class)->build(null, Carbon::parse('2026-10-15'), Carbon::parse('2026-10-18'), by: DailyWork::BY_PROJECT)['departments'])->firstWhere('projectNo', 'SO-OPEN')['tickedToday'], 'today\'s ticks whatever the range');
+
+        $this->assertSame([1, 0, 'เสร็จสิ้น'], [$rows['SO-CLOSED']['completed'], $rows['SO-CLOSED']['pending'], $rows['SO-CLOSED']['statusLabel']], 'a closed project shows when its work moved');
+        $this->assertTrue($rows['SO-IDLE']['isQuiet'], 'every running project gets a card');
+        $this->assertSame(['SO-OPEN', 'SO-IDLE', 'SO-CLOSED'], array_column($summary['departments'], 'projectNo'), 'running first (quiet after), closed last');
+        $this->assertNull($rows['SO-CLOSED']['daysLeft'], 'a closed project is never late');
+        $this->assertSame(2, $summary['totals']['activeProjectCount']);
+        $this->assertSame($open->id, collect($summary['feed'])->firstWhere('key', 'accepted-'.$work['overdue']->id)['projectId']);
+
+        // a department-scoped viewer: only its departments' work, and only projects it has work in
+        $scoped = collect(app(DailyWork::class)->build([$this->shipping->id], today(), by: DailyWork::BY_PROJECT)['departments'])->keyBy('projectNo');
+        $this->assertSame(['SO-CLOSED', 'SO-OPEN'], $scoped->keys()->sort()->values()->all());
+        $this->assertSame([0, 1, 0], [$scoped['SO-OPEN']['received'], $scoped['SO-OPEN']['completed'], $scoped['SO-OPEN']['pending']]);
+    }
+
+    public function test_the_page_by_project(): void
+    {
+        $this->dayOfWork();
+        $this->actingAs($this->user('admin'))->get(route('reports.projects'))->assertOk()
+            ->assertSee('สรุปงานรายโครงการ')->assertSee('projectSummary(', false)->assertDontSee('แยกตามแผนก');
+        $this->getJson(route('reports.projects.data'))->assertOk()->assertJsonPath('by', DailyWork::BY_PROJECT);
+        // the dashboard's panel: one project as the panel reads it
+        $open = Project::where('project_no', 'SO-OPEN')->first();
+        $one = $this->getJson(route('reports.projects.one', $open))->assertOk();
+        $this->assertSame(['SO-OPEN'], array_column($one->json('departments'), 'projectNo'));
+        $this->assertSame([$open->id], array_values(array_unique(array_column($one->json('feed'), 'projectId'))));
+        // read a month at a time: with no days asked for, this month so far; days asked for are kept
+        $this->assertSame(['2026-10-01', '2026-10-21'], array_values(array_intersect_key($this->getJson(route('reports.projects.data'))->json('range'), array_flip(['from', 'to']))));
+        $this->assertSame(['2026-09-01', '2026-09-30'], array_values(array_intersect_key($this->getJson(route('reports.projects.data', ['from' => '2026-09-01', 'to' => '2026-09-30']))->json('range'), array_flip(['from', 'to']))));
+        $this->assertSame('2026-10-21', $this->getJson(route('reports.today.data'))->json('range.from'), 'สรุปงาน still opens on today');
+        $this->get(route('dashboard'))->assertSee(route('reports.projects'), false);   // in the menu
+        $this->get(route('reports.today'))->assertOk()->assertDontSee('แยกตามโครงการ')->assertSee('workSummary(', false);   // สรุปงาน as it was
+    }
+
+    public function test_the_production_line_is_worked_out_from_the_ticks(): void
+    {
+        // started 10 days ago, due in 10 days: the plan says 50% today
+        $project = Project::where('project_no', 'SO-OPEN')->first();
+        $project->forceFill(['start_date' => '2026-10-11', 'due_date' => '2026-10-31'])->saveQuietly();
+        $subtask = $this->subtask($this->production, 'ACCEPTED');
+        foreach (['2026-10-13 09:00', '2026-10-17 09:00', null, null] as $at) {
+            CabinetChecklist::forceCreate(['cabinet_subtask_id' => $subtask->id, 'name' => 'ข้อ', 'is_completed' => $at !== null, 'completed_at' => $at]);
+        }
+        Cabinet::whereKey($this->task->cabinet_id)->update(['progress' => 50]);   // what ProgressService keeps: 2 of 4
+
+        $row = collect(app(DailyWork::class)->build(null, today(), by: DailyWork::BY_PROJECT)['departments'])->firstWhere('projectNo', 'SO-OPEN');
+        $curve = collect($row['curve']['actual'])->mapWithKeys(fn ($point) => [$point[0] => $point[1]]);
+
+        $this->assertSame([0, 10, 20], [$curve[0], $row['curve']['todayDay'], $row['curve']['dueDay']]);
+        $this->assertSame(25, $curve[3], 'one of four ticked on 13 ต.ค.');
+        $this->assertSame(50, $curve[10], 'today: the real %');
+        // the bars: a tick on the 13th and one on the 17th (days 2 and 6 from the start), a bar a day up to today
+        $this->assertSame([1, 11, 1, 1], [$row['curve']['barDays'], count($row['curve']['bars']), $row['curve']['bars'][2], $row['curve']['bars'][6]]);
+        $this->assertSame(2, array_sum($row['curve']['bars']));
+
+        // the ▲ beside the %: from 25% before the 17th's tick (the range 17 - 21 ต.ค.) to today's real 50%
+        $week = collect(app(DailyWork::class)->build(null, Carbon::parse('2026-10-17'), today(), by: DailyWork::BY_PROJECT)['departments'])->firstWhere('projectNo', 'SO-OPEN');
+        $this->assertSame(25, $week['curve']['gain']);
+        $this->assertNull($row['curve']['gain'] ?: null, 'nothing ticked today: no rise');
+        $this->assertSame([50, 0, '11 ต.ค.', 'ส่ง 31 ต.ค.'], [$row['curve']['planToday'], $row['curve']['gap'], $row['curve']['startLabel'], $row['curve']['endLabel']]);
+    }
+
+    public function test_the_panel_gets_a_project_as_its_levels(): void
+    {
+        $project = Project::where('project_no', 'SO-OPEN')->first();
+        Cabinet::whereKey($this->task->cabinet_id)->update(['progress' => 40]);
+        $this->task->forceFill(['progress' => 50, 'due_date' => '2026-10-20'])->saveQuietly();   // past its due date, half done
+        $subtask = $this->subtask($this->production, 'ACCEPTED', ['name' => 'ประกอบ', 'progress' => 50]);
+        CabinetChecklist::forceCreate(['cabinet_subtask_id' => $subtask->id, 'name' => 'ข้อแรก', 'is_completed' => true, 'completed_at' => '2026-10-20 09:00']);
+        CabinetChecklist::forceCreate(['cabinet_subtask_id' => $subtask->id, 'name' => 'ข้อสอง', 'is_completed' => false]);
+        ProjectFat::forceCreate(['project_id' => $project->id, 'round' => 1, 'fat_date' => '2026-10-10', 'status' => ProjectFat::PASSED, 'cabinet_ids' => []]);
+        ProjectDelivery::forceCreate(['project_id' => $project->id, 'round' => 1, 'delivery_date' => '2026-10-27', 'status' => ProjectDelivery::WAITING, 'cabinet_ids' => [$this->task->cabinet_id]]);
+
+        $cabinet = $this->actingAs($this->user('admin'))->getJson(route('reports.projects.tree', $project))->assertOk()->json('cabinets.0');
+        // ข้อมูลโครงการ: [label, value] lines, the empty ones left out, no money
+        $info = collect($this->getJson(route('reports.projects.tree', $project))->json('info'))->mapWithKeys(fn ($line) => [$line[0] => $line[1]]);
+        $this->assertSame('ลูกค้า SO-OPEN', $info['ลูกค้า']);
+        $this->assertArrayNotHasKey('ส่งรอบถัดไป', $info->all(), 'the delivery has a section of its own');
+        // การจัดส่ง: each round with its state and its four steps; how many cabinets have arrived
+        $deliveries = $this->getJson(route('reports.projects.tree', $project))->json('deliveries');
+        $this->assertSame([0, 1], [$deliveries['arrived'], $deliveries['cabinets']]);
+        $this->assertSame([1, '27/10/2569', 'รอจัดรถ'], [$deliveries['rounds'][0]['round'], $deliveries['rounds'][0]['when'], $deliveries['rounds'][0]['state']]);
+        $this->assertSame(['ห่อ 0/1', 'เปิดบิล', 'ออกจากโรงงาน', 'ส่งถึง'], array_column($deliveries['rounds'][0]['steps'], 'label'));
+        $this->assertCount(1, $deliveries['rounds'][0]['cabinetNames'], 'the round names the cabinets it sends');
+        $chip = $this->getJson(route('reports.projects.tree', $project))->json('cabinets.0.deliveryChip');
+        $this->assertSame('ส่งรอบ 1 · 27/10/2569 · รอจัดรถ', $chip['text']);
+        $this->assertSame('waiting', $chip['step']);
+        $this->assertSame('รอบ 1 · 10/10/2569 · ผ่าน', $info['FAT']);
+        $this->assertArrayNotHasKey('เลข PO', $info->all(), 'none given: left out');
+        $this->assertStringNotContainsString('มูลค่า', $info->keys()->implode(' '));
+
+        $this->assertSame([40, 'MO-SO-OPEN', 'ส่งรอบ 1 · รอจัดรถ', 'FAT 10/10/2569 · ผ่าน'], [$cabinet['progress'], $cabinet['moNo'], $cabinet['delivery'], $cabinet['fat']]);
+        $this->assertSame(['ผลิต', 50], [$cabinet['tasks'][0]['name'], $cabinet['tasks'][0]['progress']]);
+        // each level's result, for its bar's colour: going / late (with its due date) / done / not started
+        $this->assertSame(['going', 'late', '20/10/2569', 'going'], [$cabinet['result'], $cabinet['tasks'][0]['result'], $cabinet['tasks'][0]['dueLabel'], $cabinet['tasks'][0]['subtasks'][0]['result']]);
+        $this->assertSame(['ประกอบ', 50, 'Production'], [$cabinet['tasks'][0]['subtasks'][0]['name'], $cabinet['tasks'][0]['subtasks'][0]['progress'], $cabinet['tasks'][0]['subtasks'][0]['department']]);
+        $this->assertSame([['ข้อแรก', true], ['ข้อสอง', false]], array_map(fn ($item) => [$item['name'], $item['done']], $cabinet['tasks'][0]['subtasks'][0]['checklist']));
+
+        // someone whose departments have no work in it cannot ask for it (no page permission: 403, not their project: 404)
+        $outsider = $this->user('member', Department::create(['name' => 'อื่น', 'code' => 'OTH', 'is_active' => true]));
+        $this->assertContains($this->actingAs($outsider)->getJson(route('reports.projects.tree', $project))->status(), [403, 404]);
     }
 
     public function test_the_feed_is_newest_first(): void

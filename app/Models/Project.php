@@ -34,12 +34,12 @@ class Project extends Model
     const STATUS_CANCELLED = 'cancelled';
 
     public static array $statuses = [
-        self::STATUS_DRAFT => 'Draft',
-        self::STATUS_PLANNING => 'Planning',
-        self::STATUS_IN_PROGRESS => 'In Progress',
-        self::STATUS_ON_HOLD => 'On Hold',
-        self::STATUS_COMPLETED => 'Completed',
-        self::STATUS_CANCELLED => 'Cancelled',
+        self::STATUS_DRAFT => 'ร่าง',
+        self::STATUS_PLANNING => 'วางแผน',
+        self::STATUS_IN_PROGRESS => 'กำลังดำเนินการ',
+        self::STATUS_ON_HOLD => 'พักไว้',
+        self::STATUS_COMPLETED => 'เสร็จสิ้น',
+        self::STATUS_CANCELLED => 'ยกเลิก',
     ];
 
     const PRIORITY_LOW = 'low';
@@ -63,6 +63,7 @@ class Project extends Model
         'customer_name',
         'customer_phone',
         'po_no',
+        'avt_no',
         'sales_order_no',
         'owner_id',
         'sales_person_id',
@@ -104,6 +105,12 @@ class Project extends Model
     public function projectManager()
     {
         return $this->belongsTo(User::class, 'project_manager_id');
+    }
+
+    /** ฝ่ายขายของโครงการ; its team is the project's team (the โครงการ list's ทีม filter). */
+    public function salesPerson()
+    {
+        return $this->belongsTo(User::class, 'sales_person_id');
     }
 
     public function board()
@@ -219,6 +226,31 @@ class Project extends Model
         foreach (['saved', 'deleted', 'restored'] as $event) {
             static::$event(fn (self $project) => ProjectLock::forget($project->getKey()));
         }
+
+        static::saving(fn (self $project) => $project->linkCustomer());
+    }
+
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
+    }
+
+    /**
+     * customer_id follows customer_name (the form's text, kept as it was): the customer of that name, made the first
+     * time the name is seen, with the project's phone while the customer has none. Only when the name is new or
+     * changed, so a closed project saved for something else is not touched.
+     */
+    public function linkCustomer(): void
+    {
+        $name = trim((string) $this->customer_name);
+        if ($name === '' || ($this->exists && ! $this->isDirty('customer_name') && $this->customer_id)) {
+            return;
+        }
+        $customer = Customer::firstOrCreate(['name' => $name], ['phone' => $this->customer_phone ?: null]);
+        if (! $customer->phone && $this->customer_phone) {
+            $customer->update(['phone' => $this->customer_phone]);
+        }
+        $this->customer_id = $customer->id;
     }
 
     public function isLocked(): bool

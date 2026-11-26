@@ -35,6 +35,9 @@ class ChecklistEditor
     /** The list a pair shares (SharedChecklist): set per operation, cabinet lists only. */
     private ?SharedChecklist $shared = null;
 
+    /** one for every list this editor draws (the cabinet page: every Sub Task), so the status list is read once */
+    private ?ChecklistStatuses $statuses = null;
+
     public function __construct(private ProgressService $progress) {}
 
     // ======================================================================= reading
@@ -77,8 +80,9 @@ class ChecklistEditor
 
         // the Sub Tasks comparing with this one (template pairs): has each dealt with each item yet
         $receipts = app(HandoffService::class)->receiptsFor($owner->setRelation('checklists', $list));
-        $tags = app(ChecklistStatuses::class)->idsFor($list->pluck('id'));   // Settings > สีสถานะ Checklist
-        $peers = app(ChecklistStatuses::class)->peersFor($list);   // the other side of a pair: read-only
+        $this->statuses ??= app(ChecklistStatuses::class);
+        $tags = $this->statuses->idsFor($list->pluck('id'));   // Settings > สีสถานะ Checklist
+        $peers = $this->statuses->peersFor($list);   // the other side of a pair: read-only
 
         return $list
             ->map(fn (CabinetChecklist $c) => [

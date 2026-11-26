@@ -95,6 +95,29 @@ class DeliveryChecklist
      * @param  list<string>  $steps
      * @return Collection<int, CabinetChecklist>
      */
+    /**
+     * Each cabinet's Checklist items not ticked yet, the delivery steps' own items left out (ห่อ, เปิดบิล, ส่งมอบ):
+     * a cabinet is packed only once this is 0 (ผลิตเสร็จ). Cabinets with nothing left are not in the result.
+     *
+     * @param  list<int>  $cabinetIds
+     * @return array<int, int> cabinet id => items left
+     */
+    public function remaining(array $cabinetIds): array
+    {
+        if (! $cabinetIds) {
+            return [];
+        }
+
+        return CabinetChecklist::query()
+            ->join('cabinet_subtasks as s', 's.id', '=', 'cabinet_checklists.cabinet_subtask_id')
+            ->join('cabinet_tasks as t', 't.id', '=', 's.cabinet_task_id')
+            ->whereIn('t.cabinet_id', $cabinetIds)
+            ->where('cabinet_checklists.is_completed', false)
+            ->get(['cabinet_checklists.name', 't.cabinet_id'])
+            ->reject(fn ($i) => self::stepOf($i->name) !== null)
+            ->countBy('cabinet_id')->map(fn ($n) => (int) $n)->all();
+    }
+
     public function items(array $cabinetIds, array $steps): Collection
     {
         if (! $cabinetIds) {

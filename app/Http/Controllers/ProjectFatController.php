@@ -25,7 +25,11 @@ class ProjectFatController extends Controller
         $fat = $project->latestFat;
 
         // as the project page: edit the latest round, or book a new one when there is none or it failed
-        return view('projects.partials._fat-window', ['project' => $project, 'f' => ProjectFat::formData($project, $fat?->status === 'failed' ? null : $fat, $fat)]);
+        return view('projects.partials._fat-window', [
+            'project' => $project,
+            'f' => ProjectFat::formData($project, $fat?->status === 'failed' ? null : $fat, $fat),
+            'fatCabinets' => $project->cabinets()->orderBy('sequence')->orderBy('id')->get(['id', 'mo_no', 'cabinet_name']),
+        ]);
     }
 
     public function store(Request $request, Project $project)

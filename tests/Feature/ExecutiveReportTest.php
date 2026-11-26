@@ -91,17 +91,23 @@ class ExecutiveReportTest extends TestCase
         $this->assertSame([['QC', 3]], array_map(fn ($d) => [$d['name'], $d['projects']], $r['deptProjects']), 'running projects with unfinished QC work (DONE is finished)');
     }
 
-    public function test_the_dashboard_opens_on_the_executive_view_for_pmo_and_prints_the_report(): void
+    public function test_the_executive_view_lists_the_projects_and_prints_the_report(): void
     {
         $p = $this->project('LATE', 'in_progress', '2026-10-16');
         $this->cabinet($p, 'MO-L', '2026-10-08', 92);
         $admin = $this->admin();
 
-        $this->actingAs($admin)->get(route('dashboard'))->assertOk()
+        $this->actingAs($admin)->get(route('dashboard', ['view' => 'exec']))->assertOk()->assertViewHas('view', 'pm');   // Admin / PM: สัปดาห์นี้ only (PmWeekTest)
+        // ภาพรวมผู้บริหาร is the one view of those who see every department's work and are not PM
+        $seesAll = Department::create(['name' => 'ผู้บริหาร', 'code' => 'EX', 'is_active' => true, 'sees_all' => true]);
+        $boss = User::forceCreate(['name' => 'Boss', 'email' => 'boss-ex', 'password' => 'secret-pass', 'role' => 'member', 'department_id' => $seesAll->id, 'is_active' => true]);
+        $this->actingAs($boss)->get(route('dashboard'))->assertOk()->assertViewHas('view', 'exec')
             ->assertSeeInOrder(['ทั้งหมด', 'ตามแผน', 'ล่าช้า', 'รอเริ่ม', 'พักดำเนินการ', 'เสร็จสิ้น', 'โครงการที่ควรติดตาม', 'P LATE', 'งานค้างตามแผนก', 'ส่งมอบตู้รายเดือน'])
             ->assertSee(route('projects.index', ['due' => 'late']), false)
             ->assertSee(route('reports.ceo'), false);
-        $this->actingAs($admin)->get(route('dashboard', ['view' => 'dept']))->assertOk()->assertDontSee('โครงการที่ควรติดตาม')->assertSee('ภาระงานรายสัปดาห์');
+        // งานตามแผนก: the one view of a department's own people
+        $worker = User::forceCreate(['name' => 'Worker', 'email' => 'worker-ex', 'password' => 'secret-pass', 'role' => 'member', 'department_id' => Department::create(['name' => 'Busbar', 'code' => 'BB', 'is_active' => true])->id, 'is_active' => true]);
+        $this->actingAs($worker)->get(route('dashboard'))->assertOk()->assertViewHas('view', 'dept')->assertDontSee('โครงการที่ควรติดตาม')->assertSee('ภาระงานรายสัปดาห์');
 
         $this->actingAs($admin)->get(route('reports.ceo'))->assertOk()
             ->assertSee('รายงานสถานะโครงการและการผลิต')->assertSee('ข้อมูล ณ วันที่ 19 ตุลาคม 2569 เวลา 08:30 น.')

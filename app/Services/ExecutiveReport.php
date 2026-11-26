@@ -151,6 +151,21 @@ class ExecutiveReport
         ];
     }
 
+    /**
+     * The running projects' lines (as build()'s 'projects', keyed by id, no report filter) from projects already loaded
+     * with cabinets.tasks.subtasks.department, projectManager and the cabinets' average progress - for a page that has them
+     * (PmWeek) and needs only the state of each against plan. Projects not in production / paused are left out, as there.
+     */
+    public function rows(Collection $projects, Carbon $today): Collection
+    {
+        $taskCabinet = $projects->flatMap->cabinets->flatMap->tasks->pluck('cabinet_id', 'id');
+        $cabinetOf = fn (CabinetSubtask $s) => $taskCabinet[$s->cabinet_task_id] ?? null;
+
+        return $projects->whereIn('status', [Project::STATUS_IN_PROGRESS, Project::STATUS_ON_HOLD])
+            ->mapWithKeys(fn (Project $p) => [$p->id => $this->projectRow($p, $today,
+                $p->cabinets->flatMap->tasks->flatMap->subtasks->filter(fn (CabinetSubtask $s) => $s->isLateOn($today)), $cabinetOf)]);
+    }
+
     private function projectRow(Project $p, Carbon $today, Collection $late, callable $cabinetOf): array
     {
         $progress = $p->production_progress;

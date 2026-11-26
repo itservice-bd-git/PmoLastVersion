@@ -6,22 +6,31 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\UserRequest;
 use App\Models\Department;
 use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
-    public function index()
+    /** The list, searched by name, username, department or team (every page of it, not only the one on screen). */
+    public function index(Request $request)
     {
-        return view('settings.users.index', [
-            'users' => User::with('department', 'extraDepartments:id,name')->orderBy('name')->paginate(20),
-        ]);
+        $q = trim((string) $request->get('q'));
+        $users = User::with('department', 'team', 'extraDepartments:id,name')
+            ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w
+                ->where('name', 'like', "%{$q}%")->orWhere('email', 'like', "%{$q}%")->orWhere('position', 'like', "%{$q}%")
+                ->orWhereHas('department', fn ($d) => $d->where('name', 'like', "%{$q}%"))
+                ->orWhereHas('team', fn ($t) => $t->where('name', 'like', "%{$q}%"))))
+            ->orderBy('name')->paginate(20)->withQueryString();
+
+        return view('settings.users.index', ['users' => $users, 'q' => $q, 'roles' => User::roleLabels()]);
     }
 
     public function create()
     {
         return view('settings.users.create', [
-            'departments' => Department::orderBy('name')->get(),
+            'departments' => Department::with('teams')->orderBy('name')->get(),
             'roles' => User::roleLabels(),
+            'extraDepartmentIds' => [],
         ]);
     }
 
@@ -45,8 +54,9 @@ class UserController extends Controller
     {
         return view('settings.users.edit', [
             'user' => $user,
-            'departments' => Department::orderBy('name')->get(),
+            'departments' => Department::with('teams')->orderBy('name')->get(),
             'roles' => User::roleLabels(),
+            'extraDepartmentIds' => $user->extraDepartments()->pluck('departments.id')->all(),
         ]);
     }
 

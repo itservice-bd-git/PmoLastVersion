@@ -1,6 +1,6 @@
 <div class="px-4 py-3" data-subtask-row="{{ $subtaskTemplate->id }}" x-data="{ editSubtask: false }">
-    <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2 min-w-0">
+    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <div class="flex min-w-0 flex-1 basis-48 items-center gap-2">
             <span class="drag-handle shrink-0 select-none" title="ลากเพื่อจัดลำดับ">⋮⋮</span>
             <span class="text-sm font-medium text-slate-700" data-subtask-name="{{ $subtaskTemplate->id }}">{{ $subtaskTemplate->name }}</span>
             {{-- the page's script rewrites this text after an edit; empty = no department, then hidden --}}
@@ -20,7 +20,7 @@
 
     {{-- "เทียบกับ…": the other Sub Tasks whose checklist cabinets made from this template show next to this one's --}}
     @php
-        $pairChosen = $subtaskTemplate->pairSources->map(fn ($s) => \App\Http\Controllers\TemplatePairController::chip($s))->values();
+        // $pairChosen and $checklistItems: App\View\Composers\TemplateSubtaskComposer
         $pairFeeds = $subtaskTemplate->pairReceivers->reject(fn ($s) => $s->pivot->view_only || $s->pivot->own_ticks)->pluck('name');
         $pairUsers = $subtaskTemplate->pairReceivers->filter(fn ($s) => $s->pivot->own_ticks)->pluck('name');
         $pairWatchers = $subtaskTemplate->pairReceivers->filter(fn ($s) => $s->pivot->view_only)->pluck('name');
@@ -61,6 +61,6 @@
 
     {{-- the one checklist editor: edit in place, add many / paste from Excel, ready-made sets from any template, move / copy, undo --}}
     <x-checklist-editor kind="template" :owner="$subtaskTemplate" class="mt-2 ml-4"
-                        :items="app(\App\Services\ChecklistEditor::class)->items('template', $subtaskTemplate)"
+                        :items="$checklistItems"
                         :editable="(bool) auth()->user()?->allows('edit.templates')" />
 </div>

@@ -25,6 +25,7 @@ class User extends Authenticatable
         'password',
         'role',
         'department_id',
+        'team_id',
         'position',
         'avatar_path',
         'is_active',
@@ -66,6 +67,12 @@ class User extends Authenticatable
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    /** ทีม within a department (the sales department has several); none for most people. */
+    public function team()
+    {
+        return $this->belongsTo(Team::class);
     }
 
     /** The departments this person looks after on top of their own (Settings > ผู้ใช้งาน): they work for them as a member. */

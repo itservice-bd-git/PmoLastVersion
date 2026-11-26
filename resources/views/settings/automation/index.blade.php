@@ -1,10 +1,9 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">ตั้งค่า</h2>
+        <h1 class="text-lg font-semibold text-slate-900">ตั้งค่า</h1>
     </x-slot>
 
-    <div class="max-w-none mx-auto space-y-6">
-        <x-settings-nav />
+    <x-settings-layout space="space-y-6">
         {{-- ===== Workflow rules ===== --}}
         <x-card title="กฎเลื่อนสถานะงานอัตโนมัติ" subtitle="ทำงานเมื่อมีคนติ๊ก Checklist ของ Sub Task เท่านั้น (งานที่เสร็จแล้ว ถ้าเอาติ๊กออกหรือเพิ่มรายการ จะกลับเป็นกำลังดำเนินงาน) และผ่านขั้นตอนรับงาน/เริ่มงาน/ปิดงานเดิม ไม่ข้ามสิทธิ์">
             <div class="divide-y divide-slate-100 -mx-5 -mt-2">
@@ -34,25 +33,25 @@
                 @csrf
                 <div class="sm:col-span-2">
                     <x-input-label value="ชื่อกฎ" />
-                    <x-text-input name="name" class="mt-1 block w-full" placeholder="เช่น QC ติ๊กครบ → ปิดงาน" required />
+                    <x-text-input name="name" class="mt-1 block w-full" placeholder="เช่น QC ติ๊กครบ → ปิดงาน" aria-label="ชื่อกฎ" required />
                     <x-input-error :messages="$errors->get('name')" class="mt-1" />
                 </div>
                 <div>
                     <x-input-label value="แผนก" />
-                    <select name="department_id" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
+                    <select name="department_id" aria-label="แผนก" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
                         <option value="">ทุกแผนก</option>
                         @foreach ($departments as $d)<option value="{{ $d->id }}">{{ $d->name }}</option>@endforeach
                     </select>
                 </div>
                 <div>
                     <x-input-label value="เมื่อ" />
-                    <select name="trigger" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
+                    <select name="trigger" aria-label="เมื่อ" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
                         @foreach ($triggers as $key => $label)<option value="{{ $key }}">{{ $label }}</option>@endforeach
                     </select>
                 </div>
                 <div>
                     <x-input-label value="ให้ระบบทำ" />
-                    <select name="action" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
+                    <select name="action" aria-label="ให้ระบบ" class="mt-1 block w-full rounded-lg border-slate-300 text-sm">
                         @foreach ($actions as $key => $label)<option value="{{ $key }}">{{ $label }}</option>@endforeach
                     </select>
                 </div>
@@ -88,14 +87,14 @@
                 @csrf
                 <div>
                     <x-input-label value="แผนกที่ถูกจำกัด" />
-                    <select name="blocked_department_id" class="mt-1 block w-full rounded-lg border-slate-300 text-sm" required>
+                    <select name="blocked_department_id" aria-label="แผนกที่ถูกจำกัดวัน" class="mt-1 block w-full rounded-lg border-slate-300 text-sm" required>
                         @foreach ($departments as $d)<option value="{{ $d->id }}">{{ $d->name }}</option>@endforeach
                     </select>
                     <x-input-error :messages="$errors->get('blocked_department_id')" class="mt-1" />
                 </div>
                 <div>
                     <x-input-label value="ต้องไม่เกินวันของ (แผนกอ้างอิง)" />
-                    <select name="anchor_department_id" class="mt-1 block w-full rounded-lg border-slate-300 text-sm" required>
+                    <select name="anchor_department_id" aria-label="แผนกที่ใช้เป็นเกณฑ์" class="mt-1 block w-full rounded-lg border-slate-300 text-sm" required>
                         @foreach ($departments as $d)<option value="{{ $d->id }}">{{ $d->name }}</option>@endforeach
                     </select>
                 </div>
@@ -104,5 +103,5 @@
                 </div>
             </form>
         </x-card>
-    </div>
+    </x-settings-layout>
 </x-app-layout>

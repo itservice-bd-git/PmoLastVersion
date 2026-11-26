@@ -11,6 +11,7 @@ use Illuminate\Support\Collection;
 /** วัน FAT: one round of a project's factory acceptance test (App\Http\Controllers\ProjectFatController). */
 class ProjectFat extends Model
 {
+    use Concerns\KeepsIdListsInStep;
     use GuardsClosedProject;
 
     public const SCHEDULED = 'scheduled';
@@ -31,6 +32,17 @@ class ProjectFat extends Model
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    /** The round's cabinets as rows of fat_cabinet (kept in step with cabinet_ids). No rows and all_cabinets = every cabinet. */
+    public function cabinets()
+    {
+        return $this->belongsToMany(Cabinet::class, 'fat_cabinet')->withTimestamps();
+    }
+
+    protected static function idLists(): array
+    {
+        return [['cabinet_ids', 'fat_cabinet', 'project_fat_id', 'cabinet_id', 'cabinets', 'all_cabinets']];
     }
 
     protected function activityProjectId(): ?int

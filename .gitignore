@@ -24,3 +24,10 @@ Homestead.yaml
 Thumbs.db
 
 /avatar_pmo_test
+
+# this machine's own: uploads (each folder's .htaccess is kept), tool state, merge leftovers, a local SQLite copy
+/public/uploads/*/*
+!/public/uploads/*/.htaccess
+/.impeccable
+*.orig
+/avatar_pmo_target

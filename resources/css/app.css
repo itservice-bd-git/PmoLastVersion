@@ -41,6 +41,25 @@ details.group[open] > summary {
     display: none !important;
 }
 
+/* x-progress-bar ("progress-2"): a round light-blue track, the orange part filling in steps once as the page opens, then
+   resting at the value (it shows a real %, so it does not loop like a loader) */
+.progress-2 {
+    border-radius: 9999px;
+    background: #cfe8f3;
+    overflow: hidden;
+}
+.progress-2-fill {
+    border-radius: inherit;
+    background: #f59e0b;
+    animation: progress-2-fill 1s steps(10) both;
+}
+@keyframes progress-2-fill {
+    from { width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .progress-2-fill { animation: none; }
+}
+
 /* The buttons of a form in an x-modal panel stay in view at the panel's foot while a long form scrolls. The form (or
    its p-6 box) is the panel's scroll content, so the bar reaches its edges with -mx-6 / -mb-6. */
 @layer components {
@@ -322,7 +341,7 @@ html { color-scheme: light; }
 
 /* Planning: "เลื่อน n" - a project / cabinet postponed n times (planning/partials, ProjectDates) */
 .res-chip {
-    @apply inline-flex h-[18px] shrink-0 items-center whitespace-nowrap rounded-full bg-orange-50 px-1.5 text-[11.5px] font-bold text-orange-800 ring-1 ring-inset ring-orange-300;
+    @apply inline-flex h-[18px] shrink-0 items-center whitespace-nowrap rounded-full bg-orange-50 px-1.5 text-xs font-bold text-orange-800 ring-1 ring-inset ring-orange-300;
 }
 .res-pop {
     @apply absolute w-[340px] rounded-[10px] bg-slate-900 px-3 py-2.5 text-[12.5px] leading-relaxed text-slate-50 shadow-xl;
@@ -348,21 +367,21 @@ html { color-scheme: light; }
 .dl-box { @apply flex flex-col gap-1.5 border-t border-slate-200 px-3 pb-2.5 pt-2; grid-column: 1 / -1; }
 .dl-h { @apply text-[12px] font-bold tracking-wide text-slate-400; }
 .dl-row { @apply flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-700; }
-.dl-tag { @apply inline-flex h-5 items-center rounded bg-teal-700 px-1.5 text-[11px] font-extrabold tracking-wide text-white; }
+.dl-tag { @apply inline-flex h-5 items-center rounded bg-teal-700 px-1.5 text-xs font-extrabold tracking-wide text-white; }
 .dl-no { @apply w-11 shrink-0 font-bold tabular-nums text-teal-700; }
-.dl-chip { @apply inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-md border border-slate-300 bg-white px-1.5 text-[11px] font-semibold text-slate-700; }
+.dl-chip { @apply inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-md border border-slate-300 bg-white px-1.5 text-xs font-semibold text-slate-700; }
 .dl-chip.dl-need { border-style: dashed; }
 .dl-chip.dl-packed { @apply border-emerald-500 text-emerald-700; }
 /* a round's four steps (ห่อ n/m → แจ้งเปิดบิล → ออกรถ → ส่งถึง) in Planning's project window */
 .dl-steps { @apply m-0 grid max-w-sm list-none grid-cols-4 gap-1 p-0; }
-.dl-steps li { @apply flex min-w-0 flex-col gap-0.5 text-[11px] text-slate-500; }
+.dl-steps li { @apply flex min-w-0 flex-col gap-0.5 text-xs text-slate-500; }
 .dl-steps i { @apply block h-1 overflow-hidden rounded-full bg-slate-200; }
 .dl-steps u { @apply block h-full bg-emerald-600 no-underline; }
 .dl-steps li.now u { @apply bg-sky-600; }
 .dl-steps li.now b { @apply text-slate-900; }
 .dl-steps li.done b { @apply text-emerald-700; }
 .dl-steps b { @apply truncate font-semibold; }
-.dl-pill { @apply whitespace-nowrap rounded-full px-2 text-[11px] font-bold; }
+.dl-pill { @apply whitespace-nowrap rounded-full px-2 text-xs font-bold; }
 
 /* the FAT / delivery states take their colour from Settings > สถานะงาน (App\Support\EventStatuses): the element carries it as
    --c (--fat / --del on the bands below) and these mix the tint and the darker text from it */
@@ -379,7 +398,7 @@ html { color-scheme: light; }
 }
 .fat-band > span {
     position: absolute; left: 0; top: 4px; white-space: nowrap;
-    border-radius: 0 6px 6px 6px; background: var(--fat); color: #fff; font-size: 11px; font-weight: 800; line-height: 16px; padding: 0 7px 1px;
+    border-radius: 0 6px 6px 6px; background: var(--fat); color: #fff; font-size: 12px; font-weight: 800; line-height: 16px; padding: 0 7px 1px;
 }
 /* the timeline: the same, as a button over the row (its day columns are narrow: the tab may run past the line's end) */
 button.fat-band { position: relative; height: 2rem; background: none; pointer-events: auto; text-align: left; }
@@ -392,7 +411,7 @@ button.fat-band::before { content: ""; position: absolute; inset: 0 0 auto; heig
 }
 .del-band > span {
     position: absolute; right: 0; bottom: 4px; white-space: nowrap;
-    border-radius: 6px 6px 0 6px; background: var(--del); color: #fff; font-size: 11px; font-weight: 800; line-height: 16px; padding: 0 7px 1px;
+    border-radius: 6px 6px 0 6px; background: var(--del); color: #fff; font-size: 12px; font-weight: 800; line-height: 16px; padding: 0 7px 1px;
 }
 button.del-band { position: relative; height: 2rem; background: none; pointer-events: auto; }
 button.del-band::before { content: ""; position: absolute; inset: auto 0 0; height: 4px; border-radius: 0 0 2px 2px; background: var(--del); }
@@ -416,7 +435,7 @@ button.del-band.del-seg > span {
 }
 /* the FAT / จัดส่ง tabs (_events, resources/js/planning/delivery.js ev*): one bar per appointment over its days, in its state's colour (--c) */
 .ev-card {
-    @apply mx-0.5 min-w-0 overflow-hidden rounded-md border border-l-4 px-2 py-1 text-left text-[11.5px] leading-snug hover:brightness-95 hover:shadow-sm;
+    @apply mx-0.5 min-w-0 overflow-hidden rounded-md border border-l-4 px-2 py-1 text-left text-xs leading-snug hover:brightness-95 hover:shadow-sm;
     border-color: color-mix(in srgb, var(--c) 40%, #fff); border-left-color: var(--c);
     background-color: color-mix(in srgb, var(--c) 9%, #fff); color: color-mix(in srgb, var(--c) 72%, #000);
 }
@@ -432,3 +451,16 @@ button.del-band.del-seg > span {
 @keyframes ship-drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
 .ship-drawer { animation: ship-drawer-in .2s cubic-bezier(.16, 1, .3, 1); }
 @media (prefers-reduced-motion: reduce) { .ship-drawer { animation: none; } }
+
+/* A page marked data-touch (โครงการ, ตู้, จ่ายงาน): on a touch screen every button, pill link and field is at least 44px
+   tall, for a finger in a glove (PRODUCT.md "Works for every age, on every screen"); the mouse keeps the dense layout. */
+@media (pointer: coarse) {
+    [data-touch] :is(button, select, input:not([type=checkbox]):not([type=radio]):not([type=hidden])) { min-height: 2.75rem; }
+    [data-touch] a:is(.rounded, .rounded-md, .rounded-lg, .rounded-full) { display: inline-flex; align-items: center; min-height: 2.75rem; }
+    [data-touch] input:is([type=checkbox], [type=radio]) { width: 1.375rem; height: 1.375rem; }
+    /* a ▲ / ▼ / ✕ button is as wide as it is tall; a checkbox's label is the thing a finger taps */
+    [data-touch] button:not([data-dense] button) { min-width: 2.75rem; }   /* a dense editor (the template tree) keeps its own sizes */
+    /* a checkbox alone in a table cell (สิทธิ์การใช้งาน's grid) has no label to grow: the box itself is bigger */
+    [data-touch] td > input:is([type=checkbox], [type=radio]) { width: 2rem; height: 2rem; }
+    [data-touch] label:has(> input:is([type=checkbox], [type=radio])) { min-height: 2.75rem; display: inline-flex; align-items: center; }
+}

@@ -122,10 +122,27 @@ class ProgressService
     public function recalculateCabinet(Cabinet $cabinet): void
     {
         $progress = (int) round($cabinet->tasks()->avg('progress') ?? 0);
+        if ($progress < 100 && $this->builtAndPacked($cabinet)) {
+            $progress = 100;   // ผลิตเสร็จ: what is left (เปิดบิล, ออกจากโรงงาน, ส่งถึง) is the delivery round's to follow
+        }
 
         $cabinet->progress = $progress;
         $cabinet->status = $this->deriveStatus($progress, $cabinet->status);
         $cabinet->save();
+    }
+
+    /**
+     * A cabinet is made (ผลิตเสร็จ) once every item of its Checklist is ticked and it is packed (ห่อตู้เสร็จสิ้น) - the
+     * delivery steps after packing (แจ้งเปิดบิล, ดำเนินการส่งมอบ, ส่งมอบเสร็จสิ้น) don't count. A cabinet without the packing
+     * item keeps the plain rule: every Task at 100%.
+     */
+    public function builtAndPacked(Cabinet $cabinet): bool
+    {
+        $items = CabinetChecklist::query()->whereHas('subtask.cabinetTask', fn ($q) => $q->where('cabinet_id', $cabinet->id))
+            ->get(['name', 'is_completed'])->map(fn ($c) => [DeliveryChecklist::stepOf($c->name), (bool) $c->is_completed]);
+        $packed = $items->first(fn ($i) => $i[0] === DeliveryChecklist::PACK);
+
+        return $packed && $packed[1] && $items->every(fn ($i) => $i[1] || in_array($i[0], [DeliveryChecklist::BILL, DeliveryChecklist::DEPART, DeliveryChecklist::DELIVER], true));
     }
 
     private function deriveStatus(int $progress, string $currentStatus): string

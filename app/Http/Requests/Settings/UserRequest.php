@@ -22,6 +22,7 @@ class UserRequest extends FormRequest
             // "ดูแลแผนกเพิ่มเติม": departments they work for on top of their own (User::departmentIds)
             'extra_department_ids' => ['nullable', 'array'],
             'extra_department_ids.*' => ['integer', 'exists:departments,id'],
+            'team_id' => ['nullable', 'integer', 'exists:teams,id'],   // ทีม (the sales department's teams)
             'position' => ['nullable', 'string', 'max:255'],
             'is_active' => ['sometimes', 'boolean'],
         ];

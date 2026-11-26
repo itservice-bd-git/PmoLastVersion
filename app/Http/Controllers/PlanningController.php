@@ -106,12 +106,15 @@ class PlanningController extends Controller
     {
         $user = $request->user();
         $current = $this->boardOf($request);
+        // the version is taken BEFORE building (as data() does): the page's first poll then gets a 304 unless something changed meanwhile
+        $etag = '"'.$board->stamp($user, $current?->id).'"';
         [$root, $timing] = $this->measure(fn () => $board->build($user, null, $current?->id));
         $profile = $board->profile($user);
 
         $response = response()->view('planning.board', ['noDepartment' => ! $user->canSeeAllWork() && ! $user->department_id, 'config' => [
             'boardId' => PlanningBoard::BOARD_ID,
             'root' => $root,
+            'etag' => $etag,                                 // the version of 'root' (planning.data answers 304 while it holds)
             'today' => today()->format('Y-m-d'),
             'canEdit' => $user->canDispatchWork(),          // project data and dates: Admin / Project Manager only (departments do their work: accept, checklists, fields, comments)
             'isPmo' => $user->canDispatchWork(),            // admin / PM only: delete, alert a department, dispatch; the server enforces it

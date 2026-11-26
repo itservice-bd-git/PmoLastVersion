@@ -7,17 +7,20 @@ import registerDeliveriesPage from './deliveries';
 import registerActivityTree from './activity-tree';
 import registerAssignment from './assignment';
 import registerWorkSummary from './work-summary';
+import registerProjectSummary from './project-summary';
 import registerTemplateEditor from './template-editor';
 import registerCabinetPage from './cabinet-page';
 import pmoBell from './bell';
 import statusReport from './status-report';
 import pmoProjectInfo from './project-info';
 import noticeRules from './notice-rules';
+import permissionTable from './permissions';
 import pushDevice from './push-device';
 import embedBridge from './embed-bridge';
 import { registerWorkDays } from './work-days';
 import pmoProjectDates from './project-dates';
 import watchSession from './session-expiry';
+import pmWeek from './pm-week';
 
 window.Alpine = Alpine;
 window.Sortable = Sortable;
@@ -43,16 +46,19 @@ registerDeliveriesPage();                          // /deliveries' x-data="deliv
 registerActivityTree();                             // x-activity-tree
 registerAssignment();                               // cabinet / project / dispatch: handing work to departments
 registerWorkSummary();                              // reports/today
+registerProjectSummary();                           // reports/projects (builds on workSummary)
 registerTemplateEditor();                           // cabinet-templates/show
 registerCabinetPage();                              // cabinets/show
 Alpine.data('pmoBell', pmoBell);                    // the top bar's bell (layouts/app)
 Alpine.data('statusReport', statusReport);          // x-status-report: the daily report / urgent alerts window
 Alpine.data('pmoProjectInfo', pmoProjectInfo);      // projects/show "ข้อมูลโครงการ"
 Alpine.data('noticeRules', noticeRules);            // Settings > แจ้งเตือน Checklist
+Alpine.data('permissionTable', permissionTable);    // Settings > สิทธิ์การใช้งาน
 Alpine.data('pushDevice', pushDevice);              // Settings > การแจ้งเตือน: web push on this device
 embedBridge();                                     // x-embed-layout pages inside Planning's รอบส่ง window
 registerWorkDays();                                // "จำนวนวัน" beside a Sub Task's start / due dates (work-days.js)
 watchSession();                                    // logged out (left open too long): back to log in, then to this page - before Alpine starts, so its first calls are watched too
+pmWeek();                                           // dashboard สัปดาห์นี้: change the week without loading the whole page
 Alpine.start();
 
 /**
@@ -81,6 +87,25 @@ window.thaiFormat = thaiFormat;   // for date fields made by page scripts (flatp
 window.thaiParse = thaiParse;
 
 /**
+ * A day-and-time field: shown dd/mm/yyyy HH:mm (พ.ศ.), sent yyyy-mm-dd HH:mm (ค.ศ.); typing takes either year.
+ * onChange gets the value to send ('' when cleared).
+ */
+const dtParse = (str) => {
+    const s = String(str || '').trim();
+    const t = s.match(/(\d{1,2}):(\d{2})$/);
+    const day = thaiParse(s.replace(/\s*\d{1,2}:\d{2}$/, ''));
+    if (!day) return undefined;
+    if (t) day.setHours(Number(t[1]), Number(t[2]));
+    return day;
+};
+window.thaiDateTime = (el, value, onChange) => flatpickr(el, {
+    enableTime: true, time_24hr: true, dateFormat: 'Y-m-d H:i', altInput: true, altFormat: 'd/m/Y H:i', altInputClass: el.className,
+    formatDate: (d, f) => (f.startsWith('Y') ? thaiFormat(d, 'Y-m-d') + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) : thaiFormat(d, f)),
+    parseDate: dtParse, allowInput: true, disableMobile: true, defaultDate: value || null,
+    onChange: (d, v) => onChange(v),
+});
+
+/**
  * Native <input type="date"> renders its display in the visitor's own browser/OS locale (often mm/dd/yyyy, ค.ศ.), which
  * the server can't override. flatpickr shows a dd/mm/yyyy (พ.ศ.) text field instead while the original input stays (hidden)
  * and keeps the yyyy-mm-dd value - so forms, x-model and @change handlers work unchanged. Inputs added later (Alpine
@@ -100,6 +125,10 @@ function enhanceDate(el) {
     if (el.id) {
         alt.id = el.id + '-shown';
         document.querySelectorAll('label[for="' + CSS.escape(el.id) + '"]').forEach((l) => { l.htmlFor = alt.id; });
+    }
+    // an aria-label / title on the original (a field with no visible label, e.g. a checklist item's date) names the shown one too
+    for (const name of ['aria-label', 'title']) {
+        if (el.hasAttribute(name) && !alt.hasAttribute(name)) alt.setAttribute(name, el.getAttribute(name));
     }
     let syncing = false;
     // a value set from code (x-model, :value, el.value = …) shows in the visible field too

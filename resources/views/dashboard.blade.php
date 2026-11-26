@@ -1,21 +1,30 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">แดชบอร์ด</h2>
+        <h1 class="text-lg font-semibold text-slate-900">แดชบอร์ด</h1>
     </x-slot>
 
-    <div class="max-w-7xl mx-auto space-y-6">
+    {{-- the dashboard's page: steel blue; the week's days are lighter trays on it, the cards white (or their colour) on them --}}
+    <style>body { background-color: #dce5ee; }</style>
+
+    {{-- every view fills the page edge to edge, as สรุปงานรายโครงการ does --}}
+    <div class="-mx-2 sm:-mx-3 lg:-mx-4 {{ $view === 'pm' ? 'space-y-4' : 'space-y-6' }}">
 
         {{-- the two views, and the CEO report (opens in a new tab, ready to print / Save as PDF) --}}
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
+                @if (count($tabs) > 1)
                 <nav aria-label="มุมมองแดชบอร์ด" class="inline-flex rounded-xl bg-slate-200 p-1 text-sm font-semibold">
-                    @foreach (['exec' => 'ภาพรวมผู้บริหาร', 'dept' => 'งานตามแผนก'] as $key => $label)
+                    @foreach ($tabs as $key => $label)
                         <a href="{{ route('dashboard', ['view' => $key]) }}" @if ($view === $key) aria-current="page" @endif
                            class="rounded-lg px-3.5 py-1.5 {{ $view === $key ? 'bg-white text-ae-navy shadow-sm' : 'text-slate-600 hover:text-ae-navy' }}">{{ $label }}</a>
                     @endforeach
                 </nav>
+                @endif
             </div>
-            @if ($view !== 'exec')   {{-- the overview has the button in its brand bar --}}
+            @if ($view === 'pm')   {{-- สัปดาห์นี้: as of when, and all projects or only mine, beside the tabs to keep it one screen --}}
+                @include('dashboard._pm-bar')
+            @endif
+            @if ($view === 'dept')   {{-- the overview has the button in its brand bar; สัปดาห์นี้ is for working, not reporting --}}
             <a href="{{ route('reports.ceo') }}" target="_blank" rel="noopener"
                class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
@@ -24,8 +33,18 @@
             @endif
         </div>
 
-        @if ($view === 'exec')
+        @if ($view === 'pm')
+            @include('dashboard._pm')
+            {{-- a card opens the project panel of สรุปงานรายโครงการ (the same file), over the board --}}
+            @include('reports.partials._project-styles')
+            <div x-data="projectPanelHost(@js(['today' => today()->format('Y-m-d'), 'oneUrl' => route('reports.projects.one', ['project' => '__ID__']), 'treeUrl' => route('reports.projects.tree', ['project' => '__ID__']), 'dataUrl' => '', 'pageUrl' => '', 'refreshSeconds' => 60]))"
+                 x-on:open-project-panel.window="open($event.detail.id, $event.detail.url, $event.detail.round)" class="work-summary theme-switchgear">
+                @include('reports.partials._project-panel')
+            </div>
+        @elseif ($view === 'exec')
             @include('dashboard._executive')
+        @elseif ($view === 'ceo')
+            @include('dashboard._ceo')
         @else
 
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">การแจ้งเตือน</h2>
+        <h1 class="text-lg font-semibold text-slate-900">การแจ้งเตือน</h1>
     </x-slot>
 
     <div class="max-w-3xl mx-auto">
@@ -11,7 +11,7 @@
         </div>
         <x-card title="การแจ้งเตือนของฉัน">
             <x-slot name="actions">
-                @if (auth()->user()->unreadNotifications()->exists())
+                @if ($unreadCount > 0)
                     <form method="POST" action="{{ route('notifications.read-all') }}">
                         @csrf
                         <button class="inline-flex min-h-[2.75rem] items-center text-sm font-medium text-blue-600 hover:underline">รับทราบทั้งหมด</button>
@@ -28,7 +28,7 @@
                             <span class="min-w-0 flex-1">
                                 <span class="flex flex-wrap items-center gap-1.5">
                                     @if (\App\Notifications\PmoNotice::todoOf($n->data))
-                                        <span class="rounded bg-red-50 px-1.5 text-[11px] font-bold text-red-700">ต้องทำ</span>
+                                        <span class="rounded bg-red-50 px-1.5 text-xs font-bold text-red-700">ต้องทำ</span>
                                     @endif
                                     <span class="text-sm {{ $n->read_at ? 'text-slate-600' : 'font-semibold text-slate-900' }}">{{ $n->data['title'] }}</span>
                                     @if ($n->read_at && \App\Notifications\PmoNotice::todoOf($n->data))

@@ -1,7 +1,7 @@
 {{-- the sub task list stays a direct child of [data-task-row]: the page's script adds / reorders rows there --}}
 <div class="border border-slate-200 rounded-lg overflow-hidden" data-task-row="{{ $taskTemplate->id }}" x-data="{ addSubtask: false, editTask: false, open: true }" @tpl-fold.window="open = !$event.detail">
-    <div class="flex items-center justify-between gap-3 px-4 py-2.5 bg-slate-50" :class="open ? 'border-b border-slate-200' : ''">
-        <div class="flex items-center gap-2 min-w-0">
+    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5 bg-slate-50" :class="open ? 'border-b border-slate-200' : ''">
+        <div class="flex min-w-0 flex-1 basis-48 items-center gap-2">
             <span class="drag-handle shrink-0 select-none" title="ลากเพื่อจัดลำดับ">⋮⋮</span>
             <button type="button" @click="open = !open" class="flex min-w-0 items-center gap-1.5 text-left" :aria-expanded="open">
                 <span class="w-3 shrink-0 text-xs text-slate-400" x-text="open ? '▾' : '▸'"></span>

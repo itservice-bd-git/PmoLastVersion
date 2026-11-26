@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 /** Settings > สีสถานะ Checklist: a coloured tag a cabinet's checklist item can carry (App\Services\ChecklistStatuses). */
 class ChecklistStatus extends Model
 {
+    use Concerns\KeepsIdListsInStep;
+
     /** The colours an admin picks from: key => [Thai name, dot, chip background, chip text] (text on background passes AA). */
     public const PALETTE = [
         'red' => ['แดง', '#dc2626', '#fee2e2', '#991b1b'],
@@ -31,6 +33,17 @@ class ChecklistStatus extends Model
     public function checklists()
     {
         return $this->belongsToMany(CabinetChecklist::class, 'cabinet_checklist_status');
+    }
+
+    /** The departments it is for, as rows of checklist_status_department (kept in step with department_ids). None and all_departments = every department. */
+    public function departments()
+    {
+        return $this->belongsToMany(Department::class, 'checklist_status_department')->withTimestamps();
+    }
+
+    protected static function idLists(): array
+    {
+        return [['department_ids', 'checklist_status_department', 'checklist_status_id', 'department_id', 'departments', 'all_departments']];
     }
 
     /** May an item of this department's work carry it (no department on the work yet: any status). */

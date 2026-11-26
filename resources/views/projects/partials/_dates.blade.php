@@ -1,18 +1,18 @@
 {{-- เลื่อน / แก้วัน (App\Services\ProjectDates) of a project (รายละเอียดโครงการ, _info) or a cabinet (หน้าตู้): the history of
      every change, and for Admin / PM the form, the only place their dates change once they have them.
-     The page works out $dates / $canDates first and passes 'subject' (the Project or the Cabinet). --}}
+     The controller works out $dates / $canDates and App\Services\ProjectPage::dateWindow ($reasons, $linked, $notifyDepts);
+     the page passes 'subject' (the Project or the Cabinet). --}}
 @php
     $isCabinet = $subject instanceof \App\Models\Cabinet;
     $dateUrl = $isCabinet ? route('cabinets.dates.store', $subject) : route('projects.dates.store', $subject);
     $dateTitle = $isCabinet ? 'ตู้ '.($subject->mo_no ?: $subject->cabinet_name).' · '.$subject->project->project_no
         : $subject->project_no.' · '.$subject->project_name;
     $dueWord = $isCabinet ? 'กำหนดเสร็จ' : 'วันครบกำหนด';
-    $reasons = $canDates ? \App\Models\ProjectDateReason::where('is_active', true)->orderBy('sequence')->orderBy('id')->get(['id', 'name']) : collect();
+    // $reasons, $linked, $notifyDepts: App\Services\ProjectPage::dateWindow
     $dateErrors = $errors->hasAny(['kind', 'due_date', 'start_date', 'reason_id', 'note', 'events']);
     $old = session()->getOldInput();
     // รอฝ่ายขายแจ้งกำหนดส่งอีกครั้ง and the rounds that go along: a project's own dates only
     $waiting = ! $isCabinet && $subject->due_pending_at;
-    $linked = $canDates && ! $isCabinet ? \App\Services\ProjectDates::linkedEvents($subject) : collect();
     $form = [
         'kind' => $old['kind'] ?? 'postpone',
         'due' => $dateErrors ? ($old['due_date'] ?? '') : '',
@@ -208,7 +208,6 @@
 
                 <label x-show="f.kind !== 'correct'" class="flex min-h-[2.25rem] items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
                     <input type="checkbox" name="notify" value="1" x-model="f.notify" class="h-4 w-4 rounded border-slate-300">
-                    @php $notifyDepts = \App\Services\ProjectDates::departments($subject)->pluck('name'); @endphp
                     <span x-show="f.kind === 'postpone'">แจ้ง PM ผู้รับผิดชอบ ผู้ติดตามโครงการ{{ $notifyDepts->isNotEmpty() ? ' และทุกคนในแผนกที่มีงาน'.($isCabinet ? 'ในตู้นี้' : '').' ('.$notifyDepts->implode(', ').')' : '' }}</span>
                     <span x-show="f.kind === 'pending'">แจ้ง PM ผู้รับผิดชอบ และผู้ติดตามโครงการ</span>
                 </label>

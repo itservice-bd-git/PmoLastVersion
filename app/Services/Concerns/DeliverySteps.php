@@ -3,6 +3,7 @@
 namespace App\Services\Concerns;
 
 use App\Models\ActivityLog;
+use App\Models\Cabinet;
 use App\Models\ProjectDelivery;
 use App\Models\User;
 use App\Services\DeliveryChecklist;
@@ -108,6 +109,11 @@ trait DeliverySteps
             if (! $ids) {
                 return $d;
             }
+            // only a made cabinet goes in a box: every Checklist item ticked, the delivery steps' own items aside
+            if ($packed && $left = array_intersect_key($this->checklist->remaining($ids), array_flip($ids))) {
+                $this->assert(false, 'ห่อไม่ได้ · Checklist ยังไม่ครบ: '.Cabinet::whereIn('id', array_keys($left))->orderBy('sequence')->orderBy('id')
+                    ->get(['id', 'mo_no', 'cabinet_name'])->map(fn ($c) => ($c->mo_no ?: $c->cabinet_name).' (เหลือ '.$left[$c->id].' รายการ)')->implode(', '));
+            }
             $map = $d->packed ?? [];
             foreach ($ids as $id) {
                 if ($packed) {
@@ -180,7 +186,8 @@ trait DeliverySteps
      * $files (ใบส่งของที่เซ็นรับ, รูปหน้างาน …) go up as a project comment carrying the
      * round's id (ProjectDelivery::filesOf): seen in the Comment tab and on the round; each save adds, none is replaced.
      *
-     * @param  array{delivered_date: string, delivered_time?: ?string, issue?: ?string, cabinet_ids: list<int>}  $data
+     * @param  array{delivered_date: string, delivered_time?: ?string, issue?: ?string, invoice_no?: ?string, cabinet_ids: list<int>}  $data
+     *                                                                                                                                        (invoice_no: เลข IV - left as it is when not given, as the driver's link does)
      * @param  array<int, UploadedFile>  $files
      * @param  string|null  $via  how it came in, said in the history (the driver's link: ผ่านลิงก์คนขับ - $actor is the one who sent it)
      * @param  bool  $review  รอตรวจ (the driver's link): delivered, but PM is told only once the delivery department has looked
@@ -209,7 +216,7 @@ trait DeliverySteps
             $text = fn (string $k) => trim((string) ($data[$k] ?? '')) ?: null;
             $d->fill(['status' => ProjectDelivery::DELIVERED, 'cabinet_ids' => $ids, 'packed' => array_intersect_key($d->packed ?? [], array_flip($ids)) ?: null,
                 'departed_at' => $d->departed_at ?? $at, 'delivered_at' => $at, 'review_at' => $review ? now() : null,
-                'issue' => $text('issue')])->save();
+                'issue' => $text('issue')] + (array_key_exists('invoice_no', $data) ? ['invoice_no' => $text('invoice_no')] : []))->save();
             $this->checklist->mark($ids, DeliveryChecklist::DEPART, true, $actor);
             $this->checklist->mark($ids, DeliveryChecklist::DELIVER, true, $actor);
             if ($left) {   // back at the factory: no longer on the way
@@ -218,7 +225,7 @@ trait DeliverySteps
             }
 
             $line = ($again ? 'แก้การส่งถึง' : ProjectDelivery::statusName(ProjectDelivery::DELIVERED)).' '.$at->thaiDate().($at->format('H:i') !== '00:00' ? ' '.$at->format('H:i').' น.' : '')
-                .' · '.$this->describe($d).($d->receiver ? ' · ผู้รับ '.$d->receiver : '').($d->doc_no ? ' · ใบส่งของ '.$d->doc_no : '').($d->issue ? ' · หมายเหตุ: '.$d->issue : '')
+                .' · '.$this->describe($d).($d->receiver ? ' · ผู้รับ '.$d->receiver : '').($d->doc_no ? ' · ใบส่งของ '.$d->doc_no : '').($d->invoice_no ? ' · IV '.$d->invoice_no : '').($d->issue ? ' · หมายเหตุ: '.$d->issue : '')
                 .($left ? ' · ไม่ได้ส่ง '.$this->names($left)->implode(', ') : '').($files ? ' · แนบไฟล์ '.count($files).' ไฟล์' : '').($via ? ' · '.$via : '').($review ? ' · รอแผนกจัดส่งตรวจ' : '').($checked ? ' · ตรวจแล้ว' : '');
             $this->log($actor, $d, "การจัดส่งรอบที่ {$d->round}: {$line}");
             if ($files) {

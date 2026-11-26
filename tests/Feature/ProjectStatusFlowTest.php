@@ -49,7 +49,7 @@ class ProjectStatusFlowTest extends TestCase
         $flow = app(SubtaskAssignmentService::class);
         $flow->accept($this->a, $this->member);
         $this->assertSame('in_progress', $this->project->fresh()->status);
-        $this->assertStringContainsString('Draft → In Progress อัตโนมัติ (แผนก Busbar รับงานแรก)', ActivityLog::where('loggable_type', Project::class)->latest('id')->value('description'));
+        $this->assertStringContainsString('ร่าง → กำลังดำเนินการ อัตโนมัติ (แผนก Busbar รับงานแรก)', ActivityLog::where('loggable_type', Project::class)->latest('id')->value('description'));
 
         // On Hold stays On Hold
         $this->project->update(['status' => 'on_hold']);

@@ -29,6 +29,7 @@ class ProjectRequest extends FormRequest
             'contract_value' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'margin' => ['nullable', 'numeric', 'max:9999999999999'],
             'po_no' => ['nullable', 'string', 'max:100'],
+            'avt_no' => ['nullable', 'string', 'max:50'],
             'sales_order_no' => ['nullable', 'string', 'max:100'],
             'project_owner' => ['nullable', 'string', 'max:255'],
             // พนักงานขาย: ticked from the sales people (they follow the project), plus names typed for anyone without an account

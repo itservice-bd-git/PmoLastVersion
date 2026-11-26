@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\Department;
 use App\Models\NotificationPreference;
 use App\Models\Project;
+use App\Models\PushSubscription;
 use Illuminate\Http\Request;
 
 /**
@@ -21,7 +23,18 @@ class SettingsController extends Controller
 
     public function editNotifications(Request $request)
     {
-        return view('settings.notifications', ['pref' => NotificationPreference::for($request->user())]);
+        $user = $request->user();
+
+        return view('settings.notifications', [
+            'pref' => NotificationPreference::for($user),
+            // admin only: is the push setup ready (devices signed up, departments nobody would receive work in)
+            'readiness' => $user->isAdmin() ? [
+                'pushKeys' => (bool) (config('services.webpush.public_key') && config('services.webpush.private_key')),
+                'https' => $request->isSecure(),
+                'devices' => PushSubscription::count(),
+                'emptyDepts' => Department::where('is_active', true)->whereDoesntHave('users', fn ($q) => $q->where('is_active', true))->orderBy('name')->pluck('name'),
+            ] : null,
+        ]);
     }
 
     public function updateNotifications(Request $request)

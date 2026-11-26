@@ -522,11 +522,33 @@ class PlanningSyncTest extends TestCase
         $zipped = $this->actingAs($member)->withHeaders(['Accept-Encoding' => 'gzip, deflate'])->get(route('planning.board'));
         $this->assertSame('gzip', $zipped->headers->get('Content-Encoding'));
         $this->assertStringContainsString('Accept-Encoding', (string) $zipped->headers->get('Vary'));
-        $this->assertSame($plain->getContent(), gzdecode($zipped->getContent()), 'identical content, only compressed');
+        // the board's version (config.etag) may move between the two: the setup's own saves bump it when the first request ends
+        $noEtag = fn (string $html) => preg_replace('/"etag":"(?:\\\\.|[^"\\\\])*"/', '"etag":""', $html);
+        $this->assertSame($noEtag($plain->getContent()), $noEtag(gzdecode($zipped->getContent())), 'identical content, only compressed');
         $this->assertLessThan(strlen($plain->getContent()), strlen($zipped->getContent()));
 
         $this->assertMatchesRegularExpression('/^app;dur=\d+, build;dur=\d+, db;desc="\d+ queries"$/', $plain->headers->get('Server-Timing'));
         $this->assertNotNull($this->actingAs($member)->getJson(route('planning.data'))->headers->get('Server-Timing'));
+    }
+
+    public function test_the_page_hands_over_its_version_so_the_first_poll_builds_nothing(): void
+    {
+        $this->subtask($this->busbar);
+        $member = $this->user($this->busbar);
+        $this->actingAs($member)->get(route('planning.board'));   // the setup's saves bump the version as this one ends
+
+        $page = $this->actingAs($member)->get(route('planning.board'))->assertOk();
+        preg_match('/"etag":"((?:\\\\.|[^"\\\\])*)"/', $page->getContent(), $m);
+        $etag = json_decode('"'.$m[1].'"');
+        $this->assertMatchesRegularExpression('/^"[0-9a-f]{32}"$/', $etag);
+
+        $this->actingAs($member)->withHeaders(['If-None-Match' => $etag])->get(route('planning.data'))->assertStatus(304);
+
+        // someone else updates the work after the page was opened: the next poll brings the new board, not a 304
+        CabinetSubtask::query()->first()->update(['remark' => 'แก้โดยคนอื่น']);
+        app()->terminate();   // the version moves when the saving request ends
+        $fresh = $this->actingAs($member)->withHeaders(['If-None-Match' => $etag])->get(route('planning.data'))->assertOk();
+        $this->assertNotSame($etag, $fresh->headers->get('ETag'));
     }
 
     public function test_the_board_tells_each_user_which_workflow_buttons_make_sense(): void

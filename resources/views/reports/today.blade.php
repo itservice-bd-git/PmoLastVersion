@@ -5,7 +5,7 @@
      Nothing that matters under 14px; status is a word as well as a colour. Blue = งานเข้า, emerald = เสร็จ, everywhere here. --}}
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">สรุปงาน</h2>
+        <h1 class="text-lg font-semibold text-slate-900">สรุปงาน</h1>
     </x-slot>
 
     <style>
@@ -23,7 +23,7 @@
         </div>
     @else
     <div x-data="workSummary(@js(['summary' => $data, 'dataUrl' => route('reports.today.data'), 'pageUrl' => route('reports.today'), 'acknowledgeUrl' => route('reports.today.acknowledge'), 'refreshSeconds' => $refreshSeconds]))"
-         class="work-summary mx-auto flex w-full max-w-[1600px] flex-col gap-4 text-sm text-slate-800">
+         class="work-summary -mx-2 sm:-mx-3 lg:-mx-4 flex flex-col gap-4 text-sm text-slate-800">
 
         {{-- the days shown (one, or a range), live state, and how to look at it --}}
         <div class="flex flex-wrap items-center gap-x-4 gap-y-3">

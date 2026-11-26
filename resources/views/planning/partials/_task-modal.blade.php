@@ -146,7 +146,7 @@
                             <span class="w-24 shrink-0 text-xs font-semibold text-slate-600">ผู้รับผิดชอบรายคน</span>
                             <template x-for="id in cur.owners" :key="id">
                                 <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pl-0.5 pr-2 text-xs font-semibold text-slate-700">
-                                    <span class="flex h-5 w-5 items-center justify-center rounded-full text-[11.5px] text-white" :style="'background-color:' + avatarColor(personOf(id).name)" x-text="initial(personOf(id).name)"></span>
+                                    <span class="flex h-5 w-5 items-center justify-center rounded-full text-xs text-white" :style="'background-color:' + avatarColor(personOf(id).name)" x-text="initial(personOf(id).name)"></span>
                                     <span x-text="personOf(id).name"></span>
                                     <button type="button" x-show="canEdit" @click="toggleOwner(cur, id)" class="text-slate-400 hover:text-red-600" aria-label="เอาออก">×</button>
                                 </span>

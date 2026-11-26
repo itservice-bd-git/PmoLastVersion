@@ -2,19 +2,17 @@
     <x-slot name="header">
         <div class="flex min-w-0 items-center gap-2">
             <x-back-link :href="route('cabinet-templates.index')" label="เทมเพลตทั้งหมด" />
-            <h2 class="text-lg font-semibold text-slate-900">{{ $template->name }}</h2>
+            <h1 class="min-w-0 truncate text-lg font-semibold text-slate-900" title="{{ $template->name }}">{{ $template->name }}</h1>
             @if ($template->is_default)
-                <span class="text-[11.5px] uppercase tracking-wide bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">Default</span>
+                <span class="text-xs uppercase tracking-wide bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">Default</span>
             @endif
         </div>
     </x-slot>
 
-    <div class="max-w-none mx-auto space-y-6">
-        <x-settings-nav />
+    <x-settings-layout space="space-y-6">
         <x-card>
             @php
                 $subs = $template->taskTemplates->flatMap->subtaskTemplates;
-                $usedBy = $template->cabinets()->withTrashed()->count();
                 // "เทียบกับ…": every Sub Task of the template, for each Sub Task's picker (_subtask)
                 $pairOptions = $template->taskTemplates->flatMap(fn ($t) => $t->subtaskTemplates->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'task' => $t->name, 'dept' => (string) $s->department?->name]))->values();
                 $hasPairs = $subs->contains(fn ($s) => $s->pairSources->isNotEmpty());
@@ -23,7 +21,7 @@
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                         <span>รหัส <span class="font-medium text-slate-700">{{ $template->code }}</span></span>
-                        @unless ($template->is_active)<span class="rounded bg-slate-100 px-1.5 py-0.5 text-[11.5px] font-semibold text-slate-500" title="ไม่แสดงให้เลือกตอนสร้างตู้">ปิดใช้งาน</span>@endunless
+                        @unless ($template->is_active)<span class="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-500" title="ไม่แสดงให้เลือกตอนสร้างตู้">ปิดใช้งาน</span>@endunless
                     </div>
                     @if ($template->description)
                         <p class="text-sm text-slate-600 mt-1">{{ $template->description }}</p>
@@ -44,7 +42,7 @@
                               onsubmit="return confirm(@js('ใช้คู่เทียบ Checklist ของเทมเพลตนี้กับตู้เดิม '.$pairCabinets.' ตู้ (โครงการที่ยังไม่ปิด)?'."\n\nคู่เทียบเดิมของตู้เหล่านั้นจะถูกแทนด้วยของเทมเพลต"))">@csrf
                             <button class="px-3 py-2 rounded-lg bg-blue-50 text-sm font-medium text-blue-700 hover:bg-blue-100" title="Sub Task ที่ตรงกัน (จากเทมเพลต หรือชื่อเดียวกัน) จะเทียบกันเหมือนในเทมเพลต">ใช้คู่เทียบกับตู้เดิม ({{ $pairCabinets }} ตู้)</button></form>
                     @endif
-                    <a href="{{ route('cabinet-templates.export', $template) }}" class="px-3 py-2 rounded-lg bg-slate-100 text-sm font-medium text-slate-700 hover:bg-slate-200" title="Task | Sub Task | แผนก | Checklist | หมายเหตุ">Export Excel</a>
+                    <a href="{{ route('cabinet-templates.export', $template) }}" class="px-3 py-2 rounded-lg bg-slate-100 text-sm font-medium text-slate-700 hover:bg-slate-200" title="Task | Sub Task | แผนก | Checklist | หมายเหตุ">ดาวน์โหลด Excel</a>
                     <form method="POST" action="{{ route('cabinet-templates.duplicate', $template) }}" onsubmit="return confirm('ทำสำเนาเทมเพลตนี้ทั้งหมด?')">@csrf
                         <button class="px-3 py-2 rounded-lg bg-slate-100 text-sm font-medium text-slate-700 hover:bg-slate-200">ทำสำเนา</button></form>
                     <a href="{{ route('cabinet-templates.edit', $template) }}" class="px-3 py-2 rounded-lg bg-slate-100 text-sm font-medium text-slate-700 hover:bg-slate-200" title="ชื่อ รหัส คำอธิบาย ค่าเริ่มต้น เปิด/ปิดใช้งาน">แก้ไขข้อมูล</a>
@@ -58,7 +56,7 @@
             </div>
         </x-card>
 
-        <x-card title="โครงสร้างงาน" subtitle="Task → Sub Task (แผนก) → Checklist — ลาก ⋮⋮ เพื่อจัดลำดับ · กดชื่อ Task เพื่อยุบ / ขยาย">
+        <x-card data-dense title="โครงสร้างงาน" subtitle="Task → Sub Task (แผนก) → Checklist — ลาก ⋮⋮ เพื่อจัดลำดับ · กดชื่อ Task เพื่อยุบ / ขยาย">
             <div class="-mt-2 mb-3 flex justify-end gap-1 text-xs">
                 <button type="button" x-data @click="$dispatch('tpl-fold', true)" class="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100">ยุบทั้งหมด</button>
                 <button type="button" x-data @click="$dispatch('tpl-fold', false)" class="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-100">ขยายทั้งหมด</button>
@@ -87,7 +85,7 @@
             </div>
             @endedittemplates
         </x-card>
-    </div>
+    </x-settings-layout>
 
     @edittemplates
     {{-- "ส่งรายการใหม่ไปตู้เดิม": preview per cabinet, then add (App\Services\TemplateTools) --}}

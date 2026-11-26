@@ -1,9 +1,8 @@
 {{-- Settings > สาเหตุการเลื่อน (ProjectDateReasonController): the reasons offered in หน้าโครงการ › "เลื่อน / แก้วัน" --}}
 @php $colors = \App\Models\ProjectDateReason::COLORS; @endphp
 <x-app-layout>
-    <x-slot name="header"><h2 class="text-lg font-semibold text-slate-900">ตั้งค่า</h2></x-slot>
-    <div class="max-w-none mx-auto space-y-4">
-        <x-settings-nav />
+    <x-slot name="header"><h1 class="text-lg font-semibold text-slate-900">ตั้งค่า</h1></x-slot>
+    <x-settings-layout space="space-y-4">
         <x-card title="สาเหตุการเลื่อนวันโครงการ" subtitle="ให้เลือกตอนกด &quot;เลื่อน / แก้วัน&quot; ในหน้าโครงการ · สาเหตุที่มีในประวัติแล้วลบไม่ได้ จะถูกปิดไว้แทน (ประวัติเดิมยังแสดงชื่อเดิม)">
             <div class="divide-y divide-slate-100">
                 @forelse ($reasons as $r)
@@ -26,7 +25,7 @@
                             <span class="text-xs text-slate-500">ใช้ไป {{ $used[$r->id] ?? 0 }} ครั้ง</span>
                             <button class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">บันทึก</button>
                         </form>
-                        <form method="POST" action="{{ route('settings.date-reasons.destroy', $r) }}" onsubmit="return confirm('ลบสาเหตุ &quot;{{ $r->name }}&quot;?')">@csrf @method('DELETE')
+                        <form method="POST" action="{{ route('settings.date-reasons.destroy', $r) }}" data-confirm="ลบสาเหตุ &quot;{{ $r->name }}&quot;?" onsubmit="return confirm(this.dataset.confirm)">@csrf @method('DELETE')
                             <button class="text-xs text-red-600 hover:underline">ลบ</button>
                         </form>
                     </div>
@@ -46,5 +45,5 @@
                 <button class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">+ เพิ่ม</button>
             </form>
         </x-card>
-    </div>
+    </x-settings-layout>
 </x-app-layout>

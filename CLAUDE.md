@@ -34,6 +34,16 @@ Production has **no shell, no `npm`, and no `artisan`**: schema changes go throu
 - `DisableResponseCaching` middleware sends no-store on every web response because shared-hosting caches (LiteSpeed) otherwise show stale data. Don't remove it.
 - Reminders need a `* * * * * php artisan schedule:run` cron entry.
 
+## Database rules
+
+Every schema change keeps the database relational. Check a new migration against these before writing code on it:
+1. **InnoDB, utf8mb4.** No MyISAM: it has no foreign keys and no transactions (the five that were converted in 2026_11_17_000001).
+2. **Every `*_id` is a foreign key**, with its delete rule chosen on purpose: a child that cannot exist without its parent `cascadeOnDelete()`; a person who wrote or owns something (`*_by`, `owner_id`) `nullOnDelete()`; master data still in use (a customer with projects) `restrictOnDelete()`. Polymorphic pairs (`loggable_type/_id`, `event/event_id`) are the one exception.
+3. **No list of ids in JSON.** A many-to-many is a join table with a unique pair (name it yourself: MySQL's index names stop at 64 characters). JSON is for settings and snapshots that point at nothing (`vehicle_types`, `conditions`). "Empty = all" is a column of its own (`all_cabinets`), never an empty list.
+4. **One fact in one place.** No name kept beside the id it names, no copy of another table's value. Where an old column must stay for a while (the JSON lists and `customer_name` kept in 2026-11 for older code and rollback), one piece of code keeps the new rows in step (`KeepsIdListsInStep`, `Project::linkCustomer`) and a test proves it.
+5. **A thing people pick again is a table**, not text typed each time (customers, vehicles, departments).
+6. **Migrations run on MySQL and sqlite** (the tests): no `UPDATE ... JOIN`, an UPDATE that reads its own table goes through a derived table, JSON functions per driver. Data moves are set-based statements (no rows read first) so `pmo:migration-sql` prints them; rehearse the generated `.sql` on a copy of the data, since MySQL does not undo the DDL of a statement that fails half way.
+
 ## Domain model
 
 `Project → Cabinet → CabinetTask → CabinetSubtask → CabinetChecklist`. Cabinets are created by copying a `CabinetTemplate` tree (`CabinetTemplateService`, `CabinetCopyService`); editing a cabinet never touches the template.
@@ -126,6 +136,7 @@ The old single-file SPA (`resources/planning/index.html`, `public/planning-asset
 | Models | `app/Models`, with behaviour traits in `app/Models/Concerns` (see above), and traits that split a large model: `PresentsDelivery` (how a round is said and shown), `ProjectMoney`, `ProjectProgress`, `SubtaskAssignmentRules`, `SubtaskDue`. Relations, casts, `booted()` and the `LogsActivity` overrides stay on the model (two traits may not define the same method). |
 | Page scripts | `resources/js`, registered from `app.js` before Alpine starts. Not inline in Blade. |
 | Views | `resources/views`. Reusable pieces are `components/`, e.g. `<x-round-button>`. Never build HTML in PHP strings in a view: make a component. |
+| Views do not query | A view only lays out what it is given. It never runs a query (`Model::where`, `$model->relation()->get()`, `DB::`), never calls `app(...)` / a service that reads records, and never names a controller. The page's controller (or a page service: `ProjectPage`, `CabinetPage`) works it out first; a partial drawn from many places gets it from its composer in `app/View/Composers` (registered in `AppServiceProvider`): `BellComposer` (the layout's bell), `AssignmentComposer`, `DateMoveFieldsComposer`, `TemplateSubtaskComposer`. A view may still call label / colour / format helpers that read no records (`ProjectDelivery::statusName()`, `EventStatuses`, `PlanningBoard::statusColor()`). Work done per row goes into a map by id (`$subtaskView[$subtask->id]`), not into a component attribute: Blade evaluates `:prop="…"` twice. `tests/Feature/ViewsDoNotQueryTest` fails on a view that breaks this. |
 
 `resources/js` in detail:
 
@@ -142,6 +153,7 @@ The old single-file SPA (`resources/planning/index.html`, `public/planning-asset
 | `bell.js`, `status-report.js` | the layout's bell, `x-status-report` |
 | `project-info.js` | projects/show "ข้อมูลโครงการ" |
 | `notice-rules.js`, `push-device.js` | Settings > แจ้งเตือน Checklist, Settings > การแจ้งเตือน |
+| `permissions.js` | Settings > สิทธิ์การใช้งาน, `permissionTable`: the ตามแผนก / ตารางรวม views of one state, the unsaved count |
 | `embed-bridge.js` | `x-embed-layout` pages (`body[data-embed]`) inside Planning's รอบส่ง window |
 | `ceo-report.js` | the CEO report's print page: its own Vite entry, since that page loads no `app.js` |
 

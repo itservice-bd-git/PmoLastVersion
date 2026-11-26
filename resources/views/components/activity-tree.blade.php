@@ -4,7 +4,7 @@
      Pure presentation over the existing activity_logs rows: the server groups them
      (ActivityTreeBuilder) and this renders only the rows under expanded nodes, so a
      project with hundreds of entries stays cheap to draw. --}}
-<x-card title="Activity Log" :subtitle="$subtitle">
+<x-card title="ประวัติการแก้ไข" :subtitle="$subtitle">
     <div x-data="activityTree(@js($url), @js($exportUrl))" class="-mx-5 -mb-5" style="--ind: 22px">
         {{-- Filters --}}
         <div class="px-5 pb-3 flex flex-wrap items-center gap-2 text-sm">
@@ -50,7 +50,7 @@
                 <option value="asc">เก่าสุดก่อน</option>
             </select>
             <span class="ml-auto flex items-center gap-3 text-xs">
-                <button type="button" x-show="exportUrl" @click="exportCsv()" class="text-blue-600 hover:underline">Export CSV</button>
+                <button type="button" x-show="exportUrl" @click="exportCsv()" class="text-blue-600 hover:underline">ดาวน์โหลด CSV</button>
                 <span class="text-slate-300">|</span>
                 <button type="button" @click="expandAll()" class="text-blue-600 hover:underline">ขยายทั้งหมด</button>
                 <span class="text-slate-300">|</span>
@@ -104,7 +104,7 @@
                             </div>
                             <div class="text-xs text-slate-500 tabular-nums mt-0.5 md:mt-0.5 pl-6 md:pl-0" x-text="r.act.at"></div>
                             <div class="flex items-center gap-1.5 text-xs text-slate-600 min-w-0 pl-6 md:pl-0">
-                                <span class="w-5 h-5 rounded-full bg-slate-100 text-[11.5px] font-semibold text-slate-500 flex items-center justify-center shrink-0" x-text="r.act.initial"></span>
+                                <span class="w-5 h-5 rounded-full bg-slate-100 text-xs font-semibold text-slate-500 flex items-center justify-center shrink-0" x-text="r.act.initial"></span>
                                 <span class="truncate" x-text="r.act.actor"></span>
                             </div>
                             <div class="text-xs text-slate-500 min-w-0 pl-6 md:pl-0 mt-1 md:mt-0">

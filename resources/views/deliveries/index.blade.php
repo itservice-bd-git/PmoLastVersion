@@ -21,22 +21,30 @@
 <x-dynamic-component :component="$embed ? 'embed-layout' : 'app-layout'">
     <x-slot name="header">
         <div class="flex min-w-0 items-baseline gap-3">
-            <h2 class="shrink-0 text-lg font-semibold text-slate-900">งานจัดส่ง</h2>
+            <h1 class="shrink-0 text-lg font-semibold text-slate-900">งานจัดส่ง</h1>
             <span class="hidden truncate text-sm text-slate-500 xl:block">จัดรถ / คนตามวันที่ PM ลง · ห่อตู้ · แจ้งเปิดบิล · ออกจากโรงงาน · ส่งถึง (Checklist ของตู้ติ๊กให้เอง)</span>
         </div>
     </x-slot>
 
-    <div class="mx-auto max-w-6xl space-y-4"
+    <div class="{{ $embed ? 'mx-auto max-w-6xl' : '-mx-2 sm:-mx-3 lg:-mx-4' }} space-y-4"
          x-data="deliveriesPage(@js(['tab' => $tab, 'busy' => (object) $busy, 'vehicles' => $vehicles, 'reasons' => $reasons, 'people' => $people, 'filesMax' => \App\Models\ProjectDelivery::FILES_MAX]))">
 
         @if ($errors->any())
             <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{{ $errors->first() }}</p>
         @endif
 
+        @unless ($project || $embed)
+            {{-- the two views of the page, this one first: it is where the steps are worked --}}
+            <nav aria-label="มุมมองงานจัดส่ง" class="inline-flex rounded-xl bg-slate-200 p-1 text-sm font-semibold">
+                <a href="{{ route('deliveries.index', ['view' => 'list']) }}" aria-current="page" class="rounded-lg bg-white px-3 py-1.5 text-slate-900 shadow-sm">จัดการรอบส่ง</a>
+                <a href="{{ route('deliveries.index', ['view' => 'week']) }}" class="rounded-lg px-3 py-1.5 text-slate-600 hover:text-slate-900">ปฏิทินสัปดาห์</a>
+            </nav>
+        @endunless
+
         @unless ($project)
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
         <nav id="dl-tabs" class="flex min-w-0 basis-full gap-1 sm:basis-auto sm:flex-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 text-sm" aria-label="ขั้นงาน">
-            @foreach (\App\Http\Controllers\DeliveryController::TABS as $key => $label)
+            @foreach ($tabLabels as $key => $label)
                 @php $n = $key === 'delivered' ? $tabs[$key]->whereNotNull('review_at')->count() : $tabs[$key]->count(); @endphp   {{-- ส่งถึงแล้ว: how many wait to be checked --}}
                 <a href="{{ route('deliveries.index', ['tab' => $key]) }}" @if ($tab === $key) aria-current="page" @endif
                    class="inline-flex min-h-[2.75rem] shrink-0 items-center gap-1.5 rounded-lg px-3 font-medium {{ $tab === $key ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100' }}">
@@ -62,7 +70,7 @@
 
         {{-- what the panels need that changes once something is saved; read again by refreshList() --}}
         <script type="application/json" id="dl-live">@json(['busy' => (object) $busy, 'people' => $people])</script>
-        <section id="dl-rows" class="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="{{ \App\Http\Controllers\DeliveryController::TABS[$tab] ?? 'รอบส่งของโครงการ' }}">
+        <section id="dl-rows" class="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="{{ $tabLabels[$tab] ?? 'รอบส่งของโครงการ' }}">
             @forelse ($rows as $row)
                 @php
                     $before = in_array($row['status'], ['waiting', 'rejected', 'scheduled'], true);   // packing / แจ้งเปิดบิล may happen
@@ -116,7 +124,7 @@
                         @if ($row['status'] === 'delivered')
                             <p class="font-semibold text-slate-800">ส่งถึง {{ $row['delivered'] }}</p>
                             @if ($row['review'])<p class="text-xs text-slate-500">คนขับแจ้งทางลิงก์ {{ $row['review'] }}</p>@endif
-                            @if ($row['receiver'] || $row['doc_no'])<p class="text-slate-500">{{ collect([$row['receiver'] ? 'ผู้รับ '.$row['receiver'] : null, $row['doc_no'] ? 'ใบส่งของ '.$row['doc_no'] : null])->filter()->implode(' · ') }}</p>@endif
+                            @if ($row['receiver'] || $row['doc_no'] || $row['invoice_no'])<p class="text-slate-500">{{ collect([$row['receiver'] ? 'ผู้รับ '.$row['receiver'] : null, $row['doc_no'] ? 'ใบส่งของ '.$row['doc_no'] : null, $row['invoice_no'] ? 'IV '.$row['invoice_no'] : null])->filter()->implode(' · ') }}</p>@endif
                             @if ($row['files'])
                                 {{-- what was sent with ส่งถึงแล้ว (ใบส่งของที่เซ็นรับ, รูป) as a strip of tiles, 44px to tap with gloves on;
                                      past six, five and +n (the ส่งถึงแล้ว panel has them all) --}}
@@ -246,12 +254,12 @@
                             <div>
                                 <ol class="flex items-center gap-2 text-sm" aria-label="ขั้น">
                                     <li class="flex items-center gap-1.5 font-semibold" :class="cabCount('todo') ? 'text-slate-900' : 'text-emerald-700'">
-                                        <span class="flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold" :class="cabCount('todo') ? 'bg-sky-600 text-white' : 'bg-emerald-600 text-white'" aria-hidden="true"><span x-show="cabCount('todo')">1</span><span x-show="!cabCount('todo')">{!! $check !!}</span></span>
+                                        <span class="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold" :class="cabCount('todo') ? 'bg-sky-600 text-white' : 'bg-emerald-600 text-white'" aria-hidden="true"><span x-show="cabCount('todo')">1</span><span x-show="!cabCount('todo')">{!! $check !!}</span></span>
                                         <span x-text="'ห่อตู้ ' + cabCount('done') + '/' + cab.list.length"></span>
                                     </li>
                                     <li class="h-px w-6 shrink-0 bg-slate-300" aria-hidden="true"></li>
                                     <li class="flex min-w-0 items-center gap-1.5 font-semibold" :class="cab.row.billed ? 'text-emerald-700' : (cabStep === 'bill' ? 'text-slate-900' : 'text-slate-500')">
-                                        <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" :class="cab.row.billed ? 'bg-emerald-600 text-white' : (cabStep === 'bill' ? 'bg-sky-600 text-white' : 'border border-slate-300 text-slate-500')" aria-hidden="true"><span x-show="!cab.row.billed">2</span><span x-show="cab.row.billed">{!! $check !!}</span></span>
+                                        <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold" :class="cab.row.billed ? 'bg-emerald-600 text-white' : (cabStep === 'bill' ? 'bg-sky-600 text-white' : 'border border-slate-300 text-slate-500')" aria-hidden="true"><span x-show="!cab.row.billed">2</span><span x-show="cab.row.billed">{!! $check !!}</span></span>
                                         <span class="truncate" x-text="cab.row.billed ? 'แจ้งเปิดบิล ' + cab.row.billed : 'แจ้งเปิดบิล'"></span>
                                     </li>
                                 </ol>
@@ -283,8 +291,8 @@
                             </li>
                             <template x-for="c in cabShown" :key="c.id">
                                 <li>
-                                    <button type="button" @click="packCabs([c], !c.packed)" :disabled="!cab.row.packable || c.busy" :aria-pressed="c.packed"
-                                            :aria-label="(c.model ? c.name + ' ' + c.model : c.name) + (c.packed ? ' ห่อแล้ว' : ' ยังไม่ห่อ')"
+                                    <button type="button" @click="packCabs([c], !c.packed)" :disabled="!cab.row.packable || c.busy || (!c.packed && c.left > 0)" :aria-pressed="c.packed"
+                                            :aria-label="(c.model ? c.name + ' ' + c.model : c.name) + (c.packed ? ' ห่อแล้ว' : (c.left > 0 ? ' ห่อไม่ได้ Checklist เหลือ ' + c.left + ' รายการ' : ' ยังไม่ห่อ'))"
                                             class="{{ $cols }} min-h-[3.75rem] w-full px-4 py-2.5 text-left enabled:hover:bg-slate-50 disabled:cursor-default sm:px-5" :class="c.busy ? 'opacity-60' : ''">
                                         <span class="flex h-7 w-7 items-center justify-center rounded-full border-2 transition-colors" :class="c.packed ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white text-transparent'" aria-hidden="true">
                                             <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m5 12 5 5 9-10"/></svg>
@@ -296,8 +304,9 @@
                                             <span class="block break-words text-sm font-semibold text-slate-800" x-text="c.model || c.name"></span>
                                             <span x-show="c.type || c.size || c.qty > 1" class="block text-xs text-slate-600" x-text="[c.type, c.size ? 'ขนาด ' + c.size : '', c.qty > 1 ? c.qty + ' ตู้' : ''].filter(Boolean).join(' · ')"></span>
                                         </span>
-                                        <span class="text-right text-xs font-semibold leading-tight" :class="c.packed ? 'text-emerald-700' : 'text-slate-500'">
-                                            <span class="block" x-text="c.packed ? 'ห่อแล้ว' : 'ยังไม่ห่อ'"></span>
+                                        <span class="text-right text-xs font-semibold leading-tight" :class="c.packed ? 'text-emerald-700' : (c.left > 0 ? 'text-amber-700' : 'text-slate-500')">
+                                            <span class="block" x-text="c.packed ? 'ห่อแล้ว' : (c.left > 0 ? 'ผลิตยังไม่เสร็จ' : 'ยังไม่ห่อ')"></span>
+                                            <span x-show="!c.packed && c.left > 0" class="block font-normal" x-text="'Checklist เหลือ ' + c.left"></span>
                                             <span x-show="c.packed && c.at" class="block font-normal tabular-nums" x-text="c.at"></span>
                                         </span>
                                     </button>
@@ -321,8 +330,8 @@
                                 {{-- ห่อตู้ --}}
                                 <template x-if="cabStep === 'pack'">
                                     <div class="contents">
-                                        <span class="min-w-0 flex-1 text-xs text-slate-500" aria-live="polite" x-text="cab.saving ? 'กำลังบันทึก…' : 'กดที่ตู้เพื่อห่อ / เอาออก · แจ้งเปิดบิลได้เมื่อห่อครบ'"></span>
-                                        <button type="button" @click="packCabs(cab.list, true)" class="inline-flex h-11 items-center rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800" x-text="'ห่อครบที่เหลือ (' + cabCount('todo') + ')'"></button>
+                                        <span class="min-w-0 flex-1 text-xs text-slate-500" aria-live="polite" x-text="cab.saving ? 'กำลังบันทึก…' : 'กดที่ตู้เพื่อห่อ / เอาออก · ห่อได้เมื่อ Checklist ของตู้ครบ · แจ้งเปิดบิลได้เมื่อห่อครบ'"></span>
+                                        <button type="button" @click="packCabs(cab.list, true)" :disabled="!cabCount('ready')" class="inline-flex h-11 items-center rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50" x-text="'ห่อที่พร้อม (' + cabCount('ready') + ')'"></button>
                                     </div>
                                 </template>
                                 {{-- แจ้งเปิดบิล --}}
@@ -530,6 +539,7 @@
                     </div>
                     <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 rounded-xl bg-slate-50 p-3 text-sm">
                         <dt class="text-slate-600">ส่งถึง</dt><dd class="font-semibold text-slate-900" x-text="rv.delivered"></dd>
+                        <dt class="text-slate-600">เลข IV</dt><dd class="font-semibold text-slate-900" x-text="rv.invoice_no || '-'"></dd>
                         <dt class="text-slate-600">ตู้</dt><dd class="font-semibold text-slate-900" x-text="rv.cabinets.length + ' ตู้'"></dd>
                         <dt class="text-slate-600">รูป / ไฟล์</dt><dd class="font-semibold text-slate-900" x-text="rv.files.length ? rv.files.length + ' ไฟล์' : 'ไม่มี'"></dd>
                         <dt class="text-slate-600">หมายเหตุ</dt><dd class="whitespace-pre-line break-words text-slate-900" x-text="rv.issue || '-'"></dd>
@@ -682,14 +692,15 @@
                     <p x-show="r.review" class="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-inset ring-amber-200">
                         <span x-text="'คนขับแจ้งส่งถึง ' + r.review"></span><span class="block font-normal">ตรวจข้อมูลด้านล่าง · บันทึกแล้วนับว่าตรวจแล้ว และแจ้ง PM</span></p>
 
+                    {{-- the day and time it arrived in one field (dd/mm/yyyy HH:mm, พ.ศ.), and the invoice's number --}}
                     <div class="grid grid-cols-2 gap-3">
-                        <label class="block text-sm font-semibold text-slate-800">ส่งถึงวันที่ *
-                            <input type="date" name="delivered_date" x-model="dlv.date" required class="{{ $field }}">
-                        </label>
-                        <label class="block text-sm font-semibold text-slate-800">เวลา
-                            <input type="text" name="delivered_time" x-model="dlv.time" placeholder="เช่น 10:40" inputmode="numeric" maxlength="5" autocomplete="off"
-                                   x-init="window.flatpickr($el, { enableTime: true, noCalendar: true, dateFormat: 'H:i', time_24hr: true, allowInput: true, defaultDate: dlv.time || null, onChange: (d, v) => { dlv.time = v; } })"
+                        <label class="block text-sm font-semibold text-slate-800">ส่งถึงวันที่ / เวลา *
+                            <input type="text" name="delivered_at" required autocomplete="off" placeholder="วว/ดด/ปปปป ชช:นน"
+                                   x-init="window.thaiDateTime($el, dlv.at, (v) => { dlv.at = v; })"
                                    class="{{ $field }} tabular-nums">
+                        </label>
+                        <label class="block text-sm font-semibold text-slate-800">เลข IV
+                            <input type="text" name="invoice_no" x-model="dlv.iv" maxlength="50" autocomplete="off" placeholder="เช่น IV2611-0012" class="{{ $field }} tabular-nums">
                         </label>
                     </div>
 
@@ -730,24 +741,24 @@
                                        @click="if (f.kind) { $event.preventDefault(); $dispatch('pmo-file', { url: f.url, name: f.name, kind: f.kind }) }"
                                        class="block aspect-square w-full overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-900/10 transition-shadow duration-150 hover:ring-2 hover:ring-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2">
                                         <template x-if="f.kind === 'image'"><img :src="f.url" alt="" loading="lazy" decoding="async" class="h-full w-full object-cover"></template>
-                                        <template x-if="f.kind !== 'image'"><span class="flex h-full w-full flex-col items-center justify-center gap-0.5 text-slate-500"><svg class="h-[42%] w-[42%]" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg><span class="text-[10px] font-bold leading-none tracking-wide text-slate-600" x-text="f.ext"></span></span></template>
+                                        <template x-if="f.kind !== 'image'"><span class="flex h-full w-full flex-col items-center justify-center gap-0.5 text-slate-500"><svg class="h-[42%] w-[42%]" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg><span class="text-xs font-bold leading-none tracking-wide text-slate-600" x-text="f.ext"></span></span></template>
                                     </a>
-                                    <p class="mt-1 truncate text-[11px] leading-tight text-slate-600" :title="f.name" x-text="f.name"></p>
+                                    <p class="mt-1 truncate text-xs leading-tight text-slate-600" :title="f.name" x-text="f.name"></p>
                                 </li>
                             </template>
                             <template x-for="(f, i) in dlv.files" :key="'n' + i">
                                 <li class="min-w-0">
                                     <div class="relative aspect-square w-full overflow-hidden rounded-lg bg-teal-50 ring-2 ring-teal-600">
                                         <template x-if="f.preview"><img :src="f.preview" alt="" class="h-full w-full object-cover"></template>
-                                        <template x-if="!f.preview"><span class="flex h-full w-full flex-col items-center justify-center gap-0.5 text-teal-700"><svg class="h-[42%] w-[42%]" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg><span class="text-[10px] font-bold leading-none tracking-wide" x-text="f.ext"></span></span></template>
-                                        <span class="absolute left-1 top-1 rounded bg-teal-700 px-1 text-[10px] font-bold leading-4 text-white">ใหม่</span>
+                                        <template x-if="!f.preview"><span class="flex h-full w-full flex-col items-center justify-center gap-0.5 text-teal-700"><svg class="h-[42%] w-[42%]" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg><span class="text-xs font-bold leading-none tracking-wide" x-text="f.ext"></span></span></template>
+                                        <span class="absolute left-1 top-1 rounded bg-teal-700 px-1 text-xs font-bold leading-4 text-white">ใหม่</span>
                                         {{-- take this one out (the others stay) --}}
                                         <button type="button" @click="dropFile(i, $el.closest('form').querySelector('input[name=&quot;files[]&quot;]'))" :aria-label="'เอา ' + f.name + ' ออก'"
                                                 class="absolute right-0 top-0 flex h-11 w-11 items-start justify-end p-1 focus-visible:outline-none">
                                             <span class="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900/75 text-white ring-2 ring-white" aria-hidden="true"><svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" viewBox="0 0 24 24"><path d="M6 18 18 6M6 6l12 12"/></svg></span>
                                         </button>
                                     </div>
-                                    <p class="mt-1 truncate text-[11px] leading-tight text-slate-600" :title="f.name + ' · ' + f.size" x-text="f.name"></p>
+                                    <p class="mt-1 truncate text-xs leading-tight text-slate-600" :title="f.name + ' · ' + f.size" x-text="f.name"></p>
                                 </li>
                             </template>
                         </ul>

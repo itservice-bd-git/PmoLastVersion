@@ -1,18 +1,12 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">ตั้งค่า</h2>
+        <h1 class="text-lg font-semibold text-slate-900">ตั้งค่า</h1>
     </x-slot>
 
-    <div class="max-w-none mx-auto">
-        <x-settings-nav />
+    <x-settings-layout>
 
-        @if (auth()->user()->isAdmin())
-            @php
-                $pushKeys = (bool) (config('services.webpush.public_key') && config('services.webpush.private_key'));
-                $https = request()->isSecure();
-                $devices = \App\Models\PushSubscription::count();
-                $emptyDepts = \App\Models\Department::where('is_active', true)->whereDoesntHave('users', fn ($q) => $q->where('is_active', true))->orderBy('name')->pluck('name');
-            @endphp
+        @if ($readiness)
+            @php ['pushKeys' => $pushKeys, 'https' => $https, 'devices' => $devices, 'emptyDepts' => $emptyDepts] = $readiness; @endphp
             <x-card title="ความพร้อมของระบบแจ้งเตือน (Admin)" class="mb-4">
                 <ul class="space-y-1.5 text-sm">
                     <li>{{ $https ? '✅' : '⚠️' }} เว็บเปิดผ่าน https {{ $https ? '' : '— ต้องมี https ถึงจะใช้แจ้งเตือนตอนปิดแอปได้' }}</li>
@@ -26,7 +20,7 @@
 
         {{-- this device: notices when the app is closed (web push). Needs https and the server's VAPID keys. --}}
         <x-card title="แจ้งเตือนบนเครื่องนี้ (ตอนปิดแอป)" subtitle="เปิดแล้ว การแจ้งเตือนที่เข้ากระดิ่งจะเด้งบนเครื่องนี้ด้วย แม้ไม่ได้เปิดหน้าเว็บ — ตั้งแยกทีละเครื่อง / เบราว์เซอร์" class="mb-4">
-            <div x-data="pushDevice(@js(['key' => config('services.webpush.public_key'), 'sw' => asset('sw.js'), 'subscribe' => route('push.subscribe'), 'test' => route('push.test')]))" x-init="init()" class="space-y-2 text-sm">
+            <div x-data="pushDevice(@js(['key' => config('services.webpush.public_key'), 'sw' => asset('sw.js'), 'subscribe' => route('push.subscribe'), 'test' => route('push.test')]))" class="space-y-2 text-sm">
                 <p x-text="message" :class="ok ? 'text-emerald-700' : 'text-slate-600'"></p>
                 <div class="flex flex-wrap gap-2">
                     <button type="button" x-show="supported && !on" @click="enable()" :disabled="busy" class="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">เปิดการแจ้งเตือนบนเครื่องนี้</button>
@@ -70,5 +64,5 @@
                 </div>
             </form>
         </x-card>
-    </div>
+    </x-settings-layout>
 </x-app-layout>

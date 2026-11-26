@@ -27,6 +27,7 @@
                 } catch (e) { /* ignore - private mode / blocked storage, falls back to expanded */ }
             })();
         </script>
+        @stack('head')
     </head>
     <body class="font-sans antialiased bg-slate-50 text-slate-800">
         <div class="min-h-screen flex"
@@ -88,11 +89,11 @@
                             {{-- the bell: drawn from the server's data, then asks again every 15 s (and when the tab comes back), so new
                                  notices show without a reload; a new urgent one (tag / alert / new work / overdue) opens the alert window.
                                  Opening it = "เห็นแล้ว" (the red number resets); "ต้องทำ" waits for "รับทราบ" (NotificationController) --}}
-                            <div class="relative" x-data="pmoBell(@js(['feed' => \App\Http\Controllers\NotificationController::feedFor(auth()->user()), 'url' => route('notifications.feed'), 'read' => route('notifications.read', ['id' => '__ID__']), 'ack' => route('notifications.ack', ['id' => '__ID__']), 'seen' => route('notifications.seen'), 'ackAll' => route('notifications.read-all')]))"
-                                 x-init="init()" @click.outside="close()" @keydown.escape.window="close()" @pmo-bell-refresh.window="refresh()">
+                            <div class="relative" x-data="pmoBell(@js(['feed' => $bellFeed, 'url' => route('notifications.feed'), 'read' => route('notifications.read', ['id' => '__ID__']), 'ack' => route('notifications.ack', ['id' => '__ID__']), 'seen' => route('notifications.seen'), 'ackAll' => route('notifications.read-all')]))"
+                                 @click.outside="close()" @keydown.escape.window="close()" @pmo-bell-refresh.window="refresh()">
                                 <button type="button" @click="toggle()" class="relative inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700" aria-label="การแจ้งเตือน" :aria-expanded="open">
                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0" /></svg>
-                                    <span x-show="feed.unread > 0" x-cloak class="absolute right-1 top-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[11.5px] font-semibold leading-4 text-center" x-text="feed.unread > 99 ? '99+' : feed.unread"></span>
+                                    <span x-show="feed.unread > 0" x-cloak class="absolute right-1 top-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-xs font-semibold leading-4 text-center" x-text="feed.unread > 99 ? '99+' : feed.unread"></span>
                                 </button>
                                 <div x-show="open" x-cloak x-transition.origin.top.right class="fixed inset-x-2 top-16 z-50 flex max-h-[calc(100dvh-5rem)] flex-col sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:max-h-none sm:w-[26rem] rounded-xl border border-slate-200 bg-white shadow-xl">
                                     <div class="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
@@ -136,7 +137,7 @@
                                                         <button class="flex w-full items-start gap-2.5 px-4 py-2.5 text-left hover:bg-slate-50">
                                                             <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full" :class="isNew(n) ? 'bg-orange-500' : ''"></span>
                                                             <span class="min-w-0">
-                                                                <span class="flex items-center gap-1.5"><span class="text-sm font-semibold text-slate-900" x-text="n.title"></span><span x-show="isNew(n)" class="rounded bg-orange-100 px-1.5 text-[11px] font-bold text-orange-800">ใหม่</span></span>
+                                                                <span class="flex items-center gap-1.5"><span class="text-sm font-semibold text-slate-900" x-text="n.title"></span><span x-show="isNew(n)" class="rounded bg-orange-100 px-1.5 text-xs font-bold text-orange-800">ใหม่</span></span>
                                                                 <span class="block text-xs text-slate-600 line-clamp-2" x-text="n.body"></span>
                                                                 <span x-show="n.latest" class="block text-[12px] text-slate-400 truncate" x-text="'ล่าสุด: ' + n.latest"></span>
                                                                 <span class="block text-[12px] text-slate-400" x-text="n.at"></span>
@@ -193,7 +194,8 @@
                     </div>
                 @endif
 
-                <main class="flex-1 p-4 sm:p-6 lg:p-8">
+                {{-- every Settings page (and the trash, the templates): touch-sized controls on a touch screen (app.css [data-touch]) --}}
+                <main class="flex-1 p-4 sm:p-6 lg:p-8" @if (request()->routeIs('settings.*', 'trash.*', 'cabinet-templates.*')) data-touch @endif>
                     {{ $slot }}
                 </main>
             </div>

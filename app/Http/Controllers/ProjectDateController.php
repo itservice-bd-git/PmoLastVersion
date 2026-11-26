@@ -6,6 +6,7 @@ use App\Models\Cabinet;
 use App\Models\Project;
 use App\Models\ProjectDateChange;
 use App\Services\ProjectDates;
+use App\Services\ProjectPage;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -21,9 +22,9 @@ class ProjectDateController extends Controller
     }
 
     /** The project's "เลื่อน / แก้วัน" windows on their own, for Planning's project window to open (it saves through store()). */
-    public function form(Project $project, ProjectDates $dates)
+    public function form(Project $project, ProjectDates $dates, ProjectPage $page)
     {
-        return view('projects.partials._dates', ['subject' => $project, 'dates' => $dates->summary($project), 'canDates' => true]);
+        return view('projects.partials._dates', ['subject' => $project, 'dates' => $dates->summary($project), 'canDates' => true] + $page->dateWindow($project, true));
     }
 
     public function storeCabinet(Request $request, Cabinet $cabinet, ProjectDates $dates)

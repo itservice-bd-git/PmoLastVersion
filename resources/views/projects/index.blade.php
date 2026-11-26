@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">โครงการ</h2>
+        <h1 class="text-lg font-semibold text-slate-900">โครงการ</h1>
     </x-slot>
 
     @php
@@ -18,17 +18,17 @@
         };
     @endphp
 
-    <div class="max-w-screen-2xl mx-auto space-y-4">
+    <div data-touch class="-mx-2 sm:-mx-3 lg:-mx-4 space-y-4">
 
         {{-- toolbar, in Planning's style: search, a segmented status switch, the ⚑ priority buttons --}}
         <div class="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <form method="GET" class="relative min-w-0 flex-1 basis-64 sm:max-w-xs">
-                @foreach (['status' => $status, 'priority' => $priority, 'due' => $filters['due'] ?? ''] as $k => $v)
+                @foreach (['status' => $status, 'priority' => $priority, 'due' => $filters['due'] ?? '', 'team' => $filters['team'] ?? ''] as $k => $v)
                     @if ($v)<input type="hidden" name="{{ $k }}" value="{{ $v }}">@endif
                 @endforeach
                 <label for="project-search" class="sr-only">ค้นหาโครงการ</label>
                 <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="m20 20-3.5-3.5"/></svg>
-                <input id="project-search" type="search" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ค้นหาเลขโครงการ / ชื่อ / ลูกค้า…"
+                <input id="project-search" type="search" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ค้นหาเลขโครงการ / เลข AVT / ชื่อ / ลูกค้า…"
                        class="w-full rounded-lg border-slate-300 pl-9 text-sm focus:border-blue-500 focus:ring-blue-500">
             </form>
 
@@ -51,6 +51,28 @@
                 @endforeach
             </div>
 
+            {{-- ทีม: the projects of one team (its sales person's team); shown once a department has teams (Settings › แผนก) --}}
+            @if ($teams->isNotEmpty())
+                <form method="GET" x-data class="flex items-center gap-1.5">
+                    @foreach (['q' => $filters['q'] ?? '', 'status' => $status, 'priority' => $priority, 'due' => $filters['due'] ?? ''] as $k => $v)
+                        @if ($v)<input type="hidden" name="{{ $k }}" value="{{ $v }}">@endif
+                    @endforeach
+                    <label for="project-team" class="text-sm font-semibold text-slate-600">ทีม</label>
+                    <select id="project-team" name="team" @change="$el.form.submit()"
+                            class="rounded-lg border-slate-300 py-1.5 text-sm {{ ($filters['team'] ?? '') ? 'border-blue-400 bg-blue-50 font-semibold text-blue-700' : '' }}">
+                        <option value="">ทุกทีม</option>
+                        @foreach ($teams->groupBy(fn ($t) => $t->department?->name) as $dept => $list)
+                            <optgroup label="{{ $dept }}">
+                                @foreach ($list as $team)
+                                    <option value="{{ $team->id }}" @selected((string) ($filters['team'] ?? '') === (string) $team->id)>{{ $team->name }}</option>
+                                @endforeach
+                            </optgroup>
+                        @endforeach
+                    </select>
+                    <noscript><button class="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">กรอง</button></noscript>
+                </form>
+            @endif
+
             @if ($chip)
                 <a href="{{ $link($chip[1]) }}" class="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-100" title="เอาตัวกรองนี้ออก">
                     เฉพาะ{{ $chip[0] }} <span aria-hidden="true">×</span><span class="sr-only">เอาตัวกรองออก</span>
@@ -59,7 +81,7 @@
 
             <div class="ml-auto flex items-center gap-2">
                 @if (auth()->user()->allows('page.export'))
-                    <a href="{{ route('projects.export', $filters) }}" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Export CSV</a>
+                    <a href="{{ route('projects.export', $filters) }}" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">ดาวน์โหลด CSV</a>
                 @endif
                 @editplan
                     <a href="{{ route('projects.create') }}" class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
@@ -80,11 +102,12 @@
                         <tr class="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold text-slate-500">
                             <th class="sticky left-0 z-[1] bg-slate-50 py-2.5 pl-5 pr-3">โครงการ</th>
                             <th class="whitespace-nowrap px-3 py-2.5">ลูกค้า</th>
+                            <th class="whitespace-nowrap px-3 py-2.5">ทีมขาย</th>
                             <th class="whitespace-nowrap px-3 py-2.5">ประเภทงาน</th>
-                            <th class="whitespace-nowrap px-3 py-2.5">กำหนดส่ง</th>
                             <th class="whitespace-nowrap px-3 py-2.5">FAT</th>
+                            <th class="whitespace-nowrap px-3 py-2.5">กำหนดส่ง</th>
                             <th class="whitespace-nowrap px-3 py-2.5">สถานะ</th>
-                            <th class="whitespace-nowrap px-3 py-2.5">แผนก</th>
+                            <th class="whitespace-nowrap px-3 py-2.5">เลข AVT</th>
                             <th class="w-24 min-w-[6rem] whitespace-nowrap px-3 py-2.5">การผลิต</th>
                             <th class="whitespace-nowrap px-3 py-2.5 pr-4 text-right">ตู้</th>
                         </tr>
@@ -94,7 +117,6 @@
                             @php
                                 $color = \App\Services\PlanningBoard::statusColor($project->status);
                                 $done = in_array($project->status, [\App\Models\Project::STATUS_COMPLETED, \App\Models\Project::STATUS_CANCELLED], true);
-                                $depts = $projectDepartments[$project->id] ?? [];
                             @endphp
                             <tr class="group cursor-pointer hover:bg-blue-50/40" onclick="window.location='{{ route('projects.show', $project) }}'">
                                 <td class="sticky left-0 z-[1] bg-white py-3 pl-5 pr-3 group-hover:bg-[#f6f9fe]">
@@ -110,19 +132,15 @@
                                     </div>
                                 </td>
                                 <td class="min-w-[8.5rem] max-w-[11rem] px-3 py-3 text-slate-600"><span class="line-clamp-2" title="{{ $project->customer_name }}">{{ $project->customer_name }}</span></td>
-                                <td class="whitespace-nowrap px-3 py-3 text-slate-600">{{ $project->jobType?->name ?? '-' }}</td>
+                                {{-- ทีมขาย: the team of the project's sales person (Settings › แผนก) --}}
                                 <td class="whitespace-nowrap px-3 py-3">
-                                    @unless ($project->isDuePending())<div class="tabular-nums text-slate-700">{{ optional($project->due_date)->thaiDate() ?? '-' }}</div>@endunless
-                                    @if ($project->due_date && ! $done && $project->isDuePending())
-                                        {{-- รอฝ่ายขายแจ้งกำหนดส่ง (ProjectDates): put off with no new date yet - not late, nothing counted --}}
-                                        <span class="mt-0.5 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-[12px] font-semibold text-indigo-800">{{ $project->duePendingLabel() }}</span>
-                                    @elseif ($project->due_date && ! $done)
-                                        @php $days = $project->days_remaining; @endphp
-                                        <span data-countdown class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold {{ $days < 0 ? 'bg-red-100 text-red-700' : ($days <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500') }}">
-                                            {{ $days < 0 ? 'เลยกำหนด '.abs($days).' วัน' : ($days === 0 ? 'ครบกำหนดวันนี้' : 'เหลือ '.$days.' วัน') }}
-                                        </span>
+                                    @if ($team = $project->salesPerson?->team?->name)
+                                        <span class="inline-flex rounded-full bg-[#eef2ff] px-2 py-0.5 text-xs font-medium text-[#3730a3] ring-1 ring-inset ring-[#c7d2fe]">{{ $team }}</span>
+                                    @else
+                                        <span class="text-slate-400">-</span>
                                     @endif
                                 </td>
+                                <td class="whitespace-nowrap px-3 py-3 text-slate-600">{{ $project->jobType?->name ?? '-' }}</td>
                                 {{-- วัน FAT: the latest round (ProjectFatController), as in หน้าโครงการ's FAT card --}}
                                 <td class="whitespace-nowrap px-3 py-3">
                                     @if ($fat = $project->latestFat)
@@ -137,19 +155,20 @@
                                         <span class="text-slate-400">-</span>
                                     @endif
                                 </td>
-                                <td class="whitespace-nowrap px-3 py-3"><x-project-status :status="$project->status" /></td>
-                                <td class="min-w-[4.5rem] px-3 py-3">
-                                    @if ($depts)
-                                        <div class="flex items-center" title="{{ collect($depts)->map(fn ($d) => $departmentNames[$d] ?? '')->implode(', ') }}">
-                                            @foreach (array_slice($depts, 0, 6) as $deptId)
-                                                <span class="-ml-1 h-3.5 w-3.5 rounded-full ring-2 ring-white first:ml-0" style="background: {{ $departmentColors[$deptId] ?? '#94a3b8' }}"></span>
-                                            @endforeach
-                                            @if (count($depts) > 6)<span class="ml-1.5 text-xs font-medium text-slate-500">+{{ count($depts) - 6 }}</span>@endif
-                                        </div>
-                                    @else
-                                        <span class="text-xs leading-tight text-slate-400">ยังไม่จ่ายงาน</span>
+                                <td class="whitespace-nowrap px-3 py-3">
+                                    @unless ($project->isDuePending())<div class="tabular-nums text-slate-700">{{ optional($project->due_date)->thaiDate() ?? '-' }}</div>@endunless
+                                    @if ($project->due_date && ! $done && $project->isDuePending())
+                                        {{-- รอฝ่ายขายแจ้งกำหนดส่ง (ProjectDates): put off with no new date yet - not late, nothing counted --}}
+                                        <span class="mt-0.5 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-[12px] font-semibold text-indigo-800">{{ $project->duePendingLabel() }}</span>
+                                    @elseif ($project->due_date && ! $done)
+                                        @php $days = $project->days_remaining; @endphp
+                                        <span data-countdown class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[12px] font-semibold {{ $days < 0 ? 'bg-red-100 text-red-700' : ($days <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500') }}">
+                                            {{ $days < 0 ? 'เลยกำหนด '.abs($days).' วัน' : ($days === 0 ? 'ครบกำหนดวันนี้' : 'เหลือ '.$days.' วัน') }}
+                                        </span>
                                     @endif
                                 </td>
+                                <td class="whitespace-nowrap px-3 py-3"><x-project-status :status="$project->status" /></td>
+                                <td class="whitespace-nowrap px-3 py-3 tabular-nums text-slate-600">{{ $project->avt_no ?: '-' }}</td>
                                 <td class="px-3 py-3">
                                     <div class="flex items-center gap-2">
                                         <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
@@ -168,7 +187,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="9" class="px-5 py-10 text-center text-slate-400">ไม่พบโครงการ</td></tr>
+                            <tr><td colspan="10" class="px-5 py-10 text-center text-slate-400">ไม่พบโครงการ</td></tr>
                         @endforelse
                     </tbody>
                 </table>

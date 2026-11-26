@@ -110,12 +110,12 @@
             <li x-show="shown(item)" class="group scroll-mt-24" :id="'checklist-' + item.id" :class="[linked.length ? 'lg:grid lg:grid-cols-2' : '', dragId === item.id ? 'opacity-40' : '', isSelected(item.id) ? 'bg-blue-50/60' : '']"
                 tabindex="-1" @keydown.alt.arrow-up.prevent="nudge(item, -1)" @keydown.alt.arrow-down.prevent="nudge(item, 1)"
                 @dragover.prevent @drop.prevent="drop(item)">
-              <div class="relative flex min-w-0 items-start gap-2 px-2 py-1.5">
-                <input x-show="editable" type="checkbox" :checked="isSelected(item.id)" @change="toggleSelect(item.id)" class="mt-1 h-3.5 w-3.5 shrink-0 rounded border-slate-300" :aria-label="'เลือก ' + item.name">
+              <div class="relative flex min-w-0 items-start gap-2 px-2 py-1.5 [@media(pointer:coarse)]:flex-wrap">
+                <input x-show="editable" type="checkbox" :checked="isSelected(item.id)" @change="toggleSelect(item.id)" class="mt-1 h-3.5 w-3.5 shrink-0 rounded border-slate-300 [@media(pointer:coarse)]:mt-0.5 [@media(pointer:coarse)]:h-6 [@media(pointer:coarse)]:w-6" :aria-label="'เลือก ' + item.name">
                 <span x-show="editable" draggable="true" @dragstart="dragStart($event, item)" @dragend="dragId = null" class="mt-0.5 shrink-0 cursor-grab select-none text-slate-300 hover:text-slate-500" title="ลากเพื่อจัดลำดับ">⋮⋮</span>
                 <template x-if="kind === 'subtask'">
                     {{-- who ticked it and when: on hover, not a line of its own --}}
-                    <input type="checkbox" :checked="item.done" @change="tick(item, $event.target.checked)" :disabled="!tickable" class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600"
+                    <input type="checkbox" :checked="item.done" @change="tick(item, $event.target.checked)" :disabled="!tickable" class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600 [@media(pointer:coarse)]:h-7 [@media(pointer:coarse)]:w-7"
                            :title="item.done && item.doneBy ? '✓ ' + item.doneBy + (item.doneAt ? ' · ' + item.doneAt : '') : ''" :aria-label="'ทำแล้ว: ' + item.name">
                 </template>
                 <div class="min-w-0 flex-1">
@@ -147,7 +147,7 @@
                               class="cursor-text whitespace-pre-line rounded bg-amber-50 px-1.5 py-0.5 text-[13px] text-amber-900" x-text="item.remark" title="หมายเหตุ (คลิกเพื่อแก้)"></span>
                         <template x-if="dateLabel">
                             <span class="inline-flex items-center gap-1 text-[13px] font-medium text-slate-700">📦 <span x-text="dateLabel"></span>
-                                <input type="date" :value="item.date || ''" :disabled="!editable" @change="send({ type: 'update', id: item.id, date: $event.target.value }, { quiet: true })"
+                                <input type="date" :value="item.date || ''" :disabled="!editable" @change="send({ type: 'update', id: item.id, date: $event.target.value }, { quiet: true })" :aria-label="dateLabel + ' ของ ' + item.name"
                                        class="h-7 rounded border-slate-300 px-1.5 py-0 text-[13px] font-semibold tabular-nums"
                                        :class="item.date ? (item.date < today ? 'border-red-300 bg-red-50 text-red-700' : 'border-amber-300 bg-amber-50 text-amber-900') : 'text-slate-400'"></span>
                         </template>
@@ -192,15 +192,15 @@
                 </div>
                 {{-- statuses: always on the row's right, as the dots after the name (the same panel) --}}
                 <button type="button" x-show="tagOn && editable" @click="openPick(item)" :aria-expanded="picking === item.id" :aria-label="'ติดสถานะให้ ' + item.name" title="ติดสถานะ"
-                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border" :class="picking === item.id ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-800'">
+                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11" :class="picking === item.id ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-800'">
                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9z"/><circle cx="8" cy="8" r="1.5"/></svg></button>
                 {{-- floats over the row on hover so it takes no width (left of the status button) --}}
-                <span x-show="editable" class="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(hover:hover)]:absolute [@media(hover:hover)]:top-1 [@media(hover:hover)]:rounded [@media(hover:hover)]:bg-white [@media(hover:hover)]:shadow-sm [@media(hover:hover)]:ring-1 [@media(hover:hover)]:ring-slate-200"
+                <span x-show="editable" class="flex shrink-0 items-center gap-0.5 [@media(pointer:coarse)]:w-full [@media(pointer:coarse)]:justify-end opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(hover:hover)]:absolute [@media(hover:hover)]:top-1 [@media(hover:hover)]:rounded [@media(hover:hover)]:bg-white [@media(hover:hover)]:shadow-sm [@media(hover:hover)]:ring-1 [@media(hover:hover)]:ring-slate-200"
                       :class="tagOn ? '[@media(hover:hover)]:right-11' : '[@media(hover:hover)]:right-1'">
-                    <button type="button" x-show="!item.remark" @click="startEdit(item, 'remark')" class="px-1 text-slate-400 hover:text-blue-600" title="เพิ่มหมายเหตุ" aria-label="เพิ่มหมายเหตุ">📝</button>
-                    <button type="button" @click="nudge(item, -1)" class="px-1 text-slate-400 hover:text-slate-800" title="ขึ้น (Alt+↑)" aria-label="ย้ายขึ้น">↑</button>
-                    <button type="button" @click="nudge(item, 1)" class="px-1 text-slate-400 hover:text-slate-800" title="ลง (Alt+↓)" aria-label="ย้ายลง">↓</button>
-                    <button type="button" x-show="!item.from" @click="remove([item.id])" class="rounded px-1 text-red-500 hover:bg-red-50" title="ลบ" aria-label="ลบรายการ">✕</button>
+                    <button type="button" x-show="!item.remark" @click="startEdit(item, 'remark')" class="px-1 text-slate-400 hover:text-blue-600 [@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:justify-center" title="เพิ่มหมายเหตุ" aria-label="เพิ่มหมายเหตุ">📝</button>
+                    <button type="button" @click="nudge(item, -1)" class="px-1 text-slate-400 hover:text-slate-800 [@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:justify-center" title="ขึ้น (Alt+↑)" aria-label="ย้ายขึ้น">↑</button>
+                    <button type="button" @click="nudge(item, 1)" class="px-1 text-slate-400 hover:text-slate-800 [@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:justify-center" title="ลง (Alt+↓)" aria-label="ย้ายลง">↓</button>
+                    <button type="button" x-show="!item.from" @click="remove([item.id])" class="rounded px-1 text-red-500 hover:bg-red-50 [@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:justify-center" title="ลบ" aria-label="ลบรายการ">✕</button>
                 </span>
               </div>
               <template x-if="linked.length">
@@ -259,7 +259,7 @@
         {{-- add: type one, or paste many (from Excel: name | remark | date) --}}
         <li x-show="editable" class="flex items-center gap-2 px-2 py-1.5">
             <span class="text-slate-300">＋</span>
-            <input x-ref="draft" type="text" x-model="draft" @keydown.enter.prevent="addDraft()" @paste="onPaste($event)" maxlength="2000"
+            <input x-ref="draft" type="text" x-model="draft" aria-label="เพิ่มรายการ Checklist" @keydown.enter.prevent="addDraft()" @paste="onPaste($event)" maxlength="2000"
                    placeholder="พิมพ์เพื่อเพิ่มรายการ แล้วกด Enter — วางจาก Excel ได้หลายแถว" class="min-w-0 flex-1 border-0 px-0 py-0.5 text-sm placeholder:text-slate-400 focus:ring-0">
             <button type="button" @click="openDialog('copyFrom')" class="shrink-0 text-xs font-medium text-blue-600 hover:underline" x-text="kind === 'subtask' ? 'คัดลอกจาก Sub Task อื่น' : 'ใส่ชุดจาก Sub Task อื่น'"></button>
         </li>

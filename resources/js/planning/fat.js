@@ -10,7 +10,7 @@ export default ({ config, board, starKey, loadStars, t0 }) => ({
     evState(group, key) { return (this.evs[group] || {})[key] || { name: key, color: '#64748b' }; },
     fatState(t) { return t.fat.status !== 'scheduled' ? t.fat.status : this.fatLate(t) ? 'late' : 'scheduled'; },
     fatColor(t) { return this.evState('fat', this.fatState(t)).color; },
-    fatTag() { return 'st-tag shrink-0 rounded px-1 text-[11px] font-extrabold tracking-wide'; },
+    fatTag() { return 'st-tag shrink-0 rounded px-1 text-xs font-extrabold tracking-wide'; },
     // a round waiting with its project for sales to give the dates (ProjectDates): said instead of its state
     fatStatus(t) { return t.fat.pending ? 'รอฝ่ายขายแจ้งกำหนดส่ง' : this.evState('fat', t.fat.status).name; },
     fatPill() { return 'st-pill'; },

@@ -10,6 +10,7 @@ use App\Models\Department;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\CabinetCopyService;
+use App\Services\CabinetPage;
 use App\Services\CabinetTemplateService;
 use App\Services\CommentAttachmentUploader;
 use App\Services\Remarks;
@@ -115,7 +116,7 @@ class CabinetController extends Controller
             ->with('success', "คัดลอกตู้ไฟฟ้าเรียบร้อยแล้ว - ตู้ใหม่: {$newCabinet->mo_no}");
     }
 
-    public function show(Request $request, Cabinet $cabinet)
+    public function show(Request $request, Cabinet $cabinet, CabinetPage $page)
     {
         $cabinet->load([
             'project',
@@ -129,7 +130,10 @@ class CabinetController extends Controller
         ]);
 
         WorkScope::trimCabinet($cabinet, $request->user());   // only their own department's work, unless they may see all
-        $cabinet->tasks->each(fn ($task) => $task->setRelation('cabinet', $cabinet));
+        $cabinet->tasks->each(function ($task) use ($cabinet) {   // each Sub Task knows its Task and cabinet without asking again
+            $task->setRelation('cabinet', $cabinet);
+            $task->subtasks->each->setRelation('cabinetTask', $task);
+        });
 
         $comments = ActivityLog::where('loggable_type', Cabinet::class)
             ->where('loggable_id', $cabinet->id)
@@ -151,7 +155,7 @@ class CabinetController extends Controller
             'users' => User::orderBy('name')->get(),
             'comments' => $comments,
             'remarks' => Remarks::forCabinet($cabinet),   // the "หมายเหตุ" tab: only the work this user sees (trimmed above)
-        ]);
+        ] + $page->build($cabinet, $request->user()));
     }
 
     public function edit(Cabinet $cabinet)

@@ -84,7 +84,7 @@ class SettingsHubTest extends TestCase
     public function test_only_admins_see_and_open_the_admin_tabs(): void
     {
         $member = $this->user($this->busbar);
-        $this->actingAs($member)->get(route('settings.notifications.edit'))->assertOk()->assertDontSee('กฎการทำงาน')->assertDontSee('Automation');
+        $this->actingAs($member)->get(route('settings.notifications.edit'))->assertOk()->assertDontSee('กฎการทำงาน')->assertDontSee('งานอัตโนมัติ');
         $this->actingAs($member)->get(route('settings.rules.edit'))->assertStatus(403);
         $this->actingAs($member)->put(route('settings.rules.update'), ['cross_mention' => 1])->assertStatus(403);
         $this->assertFalse(AppSetting::get('cross_mention'));
@@ -422,15 +422,21 @@ class SettingsHubTest extends TestCase
     /** Every page with the settings tab bar uses the same width, so switching tabs never moves the bar or the content edge. */
     public function test_every_settings_page_uses_the_full_width(): void
     {
+        // every page goes through x-settings-layout (the menu beside / above the page); only that component draws the menu
         $pages = 0;
         foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(resource_path('views'))) as $file) {
             $html = $file->isFile() ? file_get_contents($file->getPathname()) : '';
-            if (! str_contains($html, '<x-settings-nav />')) {
+            if (str_contains($file->getPathname(), 'components/settings-layout')) {
                 continue;
             }
-            $pages++;
-            $this->assertMatchesRegularExpression('#<div class="max-w-none mx-auto[^"]*">[^\n]*\s*<x-settings-nav />#', $html, $file->getPathname());   // full width, every one
+            $this->assertStringNotContainsString('<x-settings-nav />', $html, $file->getPathname().': use <x-settings-layout>');
+            $pages += str_contains($html, '<x-settings-layout') ? 1 : 0;
         }
         $this->assertGreaterThanOrEqual(18, $pages);
+
+        // full width: no max-w-* cap on the layout
+        $layout = file_get_contents(resource_path('views/components/settings-layout.blade.php'));
+        $this->assertStringContainsString('<x-settings-nav />', $layout);
+        $this->assertDoesNotMatchRegularExpression('/\bmax-w-(?!none)/', $layout);
     }
 }

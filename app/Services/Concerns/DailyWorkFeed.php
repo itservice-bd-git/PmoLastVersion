@@ -88,8 +88,11 @@ trait DailyWorkFeed
             ->get(['id', 'project_id', 'mo_no', 'cabinet_name', 'quantity', 'created_at']);
     }
 
-    /** The work these departments hold right now; a closed project's is finished business, as on the dashboard. */
-    private function pendingSubtasks(array $departmentIds): Collection
+    /**
+     * The work these departments hold right now; a closed project's is finished business, as on the dashboard.
+     * $withCabinets: also its cabinet (project, quantity) - the page by project groups by it.
+     */
+    private function pendingSubtasks(array $departmentIds, bool $withCabinets = false): Collection
     {
         if ($departmentIds === []) {
             return collect();
@@ -100,7 +103,8 @@ trait DailyWorkFeed
             ->whereIn('assignment_status', self::PENDING_ASSIGNMENT_STATUSES)
             ->notDone()
             ->whereHas('cabinetTask.cabinet.project', fn ($query) => $query->whereNotIn('status', [Project::STATUS_COMPLETED, Project::STATUS_CANCELLED]))
-            ->get(['id', 'department_id', 'assignment_status', 'status', 'due_date', 'is_active']);
+            ->when($withCabinets, fn ($query) => $query->with(['cabinetTask:id,cabinet_id', 'cabinetTask.cabinet:id,project_id,quantity']))
+            ->get(['id', 'cabinet_task_id', 'department_id', 'assignment_status', 'status', 'due_date', 'is_active']);
     }
 
     /** "มีงานเข้า": the pending work not opened yet, per department newest first, as feed events (the page groups them by department) */
@@ -142,6 +146,7 @@ trait DailyWorkFeed
             'date' => $date,
             'departmentId' => $subtask->department_id,
             'title' => (string) $subtask->name,
+            'projectId' => $cabinet?->project_id,
             'projectNo' => (string) $cabinet?->project?->project_no,
             'projectName' => (string) $cabinet?->project?->project_name,
             'detail' => (string) ($cabinet?->mo_no ?: $cabinet?->cabinet_name),
@@ -201,6 +206,7 @@ trait DailyWorkFeed
                 'sortAt' => $cabinet->created_at->getTimestamp(),
                 'departmentId' => null,
                 'title' => (string) $cabinet->cabinet_name,
+                'projectId' => $cabinet->project_id,
                 'projectNo' => (string) $cabinet->project?->project_no,
                 'projectName' => (string) $cabinet->project?->project_name,
                 'detail' => max(1, (int) $cabinet->quantity).' ตู้'.($cabinet->mo_no ? ' · '.$cabinet->mo_no : ''),

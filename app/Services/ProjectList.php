@@ -11,7 +11,7 @@ use Illuminate\Support\Collection;
 /** The โครงการ list page and its CSV: the filters (search / status / priority / due), the order, and the department dots. */
 class ProjectList
 {
-    public const CSV_HEADERS = ['Project No.', 'ชื่อโครงการ', 'ลูกค้า', 'PO No.', 'สถานะ', 'ความสำคัญ', 'Project Manager', 'ประเภทงาน', 'เริ่ม', 'กำหนดส่ง', 'จำนวนตู้', 'ความคืบหน้าการผลิต', 'ความเสี่ยง'];
+    public const CSV_HEADERS = ['Project No.', 'ชื่อโครงการ', 'ลูกค้า', 'PO No.', 'เลข AVT', 'ทีมขาย', 'สถานะ', 'ความสำคัญ', 'Project Manager', 'ประเภทงาน', 'เริ่ม', 'กำหนดส่ง', 'จำนวนตู้', 'ความคืบหน้าการผลิต', 'ความเสี่ยง'];
 
     /** The projects this person may see, narrowed by the list's filters. */
     public function query(Request $request): Builder
@@ -25,7 +25,8 @@ class ProjectList
             $query->where(function ($q) use ($search) {
                 $q->where('project_no', 'like', "%{$search}%")
                     ->orWhere('project_name', 'like', "%{$search}%")
-                    ->orWhere('customer_name', 'like', "%{$search}%");
+                    ->orWhere('customer_name', 'like', "%{$search}%")
+                    ->orWhere('avt_no', 'like', "%{$search}%");
             });
         }
 
@@ -44,6 +45,11 @@ class ProjectList
 
         if (in_array($priority = $request->get('priority'), [Project::PRIORITY_URGENT, Project::PRIORITY_HIGH], true)) {   // the ⚑ ด่วน / ⚑ สูง buttons
             $query->where('priority', $priority);
+        }
+
+        // ทีม: the projects whose sales person is in that team (a project's team is its sales person's)
+        if ($team = (int) $request->get('team')) {
+            $query->whereHas('salesPerson', fn ($q) => $q->where('team_id', $team));
         }
 
         // the dashboard cards "ล่าช้า" / "ตามแผน": in progress and past / not past the due date (Project::scopeRunningLate)
@@ -101,6 +107,8 @@ class ProjectList
             $p->project_name,
             $p->customer_name,
             $p->po_no,
+            $p->avt_no,
+            $p->salesPerson?->team?->name,
             Project::$statuses[$p->status] ?? $p->status,
             Project::$priorities[$p->priority] ?? $p->priority,
             $p->projectManager?->name,

@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Http\Controllers\DeliveryController;
 use App\Http\Controllers\DriverLinkController;
-use App\Http\Controllers\ProjectDeliveryController;
 use App\Models\ActivityLog;
 use App\Models\AppSetting;
 use App\Models\Cabinet;
@@ -20,8 +19,11 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\CommentAttachmentUploader;
 use App\Services\DeliveryBrief;
+use App\Services\DeliveryChecklist;
 use App\Services\DeliveryFlow;
+use App\Services\DeliveryWindow;
 use App\Services\PlanningBoard;
+use App\Services\ProgressService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -93,6 +95,60 @@ class ProjectDeliveryTest extends TestCase
     {
         Carbon::setTestNow();
         parent::tearDown();
+    }
+
+    public function test_everyone_lands_on_the_step_tabs_and_the_calendar_is_the_second_tab(): void
+    {
+        ProjectDelivery::forceCreate(['project_id' => $this->project->id, 'round' => 1, 'delivery_date' => '2026-11-12', 'status' => ProjectDelivery::WAITING,
+            'cabinet_ids' => [$this->cab1->id], 'method' => ProjectDelivery::COMPANY, 'site' => 'โรงงานลูกค้า', 'vehicle_types' => ['รถกระบะ'], 'crew_size' => 2]);
+
+        // two tabs, จัดการรอบส่ง first: PM / Admin and the delivery department alike land on it; ปฏิทินสัปดาห์ when pressed
+        foreach ([$this->admin, $this->clerk] as $user) {
+            $this->actingAs($user)->get(route('deliveries.index'))->assertOk()->assertViewIs('deliveries.index')
+                ->assertSee('id="dl-tabs"', false)->assertSee('โรงงานลูกค้า')->assertSeeInOrder(['จัดการรอบส่ง', 'ปฏิทินสัปดาห์']);
+            $week = $this->actingAs($user)->get(route('deliveries.index', ['view' => 'week']))->assertOk()->assertViewIs('deliveries.week')
+                ->assertSeeInOrder(['จัดการรอบส่ง', 'ปฏิทินสัปดาห์'])->assertSee('9–13 พ.ย. 2569')->assertSee('โรงงานลูกค้า');
+            $this->assertSame([[], [], [], [1], []], array_map(fn ($d) => array_column($d['items'], 'round'), $week->viewData('days')), 'Thursday 12');
+        }
+        // a notice's round and an old tab link: the step tabs
+        $this->actingAs($this->admin)->get(route('deliveries.index', ['tab' => 'waiting']))->assertOk()->assertViewIs('deliveries.index');
+    }
+
+    public function test_a_cabinet_is_made_once_its_checklist_is_ticked_and_it_is_packed(): void
+    {
+        // a production item of cab1 (Task 5 in the template), not ticked yet
+        $t = CabinetTask::forceCreate(['cabinet_id' => $this->cab1->id, 'name' => 'ประกอบตู้', 'status' => 'in_progress', 'progress' => 0, 'sequence' => 5]);
+        $sub = CabinetSubtask::forceCreate(['cabinet_task_id' => $t->id, 'name' => 'ประกอบตู้', 'assignment_status' => 'ACCEPTED', 'status' => 'not_started', 'progress' => 0]);
+        $item = CabinetChecklist::forceCreate(['cabinet_subtask_id' => $sub->id, 'name' => 'ประกอบเสร็จ', 'is_completed' => false, 'sequence' => 1]);
+        $progress = app(ProgressService::class);
+        $state = fn () => [$this->cab1->fresh()->status, $this->cab1->fresh()->progress];
+
+        $d = $this->send();
+        $this->assign($d)->assertSessionHasNoErrors();
+        // its Checklist is not done: it cannot be packed, and it says which cabinet and how many items are left
+        $this->pack($d, [$this->cab1])->assertSessionHasErrors(['delivery' => 'ห่อไม่ได้ · Checklist ยังไม่ครบ: MO-1 (เหลือ 1 รายการ)']);
+        $this->assertFalse($d->fresh()->isPacked($this->cab1->id));
+        $left = app(DeliveryChecklist::class);
+        $this->assertSame([[$this->cab1->id => 1], []], [$left->remaining([$this->cab1->id]), $left->remaining([$this->cab2->id])], 'the delivery steps\' own items do not count');
+        $this->actingAs($this->clerk)->get(route('deliveries.index'))->assertOk();
+
+        $progress->toggleChecklist($item->fresh(), true, $this->pm);
+        $this->assertNotSame('completed', $state()[0], 'ticked, not packed yet');
+        $this->pack($d, [$this->cab1])->assertSessionHasNoErrors();
+        $this->assertSame(['completed', 100], $state(), 'ticked + packed = made, without waiting for the bill, the leaving or the arrival');
+
+        $this->pack($d, [$this->cab1], false)->assertSessionHasNoErrors();
+        $this->assertSame('in_progress', $state()[0], 'unpacked: not made any more');
+    }
+
+    public function test_the_data_fix_completes_the_cabinets_already_made_and_packed(): void
+    {
+        foreach (CabinetChecklist::all() as $c) {   // cab1: packed and every item but the delivery steps ticked; cab2: nothing
+            $c->forceFill(['is_completed' => $c->subtask->cabinetTask->cabinet_id === $this->cab1->id && $c->name === 'ห่อตู้เสร็จสิ้น'])->saveQuietly();
+        }
+        $this->cab1->forceFill(['status' => 'in_progress', 'progress' => 60])->saveQuietly();
+        (require database_path('migrations/2026_11_20_000001_complete_packed_cabinets.php'))->up();
+        $this->assertSame([['completed', 100], ['not_started', 40]], [[$this->cab1->fresh()->status, $this->cab1->fresh()->progress], [$this->cab2->fresh()->status, $this->cab2->fresh()->progress]]);
     }
 
     private function data(array $over = []): array
@@ -372,7 +428,7 @@ class ProjectDeliveryTest extends TestCase
             ActivityLog::where('action', 'delivery')->orderBy('id')->get()->pluck('description')->first(fn ($l) => str_contains($l, 'ลูกค้ายังไม่พร้อมรับ')));
         $this->assertSame([['delivery', $d->id, 'postpone', '20/11/2569 · 09:00 น.', '23/11/2569 · 09:00 น.'], ['delivery', $d->id, 'postpone', '23/11/2569 · 09:00 น.', '23/11/2569 · 13:00 น.']],
             EventDateChange::orderBy('id')->get()->map(fn ($c) => [$c->event, $c->event_id, $c->kind, $c->fromText(), $c->toText()])->all());
-        $this->assertSame(2, ProjectDeliveryController::formData($this->project, $d->fresh())['moves']);
+        $this->assertSame(2, DeliveryWindow::form($this->project, $d->fresh())['moves']);
         $this->actingAs($this->pm)->get(route('projects.show', $this->project))->assertOk()
             ->assertSee('เลื่อน 2 ครั้ง')->assertSeeInOrder(['ประวัติการเลื่อนวัน (2)', 'ครั้งที่ 2', 'ครั้งที่ 1', '+3 วัน', 'ลูกค้ายังไม่พร้อมรับ']);
     }
@@ -414,9 +470,15 @@ class ProjectDeliveryTest extends TestCase
         $this->assign($d);
         $this->actingAs($this->clerk)->post(route('deliveries.depart', $d))->assertSessionHas('success');
         $this->assertSame(['MO-1' => ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล', 'ดำเนินการส่งมอบ'], 'MO-2' => ['ห่อตู้เสร็จสิ้น', 'แจ้งเปิดบิล', 'ดำเนินการส่งมอบ']], $this->ticked());
-        $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-20', 'delivered_time' => '10:40',
+        // one field for the day and the time; a broken one is refused
+        $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_at' => '20/11/2569', 'cabinet_ids' => [$this->cab1->id]])
+            ->assertSessionHasErrors(['delivered_at' => 'วันที่ / เวลาส่งถึงไม่ถูกต้อง']);
+        $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_at' => '2026-11-20 10:40', 'invoice_no' => ' IV2611-0012 ',
             'issue' => 'รอยขีดข่วน', 'cabinet_ids' => [$this->cab1->id]])->assertSessionHasNoErrors();   // no receiver / delivery note number asked
         $d->refresh();
+        $this->assertSame(['2026-11-20 10:40', 'IV2611-0012'], [$d->delivered_at->format('Y-m-d H:i'), $d->invoice_no], 'the day and time, and the IV number');
+        $this->assertStringContainsString('10:40 น. · ', $this->lastLog());
+        $this->assertStringContainsString('IV IV2611-0012', $this->lastLog());
         $this->assertSame(['delivered', [$this->cab1->id], ['n' => 4, 'text' => 'ส่งถึงแล้ว']], [$d->status, $d->cabinet_ids, $d->step()]);
         $this->assertSame([null, null], [$d->receiver, $d->doc_no]);
         $this->assertStringNotContainsString('ผู้รับ', $this->lastLog());
@@ -447,7 +509,7 @@ class ProjectDeliveryTest extends TestCase
         $this->assign($d);
         $this->actingAs($this->clerk)->post(route('deliveries.bill', $d))->assertSessionHasNoErrors();
         $this->actingAs($this->clerk)->post(route('deliveries.depart', $d))->assertSessionHasNoErrors();
-        $arrive = fn (array $files) => $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-20',
+        $arrive = fn (array $files) => $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_at' => '2026-11-20 00:00',
             'cabinet_ids' => [$this->cab1->id, $this->cab2->id], 'files' => $files]);
         $uploads = public_path('uploads/comment-attachments');
         $before = is_dir($uploads) ? scandir($uploads) : [];
@@ -585,7 +647,7 @@ class ProjectDeliveryTest extends TestCase
         $this->assertSame([], $arrived());
 
         // one cabinet did not go: แก้ข้อมูลส่งถึง = checked, PM hears it as an arrival (not a correction)
-        $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-20', 'cabinet_ids' => [$this->cab1->id]])->assertSessionHasNoErrors();
+        $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_at' => '2026-11-20 00:00', 'cabinet_ids' => [$this->cab1->id]])->assertSessionHasNoErrors();
         $this->assertNull($d->fresh()->review_at);
         $this->assertStringEndsWith('· ไม่ได้ส่ง MO-2 · ตรวจแล้ว', $this->lastLog());
         $this->assertSame(['ส่งถึงแล้ว'], $arrived());
@@ -632,7 +694,7 @@ class ProjectDeliveryTest extends TestCase
         $this->mock(CommentAttachmentUploader::class, fn ($m) => $m->shouldReceive('ready')->andReturn(false)->shouldNotReceive('store'));
         $logs = ActivityLog::count();
 
-        $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_date' => '2026-11-20', 'cabinet_ids' => [$this->cab1->id],
+        $this->actingAs($this->clerk)->post(route('deliveries.deliver', $d), ['delivered_at' => '2026-11-20 00:00', 'cabinet_ids' => [$this->cab1->id],
             'files' => [UploadedFile::fake()->image('a.jpg')]])->assertSessionHasErrors('files');
         $this->assertSame(['departed', $logs], [$d->fresh()->status, ActivityLog::count()], 'no history line, no empty comment: the log cannot roll back on MyISAM');
     }

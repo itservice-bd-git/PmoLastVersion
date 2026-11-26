@@ -124,11 +124,10 @@ class DashboardDepartmentTest extends TestCase
         $this->subtask($this->wiring, '2026-09-30');
         $admin = $this->user($this->busbar, 'admin');
 
-        $all = $this->actingAs($admin)->get(route('dashboard'))->assertOk()->viewData('dept');
-        $this->assertSame(2, $all['totals']['total']);
-
-        $one = $this->actingAs($admin)->get(route('dashboard', ['department' => $this->wiring->id]))->assertOk()->viewData('dept');
-        $this->assertSame(1, $one['totals']['total']);
-        $this->assertSame(['Wiring'], array_column($one['departments'], 'name'));
+        // one view each: an Admin has สัปดาห์นี้ only, whatever the link asks for (no งานตามแผนก tab, no department filter)
+        $this->actingAs($admin)->get(route('dashboard', ['view' => 'dept']))->assertOk()->assertViewHas('view', 'pm');
+        $this->actingAs($admin)->get(route('dashboard', ['department' => $this->wiring->id]))->assertOk()->assertViewHas('view', 'pm')->assertDontSee('aria-label="มุมมองแดชบอร์ด"', false);
+        // the department numbers themselves, for every department (what งานตามแผนก would show an Admin)
+        $this->assertSame(2, app(DepartmentDashboard::class)->build(DepartmentDashboard::scopeFor($admin), today())['totals']['total']);
     }
 }

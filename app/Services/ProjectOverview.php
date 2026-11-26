@@ -31,6 +31,11 @@ class ProjectOverview
     {
         $today = now()->startOfDay();
         $cabinets = $project->cabinets;
+        // each Sub Task knows its Task and cabinet without asking again (the alerts show its MO and link to it)
+        $cabinets->each(fn (Cabinet $c) => $c->tasks->each(function ($t) use ($c) {
+            $t->setRelation('cabinet', $c);
+            $t->subtasks->each->setRelation('cabinetTask', $t);
+        }));
         $this->colors = PlanningBoard::departmentColors();   // the same department dots as Planning
         $late = fn (CabinetSubtask $s) => $s->isLateOn($today);
 

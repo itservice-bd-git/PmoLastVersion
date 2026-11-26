@@ -12,7 +12,7 @@
 @endphp
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">ตั้งค่า</h2>
+        <h1 class="text-lg font-semibold text-slate-900">ตั้งค่า</h1>
     </x-slot>
 
     <div x-data="{
@@ -23,8 +23,7 @@
             sw(key) { return this.palette.find((p) => p.key === key) || this.palette[0]; },
          }"
          x-init="@if ($errors->any() && $old) f = { ...blank(), ...@js($old), id: @js($old['id'] ?? null), url: @js(isset($old['id']) && $rows->has((int) $old['id']) ? $rows[(int) $old['id']]['url'] : route('settings.checklist-statuses.store')), department_ids: (@js($old['department_ids'] ?? [])).map(Number) }; $nextTick(() => $dispatch('open-modal', 'checklist-status')); @endif">
-        <div class="max-w-none mx-auto space-y-4">
-        <x-settings-nav />
+        <x-settings-layout space="space-y-4">
 
         <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
@@ -57,7 +56,7 @@
                     <p class="text-[13px] text-slate-500">ชุดตัวอย่าง: ของสั่งนอก · รอของ · ของเข้าแล้ว · ลูกค้าแก้แบบ แก้ชื่อและสีได้ภายหลัง</p>
                 </div>
             @else
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto relative">
                     <table class="w-full min-w-[720px] text-sm">
                         <thead class="border-b border-slate-100 text-left text-[13px] text-slate-500">
                             <tr>
@@ -98,7 +97,7 @@
                                                 <button class="inline-flex h-9 items-center rounded-md px-2.5 text-[13px] font-semibold {{ $s->is_active ? 'text-red-700 hover:bg-red-50' : 'text-blue-700 hover:bg-blue-50' }}">{{ $s->is_active ? 'ปิดใช้' : 'เปิดใช้' }}</button>
                                             </form>
                                         @else
-                                            <form method="POST" action="{{ route('settings.checklist-statuses.destroy', $s) }}" class="inline" onsubmit="return confirm('ลบสถานะ “{{ $s->name }}”? ยังไม่มีรายการใดใช้')">@csrf @method('DELETE')
+                                            <form method="POST" action="{{ route('settings.checklist-statuses.destroy', $s) }}" class="inline" data-confirm="ลบสถานะ “{{ $s->name }}”? ยังไม่มีรายการใดใช้" onsubmit="return confirm(this.dataset.confirm)">@csrf @method('DELETE')
                                                 <button class="inline-flex h-9 items-center rounded-md px-2.5 text-[13px] font-semibold text-red-700 hover:bg-red-50">ลบ</button>
                                             </form>
                                         @endif
@@ -111,7 +110,7 @@
                 <p class="border-t border-slate-100 px-5 py-3 text-[13px] leading-relaxed text-slate-600">สถานะที่มีรายการใช้อยู่ลบไม่ได้ ให้ "ปิดใช้" แทน: รายการเดิมยังแสดงป้ายนั้น แต่เลือกใหม่ไม่ได้ · ลำดับในตารางคือลำดับในเมนูเลือกสถานะ</p>
             @endif
         </section>
-        </div>
+        </x-settings-layout>
 
     {{-- add / edit: name, colour, meaning, departments, group - with a live look at the chip and the menu row --}}
     <x-modal name="checklist-status" maxWidth="2xl">

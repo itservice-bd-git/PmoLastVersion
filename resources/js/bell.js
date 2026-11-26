@@ -8,7 +8,7 @@ export default function pmoBell(cfg) {
         cfg, feed: cfg.feed, open: false, tab: 'all', fresh: new Set(),
         seen: new Set(cfg.feed.urgent), known: new Map(items(cfg.feed).map((n) => [n.id, stamp(n)])), started: false,
         init() {
-            if (this.started) return;   // Alpine calls init() itself, and x-init too
+            if (this.started) return;   // once per page, however init() is reached
             this.started = true;
             const poll = () => { if (!document.hidden) this.refresh(); };
             setInterval(poll, 15000);   // same pace as Planning's refresh

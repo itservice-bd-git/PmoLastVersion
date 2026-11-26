@@ -1,5 +1,5 @@
 @php
-    $actions = app(\App\Services\SubtaskAssignmentService::class)->actionsFor($subtask, auth()->user());
+    // $actions, $hasList, $departmentColors: App\View\Composers\AssignmentComposer
     $locked = $subtask->is_department_locked;
     $canEditDepartment = auth()->user()?->canDispatchWork() ?? false;
     $trail = collect([
@@ -31,7 +31,7 @@
 
 @php
     // the department's colour, as on Planning
-    $dot = $subtask->department_id ? '<span class="h-2 w-2 shrink-0 rounded-full" style="background: '.e(\App\Services\PlanningBoard::departmentColors()[$subtask->department_id] ?? '#94a3b8').'" aria-hidden="true"></span>' : '';
+    $dot = $subtask->department_id ? '<span class="h-2 w-2 shrink-0 rounded-full" style="background: '.e($departmentColors[$subtask->department_id] ?? '#94a3b8').'" aria-hidden="true"></span>' : '';
 @endphp
 @if ($locked)
     <span class="inline-flex items-center gap-1 text-xs font-medium text-slate-600 cursor-not-allowed"
@@ -78,7 +78,6 @@
     // the cabinet page's status menu (opened from the Sub Task's status badge): every step, the next one clickable
     $at = ['UNASSIGNED' => 0, 'ASSIGNED' => 1, 'ACCEPTED' => 2, 'IN_PROGRESS' => 3, 'COMPLETED' => 4][$subtask->assignment_status] ?? 0;
     // work with a checklist is done by ticking it all (SubtaskAssignmentService::followChecklist), not by a button
-    $hasList = $subtask->relationLoaded('checklists') ? $subtask->checklists->isNotEmpty() : $subtask->checklists()->exists();
     $only = 'เฉพาะแผนก '.($subtask->department?->name ?? '-');
     $menu = [
         ['รับงาน', 'cabinet-subtasks.accept', 2, $actions['can_accept'], $subtask->accepted_at ? 'โดย '.($subtask->acceptedBy?->name ?? '-').' '.$subtask->accepted_at->thaiDateTime() : null,
@@ -90,7 +89,7 @@
     ];
 @endphp
 <div class="absolute left-0 top-full z-30 mt-1 hidden w-64 rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-lg" data-status-menu-panel role="menu" aria-label="อัปเดตสถานะงาน">
-    <p class="px-2 pb-1 pt-0.5 text-[11px] font-semibold text-slate-500">สถานะงาน · {{ $subtask->work_status_label }}</p>
+    <p class="px-2 pb-1 pt-0.5 text-xs font-semibold text-slate-500">สถานะงาน · {{ $subtask->work_status_label }}</p>
     @foreach ($menu as [$label, $route, $reach, $can, $by, $why, $confirm])
         @if ($at >= $reach)
             <div class="flex items-start gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700" role="menuitem" aria-disabled="true">

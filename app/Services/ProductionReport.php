@@ -11,7 +11,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * "รายงานการผลิต" (reports/production): the open production orders answered as six questions - how many SO / MO /
+ * The open production orders answered as six questions (read by the CEO report; its own page "รายงานการผลิต" was taken out 2026-11-20) - how many SO / MO /
  * cabinets, their value, which step and department holds them, which are late or at risk, which are produced but not
  * yet taken by the customer, and what is due in 7 / 15 / 30 days. Read only; the projects this person may see.
  *

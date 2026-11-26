@@ -1,11 +1,11 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-lg font-semibold text-slate-900">Dispatch</h2>
+        <h1 class="text-lg font-semibold text-slate-900">จ่ายงาน</h1>
     </x-slot>
 
-    <div class="max-w-7xl mx-auto space-y-4">
+    <div data-touch class="-mx-2 sm:-mx-3 lg:-mx-4 space-y-4">
         <form method="GET" class="flex flex-wrap items-center gap-2">
-            <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ค้นหา Project / Cabinet / Task / Sub Task"
+            <input type="text" name="q" aria-label="ค้นหางาน" value="{{ $filters['q'] ?? '' }}" placeholder="ค้นหา Project / Cabinet / Task / Sub Task"
                    class="rounded-lg border-slate-300 text-sm w-72" />
             <select name="status" class="rounded-lg border-slate-300 text-sm">
                 <option value="">ทุกสถานะ</option>
@@ -33,11 +33,11 @@
                 <table class="min-w-full text-sm">
                     <thead>
                         <tr class="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
-                            <th class="px-5 py-3">Project</th>
-                            <th class="px-5 py-3">Cabinet</th>
+                            <th class="px-5 py-3">โครงการ</th>
+                            <th class="px-5 py-3">ตู้</th>
                             <th class="px-5 py-3">Task / Sub Task</th>
-                            <th class="px-5 py-3">Due Date</th>
-                            <th class="px-5 py-3 w-96">Department &amp; Action</th>
+                            <th class="px-5 py-3">กำหนดเสร็จ</th>
+                            <th class="px-5 py-3 w-96">แผนก · ขั้นงาน</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">

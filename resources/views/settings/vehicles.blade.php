@@ -4,9 +4,8 @@
     $field = 'rounded-lg border-slate-300 text-sm';
 @endphp
 <x-app-layout>
-    <x-slot name="header"><h2 class="text-lg font-semibold text-slate-900">ตั้งค่า</h2></x-slot>
-    <div class="max-w-none mx-auto space-y-4">
-        <x-settings-nav />
+    <x-slot name="header"><h1 class="text-lg font-semibold text-slate-900">ตั้งค่า</h1></x-slot>
+    <x-settings-layout space="space-y-4">
         <datalist id="vehicle-types">@foreach ($types as $t)<option value="{{ $t }}"></option>@endforeach</datalist>
         <x-card title="รถของบริษัท" subtitle="PM เลือกแค่ &quot;ประเภท&quot; ตอนนัดส่ง (เลือกได้จากประเภทของรถที่ใช้งานอยู่) แผนกจัดส่งเลือกคันจริงและคนที่ไปตอนจัดรถ (รอบหนึ่งใส่ได้หลายคัน) · &quot;รับได้ประมาณ&quot; ใช้เตือนเมื่อส่งตู้เกินจำนวนนี้ (ตู้ขนาดไม่เท่ากัน จึงแค่เตือน) · รถที่มีในประวัติการส่งแล้วลบไม่ได้ จะถูกปิดไว้แทน">
             <div class="divide-y divide-slate-100">
@@ -31,7 +30,7 @@
                             <span class="inline-flex h-[38px] items-center text-xs text-slate-500">ส่งไป {{ $used[$v->id] ?? 0 }} รอบ</span>
                             <button class="h-[38px] rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">บันทึก</button>
                         </form>
-                        <form method="POST" action="{{ route('settings.vehicles.destroy', $v) }}" onsubmit="return confirm('ลบรถ &quot;{{ $v->label() }}&quot;?')">@csrf @method('DELETE')
+                        <form method="POST" action="{{ route('settings.vehicles.destroy', $v) }}" data-confirm="ลบรถ &quot;{{ $v->label() }}&quot;?" onsubmit="return confirm(this.dataset.confirm)">@csrf @method('DELETE')
                             <button class="h-[38px] text-xs text-red-600 hover:underline">ลบ</button>
                         </form>
                     </div>
@@ -61,14 +60,14 @@
         </x-card>
         <x-card title="เหตุผลไม่รับงาน" subtitle="ให้แผนกจัดส่งเลือกตอนกด &quot;ไม่รับงาน&quot; ในหน้างานจัดส่ง · บรรทัดละ 1 เหตุผล · มีตัวเลือก &quot;อื่น ๆ&quot; ให้พิมพ์เองเสมอ">
             <form method="POST" action="{{ route('settings.vehicles.reasons') }}" class="space-y-2">@csrf @method('PUT')
-                <textarea name="reasons" rows="5" maxlength="2000" class="{{ $field }} block w-full max-w-md">{{ implode("\n", $reasons) }}</textarea>
+                <textarea name="reasons" aria-label="เหตุผลไม่รับงาน หนึ่งบรรทัดต่อหนึ่งเหตุผล" rows="5" maxlength="2000" class="{{ $field }} block w-full max-w-md">{{ implode("\n", $reasons) }}</textarea>
                 <button class="h-[38px] rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">บันทึก</button>
             </form>
         </x-card>
         <x-card title="แจ้งเปิดบิล" subtitle="เมื่อแผนกจัดส่งกด &quot;แจ้งเปิดบิล&quot; (ห่อตู้ครบทั้งรอบแล้ว) แผนกนี้ได้แจ้งเตือนแบบต้องทำ · ไม่เลือก = แจ้งแค่ PM">
             <form method="POST" action="{{ route('settings.vehicles.billing') }}" class="flex flex-wrap items-end gap-2">@csrf @method('PUT')
                 <label class="text-xs font-semibold text-slate-600">แผนกที่ได้แจ้ง
-                    <select name="department_id" class="{{ $field }} mt-1 block w-64">
+                    <select name="department_id" aria-label="แผนกที่รับแจ้งเปิดบิล" class="{{ $field }} mt-1 block w-64">
                         <option value="">— ไม่แจ้งแผนกไหน —</option>
                         @foreach ($departments as $dept)<option value="{{ $dept->id }}" @selected($billing === $dept->id)>{{ $dept->name }}</option>@endforeach
                     </select>
@@ -76,5 +75,5 @@
                 <button class="h-[38px] rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">บันทึก</button>
             </form>
         </x-card>
-    </div>
+    </x-settings-layout>
 </x-app-layout>

@@ -25,8 +25,7 @@
                 .'</span>' : '');
     }
     // เลื่อน / แก้วัน (App\Services\ProjectDates): how many rounds, beside the due date, and the button for Admin / PM (windows: _dates)
-    $dates = app(\App\Services\ProjectDates::class)->summary($project);
-    $canDates = auth()->user()->canDispatchWork() && ! $project->isLocked();
+    // $dates (ProjectDates::summary) and $canDates: App\Services\ProjectPage
     $open = fn (string $modal) => 'x-on:click="$dispatch(\'open-modal\', \''.$modal.'\')"';
     $dateTools = ($dates['rounds']
             ? ' <button type="button" '.$open('project-date-history').' class="ml-1 mt-1 inline-block max-w-full rounded-full bg-orange-100 text-left px-2 py-0.5 text-xs font-bold text-orange-800 hover:bg-orange-200">เลื่อนแล้ว '
@@ -62,6 +61,7 @@
         ])),
         'สัญญาและการเงิน' => array_values(array_filter([
             ['เลขที่ใบสั่งซื้อ (PO)', $project->po_no ? e($project->po_no) : null, ''],
+            ['เลข AVT', $project->avt_no ? e($project->avt_no) : null, ''],
             $project->sales_order_no ? ['ใบสั่งขาย / อ้างอิง', e($project->sales_order_no), ''] : null,
             ['เงื่อนไขการชำระ', $project->payment_terms ? e($project->payment_terms) : null, ''],
             $canFinance ? ['มูลค่างาน (ก่อน VAT)', $baht($project->contract_value), 'tabular-nums'] : null,
@@ -91,7 +91,6 @@
         // number, name, customer and status are in its header, so they are not repeated; fields that belong together share
         // a row (the due date with the days left and the first due date, the value with its VAT).
         $byLabel = collect($groups)->flatten(1)->keyBy(0);
-        $sizes = $project->cabinets()->whereNotNull('size')->where('size', '!=', '')->pluck('size')->countBy()->sortDesc();
         $muted = fn (string $t) => ' <span class="font-normal text-slate-600">'.$t.'</span>';
         $cols = [
             'งาน' => array_values(array_filter([
@@ -123,9 +122,9 @@
         $short = fn ($d) => $d ? $d->format('d/m').($d->year !== today()->year ? '/'.substr((string) ($d->year + 543), 2) : '') : '';
         // "17–18/11", "30/11 – 02/12", one day: "17/11"
         $range = fn ($a, $b) => ! $b || $b->lte($a) ? $short($a) : ($a->format('Y-m') === $b->format('Y-m') ? $a->format('d').'–'.$short($b) : $short($a).' – '.$short($b));
-        $tlFat = $hdrFat ?? $project->fats()->get()->last();
-        $tlRounds = $hdrRounds ?? $project->deliveries()->where('status', '!=', 'draft')->get();
-        $tlCan = $hdrCanAppt ?? (auth()->user()->canDispatchWork() && ! $project->isLocked());
+        $tlFat = $hdrFat;   // the header's (App\Services\ProjectPage)
+        $tlRounds = $hdrRounds;
+        $tlCan = $hdrCanAppt;
         $barColor = ['watch' => 'bg-orange-500', 'behind' => 'bg-red-500'][$s['pace']] ?? 'bg-emerald-600';
         $barText = ['watch' => 'text-orange-700', 'behind' => 'text-red-700'][$s['pace']] ?? 'text-emerald-700';
         // FAT: state (done / next / wait / todo / late / fail), the words under it, what a click does
@@ -164,7 +163,7 @@
                 'late', 'fail' => '<span class="flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-red-600 bg-white text-xs font-bold text-red-700">'.e($text ?? '!').'</span>',
                 'todo' => '<span class="block h-6 w-6 rounded-full border-2 border-dashed border-slate-400 bg-white"></span>',
                 default => $next ? '<span class="flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-blue-600 bg-white text-xs font-bold text-blue-700">'.($text ? e($text) : '<span class="block h-2.5 w-2.5 rounded-full bg-blue-600"></span>').'</span>'
-                    : '<span class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-[11px] font-bold text-slate-600">'.e($text ?? '').'</span>',
+                    : '<span class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-xs font-bold text-slate-600">'.e($text ?? '').'</span>',
             };
         };
         $tone = fn (array $n) => match ($n[0]) { 'done' => 'text-emerald-700', 'late', 'fail' => 'text-red-700', 'todo' => 'text-slate-500', default => ! empty($n[4]) ? 'text-blue-700' : 'text-slate-800' };
